@@ -108,7 +108,22 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     LocalStorageService.saveActiveDashboardTab('teacher', index);
     final route = _routeForIndex(index);
     LocalStorageService.saveLastActiveRoute(route);
-    updateBrowserUrl(route);
+    if (index == 1) {
+      final nav = LocalStorageService.getTeacherClassworkNavState();
+      final catIdx = (nav['categoryTabIndex'] as num?)?.toInt() ?? 0;
+      final tabParam = catIdx == 0 ? 'ww' : (catIdx == 1 ? 'pt' : 'ex');
+      final assessId = nav['activeAssessmentId']?.toString();
+      final actId = nav['activeActivityId']?.toString();
+      if (assessId != null && assessId.isNotEmpty) {
+        updateBrowserUrl('$route?tab=$tabParam&assessment=$assessId');
+      } else if (actId != null && actId.isNotEmpty) {
+        updateBrowserUrl('$route?tab=$tabParam&activity=$actId');
+      } else {
+        updateBrowserUrl('$route?tab=$tabParam');
+      }
+    } else {
+      updateBrowserUrl(route);
+    }
   }
 
   void _onClassworkSyncTriggered() {
@@ -132,7 +147,22 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _loadedTabIndices.add(_selectedIndex);
     final currentRoute = _routeForIndex(_selectedIndex);
     LocalStorageService.saveLastActiveRoute(currentRoute);
-    updateBrowserUrl(currentRoute);
+    if (_selectedIndex == 1) {
+      final nav = LocalStorageService.getTeacherClassworkNavState();
+      final catIdx = (nav['categoryTabIndex'] as num?)?.toInt() ?? 0;
+      final tabParam = catIdx == 0 ? 'ww' : (catIdx == 1 ? 'pt' : 'ex');
+      final assessId = nav['activeAssessmentId']?.toString();
+      final actId = nav['activeActivityId']?.toString();
+      if (assessId != null && assessId.isNotEmpty) {
+        updateBrowserUrl('$currentRoute?tab=$tabParam&assessment=$assessId');
+      } else if (actId != null && actId.isNotEmpty) {
+        updateBrowserUrl('$currentRoute?tab=$tabParam&activity=$actId');
+      } else {
+        updateBrowserUrl('$currentRoute?tab=$tabParam');
+      }
+    } else {
+      updateBrowserUrl(currentRoute);
+    }
     _loadData();
     _loadActivities();
     _checkGradebookLockStatus();
@@ -187,11 +217,51 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           .getAssessments(teacherId: teacherId);
       final results = await Future.wait([activitiesFuture, assessmentsFuture]);
       if (mounted) {
+        final loadedActs = results[0] as List<ActivityModel>;
+        final loadedAssess = results[1] as List<QuizOrExamModel>;
+        final navState = LocalStorageService.getTeacherClassworkNavState();
+        final savedActId = navState['activeActivityId']?.toString();
+        ActivityModel? restoredAct;
+        if (savedActId != null && savedActId.isNotEmpty) {
+          for (final a in loadedActs) {
+            if (a.id == savedActId) {
+              restoredAct = a;
+              break;
+            }
+          }
+          if (restoredAct == null) {
+            for (final q in loadedAssess) {
+              if (q.id == savedActId && q.completionMode == 'in_person') {
+                restoredAct = ActivityModel(
+                  id: q.id,
+                  title: q.title,
+                  description: q.description,
+                  instructions: q.description,
+                  subject: q.subject,
+                  section: q.section,
+                  deadline: q.scheduleDate,
+                  maxScore: q.totalPoints,
+                  isPublished: q.isPublished,
+                  isRequirement: false,
+                  subjectOfferingId: q.subjectOfferingId,
+                  termNumber: q.termNumber,
+                  gradebookColumnIndex: q.gradebookColumnIndex,
+                  completionMode: 'in_person',
+                  gradingCategory: q.isExam ? 'ex' : 'ww',
+                );
+                break;
+              }
+            }
+          }
+        }
         setState(() {
-          _persistedActivities = results[0] as List<ActivityModel>;
+          _persistedActivities = loadedActs;
           _quizzesAndExams
             ..clear()
-            ..addAll(results[1] as List<QuizOrExamModel>);
+            ..addAll(loadedAssess);
+          if (_viewingSubmissionsFor == null && restoredAct != null) {
+            _viewingSubmissionsFor = restoredAct;
+          }
         });
       }
     } catch (_) {
@@ -900,13 +970,33 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 selectedClassSection: _selectedClassSection,
                 repository: SupabaseTeacherClassworkRepository.instance,
                 onRefresh: () => _loadActivities(forceRefresh: true),
-                onViewSubmissions: (act) =>
-                    setState(() => _viewingSubmissionsFor = act),
+                onViewSubmissions: (act) {
+                  LocalStorageService.saveTeacherClassworkNavState(
+                    activeActivityId: act.id,
+                  );
+                  final catParam = act.isRequirement
+                      ? 'pt'
+                      : (act.gradingCategory == 'ex' ? 'ex' : 'ww');
+                  updateBrowserUrl(
+                    '${AppRoutes.teacherClasswork}?tab=$catParam&activity=${act.id}',
+                  );
+                  setState(() => _viewingSubmissionsFor = act);
+                },
               )
             : ActivitySubmissionsScreen(
                 activity: _viewingSubmissionsFor!,
                 embedded: true,
-                onBack: () => setState(() => _viewingSubmissionsFor = null),
+                onBack: () {
+                  final act = _viewingSubmissionsFor!;
+                  LocalStorageService.saveTeacherClassworkNavState(
+                    clearActiveActivity: true,
+                  );
+                  final catParam = act.isRequirement
+                      ? 'pt'
+                      : (act.gradingCategory == 'ex' ? 'ex' : 'ww');
+                  updateBrowserUrl('${AppRoutes.teacherClasswork}?tab=$catParam');
+                  setState(() => _viewingSubmissionsFor = null);
+                },
               );
       case 3:
         return TeacherLessonPlanningTab(

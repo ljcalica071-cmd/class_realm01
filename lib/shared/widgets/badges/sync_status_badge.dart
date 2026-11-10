@@ -6,7 +6,8 @@ import 'package:class_realm/core/services/sync_coordinator.dart';
 import 'package:class_realm/models/academic_models.dart';
 
 class SyncStatusBadge extends StatefulWidget {
-  const SyncStatusBadge({super.key});
+  final bool onAppBar;
+  const SyncStatusBadge({super.key, this.onAppBar = false});
 
   @override
   State<SyncStatusBadge> createState() => _SyncStatusBadgeState();
@@ -34,43 +35,99 @@ class _SyncStatusBadgeState extends State<SyncStatusBadge> {
 
             Color bg;
             Color fg;
+            Color iconColor;
+            Color textColor;
             IconData icon;
             String label;
 
             switch (status) {
               case SyncStatus.online:
-                bg = AppTheme.catTeal.withValues(alpha: 0.12);
-                fg = AppTheme.catTeal;
+                if (widget.onAppBar) {
+                  bg = Colors.white.withValues(alpha: 0.18);
+                  fg = const Color(0xFF4ADE80);
+                  iconColor = const Color(0xFF4ADE80);
+                  textColor = Colors.white;
+                } else {
+                  bg = AppTheme.catTeal.withValues(alpha: 0.12);
+                  fg = AppTheme.catTeal;
+                  iconColor = fg;
+                  textColor = fg;
+                }
                 icon = LucideIcons.wifi;
                 label = 'Online';
                 break;
               case SyncStatus.offline:
-                bg = AppTheme.catRed.withValues(alpha: 0.12);
-                fg = AppTheme.catRed;
+                if (widget.onAppBar) {
+                  bg = const Color(0xFFDC2626).withValues(alpha: 0.25);
+                  fg = const Color(0xFFFCA5A5);
+                  iconColor = const Color(0xFFFCA5A5);
+                  textColor = Colors.white;
+                } else {
+                  bg = AppTheme.catRed.withValues(alpha: 0.12);
+                  fg = AppTheme.catRed;
+                  iconColor = fg;
+                  textColor = fg;
+                }
                 icon = LucideIcons.wifiOff;
                 label = 'Offline';
                 break;
               case SyncStatus.pendingSync:
-                bg = AppTheme.catOrange.withValues(alpha: 0.12);
-                fg = AppTheme.catOrange;
+                if (widget.onAppBar) {
+                  bg = const Color(0xFFD97706).withValues(alpha: 0.25);
+                  fg = const Color(0xFFFCD34D);
+                  iconColor = const Color(0xFFFCD34D);
+                  textColor = Colors.white;
+                } else {
+                  bg = AppTheme.catOrange.withValues(alpha: 0.12);
+                  fg = AppTheme.catOrange;
+                  iconColor = fg;
+                  textColor = fg;
+                }
                 icon = LucideIcons.cloudOff;
                 label = 'Pending Sync';
                 break;
               case SyncStatus.syncing:
-                bg = AppTheme.catBlue.withValues(alpha: 0.12);
-                fg = AppTheme.catBlue;
+                if (widget.onAppBar) {
+                  bg = const Color(0xFF2563EB).withValues(alpha: 0.25);
+                  fg = const Color(0xFF93C5FD);
+                  iconColor = const Color(0xFF93C5FD);
+                  textColor = Colors.white;
+                } else {
+                  bg = AppTheme.catBlue.withValues(alpha: 0.12);
+                  fg = AppTheme.catBlue;
+                  iconColor = fg;
+                  textColor = fg;
+                }
                 icon = LucideIcons.refreshCw;
                 label = 'Syncing...';
                 break;
               case SyncStatus.synced:
-                bg = AppTheme.catTeal.withValues(alpha: 0.12);
-                fg = AppTheme.catTeal;
+                if (widget.onAppBar) {
+                  bg = Colors.white.withValues(alpha: 0.18);
+                  fg = const Color(0xFF4ADE80);
+                  iconColor = const Color(0xFF4ADE80);
+                  textColor = Colors.white;
+                } else {
+                  bg = AppTheme.catTeal.withValues(alpha: 0.12);
+                  fg = AppTheme.catTeal;
+                  iconColor = fg;
+                  textColor = fg;
+                }
                 icon = LucideIcons.cloudCheck;
                 label = 'Synced';
                 break;
               case SyncStatus.syncError:
-                bg = AppTheme.catRed.withValues(alpha: 0.12);
-                fg = AppTheme.catRed;
+                if (widget.onAppBar) {
+                  bg = const Color(0xFFDC2626).withValues(alpha: 0.25);
+                  fg = const Color(0xFFFCA5A5);
+                  iconColor = const Color(0xFFFCA5A5);
+                  textColor = Colors.white;
+                } else {
+                  bg = AppTheme.catRed.withValues(alpha: 0.12);
+                  fg = AppTheme.catRed;
+                  iconColor = fg;
+                  textColor = fg;
+                }
                 icon = LucideIcons.alertCircle;
                 label = 'Sync Error';
                 break;
@@ -104,12 +161,16 @@ class _SyncStatusBadgeState extends State<SyncStatusBadge> {
                   decoration: BoxDecoration(
                     color: bg,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: fg.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: widget.onAppBar
+                          ? Colors.white.withValues(alpha: 0.35)
+                          : fg.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(icon, size: 14, color: fg),
+                      Icon(icon, size: 14, color: iconColor),
                       if (!isCompact) ...[
                         const SizedBox(width: 6),
                         Text(
@@ -119,7 +180,7 @@ class _SyncStatusBadgeState extends State<SyncStatusBadge> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: fg,
+                            color: textColor,
                           ),
                         ),
                       ],

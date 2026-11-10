@@ -7,6 +7,8 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
+import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/teacher_classwork_repository.dart';
@@ -49,18 +51,66 @@ class TeacherUnifiedAssessmentsTab extends StatefulWidget {
 }
 
 class _TeacherUnifiedAssessmentsTabState
-    extends State<TeacherUnifiedAssessmentsTab> {
+    extends State<TeacherUnifiedAssessmentsTab>
+    with SingleTickerProviderStateMixin {
   int? _selectedGrade;
   String? _selectedSubject;
   String? _selectedClassSection;
   List<Map<String, dynamic>> _teacherSubjects = [];
   bool _isSyncing = false;
   QuizOrExamModel? _monitoringAssessment;
+  late final TabController _categoryTabController;
 
   @override
   void initState() {
     super.initState();
+    final navState = LocalStorageService.getTeacherClassworkNavState();
+    final initialTabIdx = ((navState['categoryTabIndex'] as num?)?.toInt() ?? 0)
+        .clamp(0, 2);
+    _categoryTabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: initialTabIdx,
+    );
+    _categoryTabController.addListener(() {
+      if (_categoryTabController.indexIsChanging) return;
+      final idx = _categoryTabController.index;
+      LocalStorageService.saveTeacherClassworkNavState(categoryTabIndex: idx);
+      if (_monitoringAssessment == null) {
+        final tabParam = idx == 0 ? 'ww' : (idx == 1 ? 'pt' : 'ex');
+        updateBrowserUrl('${AppRoutes.teacherClasswork}?tab=$tabParam');
+      }
+    });
     _loadTeacherSections();
+    _tryRestoreMonitoringAssessment();
+  }
+
+  @override
+  void didUpdateWidget(covariant TeacherUnifiedAssessmentsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_monitoringAssessment == null && widget.assessments.isNotEmpty) {
+      _tryRestoreMonitoringAssessment();
+    }
+  }
+
+  @override
+  void dispose() {
+    _categoryTabController.dispose();
+    super.dispose();
+  }
+
+  void _tryRestoreMonitoringAssessment() {
+    final navState = LocalStorageService.getTeacherClassworkNavState();
+    final savedAssessId = navState['activeAssessmentId']?.toString();
+    if (savedAssessId == null || savedAssessId.isEmpty) return;
+    for (final a in widget.assessments) {
+      if (a.id == savedAssessId && a.completionMode != 'in_person') {
+        if (mounted) {
+          setState(() => _monitoringAssessment = a);
+        }
+        return;
+      }
+    }
   }
 
   int _parseGrade(dynamic g) {
@@ -133,22 +183,37 @@ class _TeacherUnifiedAssessmentsTabState
         teacherId,
       );
       if (!mounted) return;
+      final navState = LocalStorageService.getTeacherClassworkNavState();
+      final savedGrade = (navState['gradeLevel'] as num?)?.toInt();
+      final savedSubject = navState['subjectName']?.toString();
+      final savedSection = navState['sectionName']?.toString();
+
       setState(() {
         _teacherSubjects = subjects;
 
         final grades = _availableGrades;
         if (grades.isNotEmpty) {
-          _selectedGrade ??= grades.first;
+          if (savedGrade != null && grades.contains(savedGrade)) {
+            _selectedGrade = savedGrade;
+          } else {
+            _selectedGrade ??= grades.first;
+          }
         }
 
         final subs = _availableSubjects;
         if (subs.isNotEmpty) {
-          _selectedSubject ??= subs.first;
+          if (savedSubject != null && subs.contains(savedSubject)) {
+            _selectedSubject = savedSubject;
+          } else {
+            _selectedSubject ??= subs.first;
+          }
         }
 
         final secs = _availableSections;
         if (secs.isNotEmpty) {
-          if (widget.selectedClassSection.isNotEmpty &&
+          if (savedSection != null && secs.contains(savedSection)) {
+            _selectedClassSection = savedSection;
+          } else if (widget.selectedClassSection.isNotEmpty &&
               widget.selectedClassSection != 'All Sections' &&
               secs.contains(widget.selectedClassSection)) {
             _selectedClassSection = widget.selectedClassSection;
@@ -238,7 +303,16 @@ class _TeacherUnifiedAssessmentsTabState
     if (_monitoringAssessment != null) {
       return AssessmentProctoringScreen(
         assessment: _monitoringAssessment!,
-        onBack: () => setState(() => _monitoringAssessment = null),
+        onBack: () {
+          final isEx = _monitoringAssessment!.isExam;
+          LocalStorageService.saveTeacherClassworkNavState(
+            clearActiveAssessment: true,
+          );
+          updateBrowserUrl(
+            '${AppRoutes.teacherClasswork}?tab=${isEx ? 'ex' : 'ww'}',
+          );
+          setState(() => _monitoringAssessment = null);
+        },
       );
     }
 
@@ -281,296 +355,308 @@ class _TeacherUnifiedAssessmentsTabState
     final availableSubjects = _availableSubjects;
     final availableSections = _availableSections;
 
-    return DefaultTabController(
-      length: 3,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Classwork',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Create activities, performance tasks, quizzes, and exams by subject and section.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                // Right-aligned Target Filter Card matching Learning Materials
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.12,
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Classwork',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.onSurface,
                       ),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.02),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Create activities, performance tasks, quizzes, and exams by subject and section.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Right-aligned Target Filter Card matching Learning Materials
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: 0.12,
+                    ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Grade Dropdown
-                      if (availableGrades.isNotEmpty) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 2,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Grade Dropdown
+                    if (availableGrades.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.08,
                           ),
-                          decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
                             color: theme.colorScheme.primary.withValues(
-                              alpha: 0.08,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.2,
-                              ),
-                            ),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              value: availableGrades.contains(_selectedGrade)
-                                  ? _selectedGrade
-                                  : availableGrades.first,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: theme.colorScheme.primary,
-                              ),
-                              items: availableGrades
-                                  .map(
-                                    (g) => DropdownMenuItem(
-                                      value: g,
-                                      child: Text('Grade $g'),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedGrade = val;
-                                    final subs = _availableSubjects;
-                                    _selectedSubject = subs.isNotEmpty
-                                        ? subs.first
-                                        : null;
-                                    final secs = _availableSections;
-                                    _selectedClassSection = secs.isNotEmpty
-                                        ? secs.first
-                                        : null;
-                                  });
-                                }
-                              },
+                              alpha: 0.2,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                      ],
-
-                      // Subject Dropdown (NO ALL SUBJECTS)
-                      if (availableSubjects.isNotEmpty) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.12,
-                              ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: availableGrades.contains(_selectedGrade)
+                                ? _selectedGrade
+                                : availableGrades.first,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: theme.colorScheme.primary,
                             ),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value:
-                                  availableSubjects.contains(_selectedSubject)
-                                  ? _selectedSubject
-                                  : availableSubjects.first,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                              items: availableSubjects
-                                  .map(
-                                    (sub) => DropdownMenuItem(
-                                      value: sub,
-                                      child: Text(
-                                        sub,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedSubject = val;
-                                    final secs = _availableSections;
-                                    _selectedClassSection = secs.isNotEmpty
-                                        ? secs.first
-                                        : null;
-                                  });
-                                }
-                              },
-                            ),
+                            items: availableGrades
+                                .map(
+                                  (g) => DropdownMenuItem(
+                                    value: g,
+                                    child: Text('Grade $g'),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedGrade = val;
+                                  final subs = _availableSubjects;
+                                  _selectedSubject = subs.isNotEmpty
+                                      ? subs.first
+                                      : null;
+                                  final secs = _availableSections;
+                                  _selectedClassSection = secs.isNotEmpty
+                                      ? secs.first
+                                      : null;
+                                });
+                                LocalStorageService.saveTeacherClassworkNavState(
+                                  gradeLevel: _selectedGrade,
+                                  subjectName: _selectedSubject,
+                                  sectionName: _selectedClassSection,
+                                );
+                              }
+                            },
                           ),
                         ),
-                        const SizedBox(width: 8),
-                      ],
-
-                      // Section Dropdown (NO ALL SECTIONS)
-                      if (availableSections.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.1,
-                              ),
-                            ),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value:
-                                  availableSections.contains(
-                                    _selectedClassSection,
-                                  )
-                                  ? _selectedClassSection
-                                  : availableSections.first,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                              items: availableSections
-                                  .map(
-                                    (sec) => DropdownMenuItem(
-                                      value: sec,
-                                      child: Text(
-                                        _formatSectionName(sec),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => _selectedClassSection = val);
-                                }
-                              },
-                            ),
-                          ),
-                        ),
+                      ),
+                      const SizedBox(width: 8),
                     ],
+
+                    // Subject Dropdown (NO ALL SUBJECTS)
+                    if (availableSubjects.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.12,
+                            ),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value:
+                                availableSubjects.contains(_selectedSubject)
+                                ? _selectedSubject
+                                : availableSubjects.first,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            items: availableSubjects
+                                .map(
+                                  (sub) => DropdownMenuItem(
+                                    value: sub,
+                                    child: Text(
+                                      sub,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedSubject = val;
+                                  final secs = _availableSections;
+                                  _selectedClassSection = secs.isNotEmpty
+                                      ? secs.first
+                                      : null;
+                                });
+                                LocalStorageService.saveTeacherClassworkNavState(
+                                  subjectName: _selectedSubject,
+                                  sectionName: _selectedClassSection,
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+
+                    // Section Dropdown (NO ALL SECTIONS)
+                    if (availableSections.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.1,
+                            ),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value:
+                                availableSections.contains(
+                                  _selectedClassSection,
+                                )
+                                ? _selectedClassSection
+                                : availableSections.first,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            items: availableSections
+                                .map(
+                                  (sec) => DropdownMenuItem(
+                                    value: sec,
+                                    child: Text(
+                                      _formatSectionName(sec),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _selectedClassSection = val);
+                                LocalStorageService.saveTeacherClassworkNavState(
+                                  sectionName: val,
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (_isSyncing) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: const LinearProgressIndicator(
+                minHeight: 4,
+                backgroundColor: Color(0xFFE2E8F0),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0F8A48)),
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Row(
+              children: [
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF0F8A48),
+                  ),
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Updating schedule and syncing with gradebook...',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0F8A48),
                   ),
                 ),
               ],
             ),
-            if (_isSyncing) ...[
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: const LinearProgressIndicator(
-                  minHeight: 4,
-                  backgroundColor: Color(0xFFE2E8F0),
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0F8A48)),
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Row(
-                children: [
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF0F8A48),
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Updating schedule and syncing with gradebook...',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF0F8A48),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 20),
-            Container(
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
-                ),
-              ),
-              child: TabBar(
-                dividerColor: Colors.transparent,
-                labelColor: theme.colorScheme.primary,
-                unselectedLabelColor: theme.colorScheme.onSurface.withValues(
-                  alpha: 0.6,
-                ),
-                indicatorColor: theme.colorScheme.primary,
-                indicatorWeight: 3,
-                tabs: const [
-                  Tab(text: 'Written Works (WW)'),
-                  Tab(text: 'Performance Tasks (PT)'),
-                  Tab(text: 'Examinations (EX)'),
-                ],
+          ],
+          const SizedBox(height: 20),
+          Container(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
               ),
             ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: TabBarView(
-                physics: const BouncingScrollPhysics(),
+            child: TabBar(
+              controller: _categoryTabController,
+              dividerColor: Colors.transparent,
+              labelColor: theme.colorScheme.primary,
+              unselectedLabelColor: theme.colorScheme.onSurface.withValues(
+                alpha: 0.6,
+              ),
+              indicatorColor: theme.colorScheme.primary,
+              indicatorWeight: 3,
+              tabs: const [
+                Tab(text: 'Written Works (WW)'),
+                Tab(text: 'Performance Tasks (PT)'),
+                Tab(text: 'Examinations (EX)'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: TabBarView(
+              controller: _categoryTabController,
+              physics: const BouncingScrollPhysics(),
                 children: [
                   _KeepAliveTabWrapper(
                     child: _buildUnifiedCategoryView(
@@ -754,8 +840,7 @@ class _TeacherUnifiedAssessmentsTabState
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildUnifiedCategoryView({
@@ -914,6 +999,14 @@ class _TeacherUnifiedAssessmentsTabState
               }
             }
           : () {
+              final tabParam = item.isExam ? 'ex' : 'ww';
+              LocalStorageService.saveTeacherClassworkNavState(
+                categoryTabIndex: item.isExam ? 2 : 0,
+                activeAssessmentId: item.id,
+              );
+              updateBrowserUrl(
+                '${AppRoutes.teacherClasswork}?tab=$tabParam&assessment=${item.id}',
+              );
               setState(() => _monitoringAssessment = item);
             },
       actionLabel: isInPerson ? 'Record Scores' : null,

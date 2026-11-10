@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
-import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/features/parent/sub_features/profile/screens/parent_settings_screen.dart';
 
 class ParentProfileTab extends StatefulWidget {
   final UserModel parent;
@@ -70,13 +67,6 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
     if (widget.onRefresh != null) {
       await widget.onRefresh!();
     }
-  }
-
-  void _openParentSettings(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ParentSettingsScreen()),
-    );
   }
 
   String _formatBirthday(DateTime date) {
@@ -389,7 +379,13 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                     ...studentsInGroup.asMap().entries.map((item) {
                       final idx = item.key;
                       final student = item.value;
-                      final isActive = student.id == linkedStudent?.id;
+                      final section = student.departmentOrSection?.trim();
+                      final lrn = student.lrn?.trim();
+                      final details = [
+                        if (section != null && section.isNotEmpty) section,
+                        if (lrn != null && lrn.isNotEmpty) 'LRN: $lrn',
+                      ].join(' • ');
+
                       return Column(
                         children: [
                           if (idx > 0)
@@ -402,79 +398,43 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                           ListTile(
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
-                              vertical: 2,
+                              vertical: 4,
                             ),
                             leading: CircleAvatar(
-                              radius: 17,
-                              backgroundColor: isActive
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.primary.withValues(
-                                      alpha: 0.12,
-                                    ),
+                              radius: 18,
+                              backgroundColor: theme.colorScheme.primary
+                                  .withValues(alpha: 0.12),
                               child: Text(
-                                student.fullName.trim().isNotEmpty
-                                    ? student.fullName.trim()[0].toUpperCase()
+                                student.lastFirstMi.trim().isNotEmpty
+                                    ? student.lastFirstMi.trim()[0].toUpperCase()
                                     : 'S',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,
-                                  color: isActive
-                                      ? Colors.white
-                                      : theme.colorScheme.primary,
+                                  color: theme.colorScheme.primary,
                                 ),
                               ),
                             ),
                             title: Text(
-                              student.fullName,
+                              student.lastFirstMi,
                               style: TextStyle(
                                 fontSize: 14.5,
-                                fontWeight: isActive
-                                    ? FontWeight.w700
-                                    : FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                                 color: theme.colorScheme.onSurface,
                               ),
                             ),
-                            trailing: isActive
-                                ? Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 9,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.catGreen.withValues(
-                                        alpha: 0.14,
-                                      ),
-                                      borderRadius: BorderRadius.circular(999),
-                                      border: Border.all(
-                                        color: AppTheme.catGreen.withValues(
-                                          alpha: 0.35,
-                                        ),
-                                      ),
-                                    ),
-                                    child: const Text(
-                                      'Viewing',
+                            subtitle: details.isNotEmpty
+                                ? Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      details,
                                       style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppTheme.catGreen,
+                                        fontSize: 12,
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.6),
                                       ),
                                     ),
                                   )
-                                : (widget.onSelectChild != null
-                                      ? TextButton(
-                                          onPressed: () => widget.onSelectChild!
-                                              .call(student),
-                                          child: const Text(
-                                            'Switch',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        )
-                                      : null),
-                            onTap: widget.onSelectChild != null
-                                ? () => widget.onSelectChild!.call(student)
                                 : null,
                           ),
                         ],
@@ -484,87 +444,6 @@ class _ParentProfileTabState extends State<ParentProfileTab> {
                 ),
               );
             }),
-
-          const SizedBox(height: 20),
-
-          // ── SETTINGS & PRIVACY ──
-          _buildSectionHeader(theme, 'SETTINGS & PRIVACY'),
-          Material(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(
-                    alpha: isDark ? 0.14 : 0.1,
-                  ),
-                ),
-              ),
-              child: ListTile(
-                leading: Icon(
-                  Icons.settings_outlined,
-                  color: theme.colorScheme.primary,
-                ),
-                title: const Text(
-                  'Settings',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                subtitle: const Text(
-                  'Notifications, password, app version, terms of service & privacy policy',
-                  style: TextStyle(fontSize: 11.5),
-                ),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => _openParentSettings(context),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 28),
-
-          // ── ACCOUNT LOGOUT ──
-          Material(
-            color: AppTheme.catRed.withValues(alpha: isDark ? 0.12 : 0.08),
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: AppTheme.catRed.withValues(alpha: isDark ? 0.35 : 0.2),
-                ),
-              ),
-              child: ListTile(
-                leading: const Icon(
-                  Icons.logout_rounded,
-                  color: AppTheme.catRed,
-                ),
-                title: const Text(
-                  'Logout',
-                  style: TextStyle(
-                    color: AppTheme.catRed,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-                subtitle: const Text(
-                  'Log out of your parent account',
-                  style: TextStyle(fontSize: 12),
-                ),
-                onTap: () {
-                  AppModals.showConfirmationDialog(
-                    context: context,
-                    title: 'Confirm Logout',
-                    message:
-                        'Are you sure you want to log out of the parent portal?',
-                    confirmLabel: 'Logout',
-                    confirmColor: AppTheme.catRed,
-                    onConfirm: () => LogoutHelper.logout(context),
-                  );
-                },
-              ),
-            ),
-          ),
         ],
       ),
     );

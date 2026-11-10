@@ -1231,9 +1231,23 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppTheme.catBlue.withValues(
+                    alpha: isDark ? 0.2 : 0.1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  LucideIcons.activity,
+                  size: 16,
+                  color: AppTheme.catBlue,
+                ),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1260,52 +1274,14 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                 ),
               ),
               const SizedBox(width: 12),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildTeacherFilterMenu(context, isDark),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.catGreen.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: AppTheme.catGreen,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Real-time',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.catGreen,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              _buildTeacherFilterMenu(context, isDark),
             ],
           ),
           const SizedBox(height: 20),
 
           // Custom Curve Chart Painter with smooth hover and multi-series support
           SizedBox(
-            height: seriesList.length > 1 ? 220 : 190,
+            height: seriesList.length > 1 ? 260 : 230,
             child: _TeacherActivityCurveChart(
               seriesList: seriesList,
               isDark: isDark,
@@ -1326,161 +1302,10 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     int activeNowCount,
     int totalTrackedTeachers,
   ) {
-    final theme = Theme.of(context);
-
-    final idleCount = math.max(0, totalTrackedTeachers - activeNowCount);
-
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Teacher Online Status',
-            style: TextStyle(
-              fontSize: 15.5,
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            'Current teacher login status and system usage',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? Colors.white54 : const Color(0xFF64748B),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Donut Chart + Center Counter
-          SizedBox(
-            height: 190,
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      CustomPaint(
-                        size: const Size(140, 140),
-                        painter: _TeacherActivityDonutPainter(
-                          activeNowCount: activeNowCount,
-                          idleCount: idleCount,
-                          total: math.max(1, totalTrackedTeachers),
-                          isDark: isDark,
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '$totalTrackedTeachers',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              color: theme.colorScheme.onSurface,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          Text(
-                            'Teachers',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDark
-                                  ? Colors.white54
-                                  : const Color(0xFF64748B),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                // Donut Legend
-                Expanded(
-                  flex: 6,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildDonutLegendItem(
-                        label: 'Online Now',
-                        count: activeNowCount,
-                        color: AppTheme.catGreen,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 10),
-                      _buildDonutLegendItem(
-                        label: 'Offline',
-                        count: idleCount,
-                        color: isDark
-                            ? Colors.white24
-                            : const Color(0xFFCBD5E1),
-                        isDark: isDark,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDonutLegendItem({
-    required String label,
-    required int count,
-    required Color color,
-    required bool isDark,
-  }) {
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? Colors.white70 : const Color(0xFF475569),
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Text(
-          '$count',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : const Color(0xFF1E293B),
-          ),
-        ),
-      ],
+    return _TeacherActivityDonutCard(
+      isDark: isDark,
+      activeNowCount: activeNowCount,
+      totalTrackedTeachers: totalTrackedTeachers,
     );
   }
 
@@ -2809,15 +2634,27 @@ class _TeacherActivityCurveChart extends StatefulWidget {
 }
 
 class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   int? _hoveredPointIndex;
   int? _hoveredSeriesIndex;
   late final AnimationController _hoverAnimController;
   late final Animation<double> _scaleAnimation;
+  late final AnimationController _entranceAnimController;
+  late final Animation<double> _entranceAnimation;
 
   @override
   void initState() {
     super.initState();
+    _entranceAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    );
+    _entranceAnimation = CurvedAnimation(
+      parent: _entranceAnimController,
+      curve: Curves.easeOutCubic,
+    );
+    _entranceAnimController.forward();
+
     _hoverAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 240),
@@ -2829,7 +2666,17 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
   }
 
   @override
+  void didUpdateWidget(covariant _TeacherActivityCurveChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeFilter != widget.activeFilter ||
+        oldWidget.seriesList != widget.seriesList) {
+      _entranceAnimController.forward(from: 0.0);
+    }
+  }
+
+  @override
   void dispose() {
+    _entranceAnimController.dispose();
     _hoverAnimController.dispose();
     super.dispose();
   }
@@ -2869,7 +2716,25 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
               return MouseRegion(
                 onHover: (event) {
                   final x = event.localPosition.dx;
+                  final y = event.localPosition.dy;
                   final width = constraints.maxWidth;
+                  final height = constraints.maxHeight;
+
+                  // If mouse moves outside active plot region, clear hover immediately
+                  if (x < leftPadding - 16 ||
+                      x > width - rightPadding + 16 ||
+                      y < topPadding - 12 ||
+                      y > height - bottomPadding + 14) {
+                    if (_hoveredPointIndex != null) {
+                      setState(() {
+                        _hoveredPointIndex = null;
+                        _hoveredSeriesIndex = null;
+                      });
+                      _hoverAnimController.reverse();
+                    }
+                    return;
+                  }
+
                   final innerWidth = width - leftPadding - rightPadding;
                   final dxPerPoint = pointsCount > 1
                       ? innerWidth / (pointsCount - 1)
@@ -2912,7 +2777,7 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
                       final p = effectiveSeries[sIdx].points[nearestPointIndex];
                       final normalizedY = (p.value / ceiling).clamp(0.0, 1.0);
                       final ptY = topPadding + chartHeight * (1.0 - normalizedY);
-                      final diff = (event.localPosition.dy - ptY).abs();
+                      final diff = (y - ptY).abs();
                       if (diff < minDiff) {
                         minDiff = diff;
                         nearestSeriesIndex = sIdx;
@@ -2937,7 +2802,10 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
                   _hoverAnimController.reverse();
                 },
                 child: AnimatedBuilder(
-                  animation: _scaleAnimation,
+                  animation: Listenable.merge([
+                    _entranceAnimation,
+                    _scaleAnimation,
+                  ]),
                   builder: (context, _) {
                     return CustomPaint(
                       size: Size.infinite,
@@ -2949,6 +2817,7 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
                         hoveredPointIndex: _hoveredPointIndex,
                         hoveredSeriesIndex: _hoveredSeriesIndex,
                         hoverAnimValue: _scaleAnimation.value,
+                        entranceProgress: _entranceAnimation.value,
                       ),
                     );
                   },
@@ -3024,6 +2893,7 @@ class _CurveChartPainter extends CustomPainter {
   final int? hoveredPointIndex;
   final int? hoveredSeriesIndex;
   final double hoverAnimValue;
+  final double entranceProgress;
 
   _CurveChartPainter({
     required this.isDark,
@@ -3033,8 +2903,73 @@ class _CurveChartPainter extends CustomPainter {
     this.hoveredPointIndex,
     this.hoveredSeriesIndex,
     this.hoverAnimValue = 0.0,
+    this.entranceProgress = 1.0,
   }) : hoveredIndex = null,
        points = const [];
+
+  /// Generates a smooth natural curved path using Monotone Cubic Splines (Fritsch-Carlson)
+  /// to eliminate straight-line segments while preventing overshoot or dipping below zero.
+  static Path _buildSmoothCurvedPath(List<Offset> points) {
+    final path = Path();
+    if (points.isEmpty) return path;
+    path.moveTo(points.first.dx, points.first.dy);
+    if (points.length == 1) return path;
+
+    if (points.length == 2) {
+      final p0 = points[0];
+      final p1 = points[1];
+      final dx = (p1.dx - p0.dx) / 2;
+      path.cubicTo(p0.dx + dx, p0.dy, p1.dx - dx, p1.dy, p1.dx, p1.dy);
+      return path;
+    }
+
+    final n = points.length;
+    final deltas = List<double>.filled(n - 1, 0.0);
+    final m = List<double>.filled(n, 0.0);
+
+    for (int i = 0; i < n - 1; i++) {
+      final dx = points[i + 1].dx - points[i].dx;
+      deltas[i] = dx != 0 ? (points[i + 1].dy - points[i].dy) / dx : 0.0;
+    }
+
+    m[0] = deltas[0];
+    m[n - 1] = deltas[n - 2];
+
+    for (int i = 1; i < n - 1; i++) {
+      if (deltas[i - 1] * deltas[i] <= 0) {
+        m[i] = 0;
+      } else {
+        m[i] = (deltas[i - 1] + deltas[i]) / 2;
+      }
+    }
+
+    for (int i = 0; i < n - 1; i++) {
+      if (deltas[i] == 0) {
+        m[i] = 0;
+        m[i + 1] = 0;
+      } else {
+        final a = m[i] / deltas[i];
+        final b = m[i + 1] / deltas[i];
+        final h = a * a + b * b;
+        if (h > 9.0) {
+          final t = 3.0 / math.sqrt(h);
+          m[i] = t * a * deltas[i];
+          m[i + 1] = t * b * deltas[i];
+        }
+      }
+    }
+
+    for (int i = 0; i < n - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final dx = p1.dx - p0.dx;
+      final cp1 = Offset(p0.dx + dx / 3, p0.dy + m[i] * dx / 3);
+      final cp2 = Offset(p1.dx - dx / 3, p1.dy - m[i + 1] * dx / 3);
+      path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p1.dx, p1.dy);
+    }
+
+    return path;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3059,6 +2994,7 @@ class _CurveChartPainter extends CustomPainter {
     const topPadding = 20.0;
     final chartHeight = size.height - bottomPadding - topPadding;
     final innerWidth = size.width - leftPadding - rightPadding;
+    final baseY = size.height - bottomPadding;
 
     double peakVal = 0.0;
     for (final s in effectiveSeries) {
@@ -3098,6 +3034,7 @@ class _CurveChartPainter extends CustomPainter {
 
     for (int i = 0; i <= 3; i++) {
       final y = topPadding + (chartHeight / 3.0) * i;
+
       // Draw grid line across the plot area
       canvas.drawLine(
         Offset(leftPadding, y),
@@ -3121,7 +3058,7 @@ class _CurveChartPainter extends CustomPainter {
     final pointsCount = effectiveSeries.first.points.length;
     final dx = pointsCount > 1 ? innerWidth / (pointsCount - 1) : innerWidth;
 
-    // Collect coordinates for every series
+    // Collect coordinates for every series with entrance animation applied
     final allSeriesCoords = <List<Offset>>[];
 
     for (int sIdx = 0; sIdx < effectiveSeries.length; sIdx++) {
@@ -3131,79 +3068,47 @@ class _CurveChartPainter extends CustomPainter {
       for (int i = 0; i < pointsCount; i++) {
         final x = leftPadding + (dx * i);
         final normalizedY = (series.points[i].value / ceiling).clamp(0.0, 1.0);
-        final y = topPadding + chartHeight * (1.0 - normalizedY);
-        pointCoords.add(Offset(x, y));
+        final targetY = topPadding + chartHeight * (1.0 - normalizedY);
+        // Animate smoothly upward from baseY
+        final animatedY = baseY - (baseY - targetY) * entranceProgress;
+        pointCoords.add(Offset(x, animatedY));
       }
       allSeriesCoords.add(pointCoords);
 
       if (pointCoords.isNotEmpty) {
-        final path = Path();
-        final fillPath = Path();
+        // Natural smooth curved spline
+        final curvePath = _buildSmoothCurvedPath(pointCoords);
 
-        path.moveTo(pointCoords[0].dx, pointCoords[0].dy);
-        fillPath.moveTo(pointCoords[0].dx, pointCoords[0].dy);
-
-        for (int i = 0; i < pointCoords.length - 1; i++) {
-          final p0 = pointCoords[i];
-          final p1 = pointCoords[i + 1];
-          final controlX1 = p0.dx + (p1.dx - p0.dx) / 2;
-          final controlX2 = controlX1;
-          path.cubicTo(controlX1, p0.dy, controlX2, p1.dy, p1.dx, p1.dy);
-          fillPath.cubicTo(controlX1, p0.dy, controlX2, p1.dy, p1.dx, p1.dy);
-        }
-
-        fillPath.lineTo(pointCoords.last.dx, size.height - bottomPadding);
-        fillPath.lineTo(pointCoords.first.dx, size.height - bottomPadding);
+        // Fill path under the curve
+        final fillPath = Path.from(curvePath);
+        fillPath.lineTo(pointCoords.last.dx, baseY);
+        fillPath.lineTo(pointCoords.first.dx, baseY);
         fillPath.close();
 
-        // If single series, draw gradient fill under curve
-        if (effectiveSeries.length == 1) {
-          final gradientPaint = Paint()
-            ..shader = LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                series.color.withValues(alpha: isDark ? 0.32 : 0.20),
-                series.color.withValues(alpha: 0.0),
-              ],
-            ).createShader(
-              Rect.fromLTWH(leftPadding, topPadding, innerWidth, chartHeight),
-            );
-          canvas.drawPath(fillPath, gradientPaint);
-        }
+        // Gradient fill under curve with glassmorphic transparency
+        final gradientPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              series.color.withValues(
+                alpha: (isDark ? 0.28 : 0.16) * entranceProgress,
+              ),
+              series.color.withValues(alpha: 0.0),
+            ],
+          ).createShader(
+            Rect.fromLTWH(leftPadding, topPadding, innerWidth, chartHeight),
+          );
+        canvas.drawPath(fillPath, gradientPaint);
 
-        // Draw curve stroke
+        // Curve stroke with smooth round cap & join
         final strokePaint = Paint()
-          ..color = series.color
+          ..color = series.color.withValues(alpha: entranceProgress)
           ..style = PaintingStyle.stroke
           ..strokeWidth = effectiveSeries.length == 1 ? 3.0 : 2.5
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round;
-        canvas.drawPath(path, strokePaint);
-      }
-    }
-
-    // Determine which point and series tooltip to target
-    int? targetPointIdx = hoveredPointIndex;
-    int targetSeriesIdx = hoveredSeriesIndex ?? 0;
-
-    // If not hovering, find peak point from series
-    if (targetPointIdx == null) {
-      double peakVal = -1;
-      int peakPt = 0;
-      int peakS = 0;
-      for (int s = 0; s < effectiveSeries.length; s++) {
-        for (int p = 0; p < effectiveSeries[s].points.length; p++) {
-          if (effectiveSeries[s].points[p].value > peakVal) {
-            peakVal = effectiveSeries[s].points[p].value;
-            peakPt = p;
-            peakS = s;
-          }
-        }
-      }
-      if (peakVal > 0) {
-        targetPointIdx = peakPt;
-        targetSeriesIdx = peakS;
+        canvas.drawPath(curvePath, strokePaint);
       }
     }
 
@@ -3214,21 +3119,20 @@ class _CurveChartPainter extends CustomPainter {
 
       for (int i = 0; i < coords.length; i++) {
         final pt = coords[i];
-        final isThisTarget = (targetPointIdx == i) && (targetSeriesIdx == sIdx);
         final isHovered =
             (hoveredPointIndex == i) && (hoveredSeriesIndex == sIdx);
 
         if (isHovered && hoverAnimValue > 0) {
           // Animated glowing ring on hover
-          final outerGlowRadius = 5.0 + (3.5 * hoverAnimValue);
+          final outerGlowRadius = 5.0 + (4.0 * hoverAnimValue);
           canvas.drawCircle(
             pt,
             outerGlowRadius,
             Paint()
-              ..color = series.color.withValues(alpha: 0.25 * hoverAnimValue),
+              ..color = series.color.withValues(alpha: 0.30 * hoverAnimValue),
           );
 
-          // Center white/dark circle ring
+          // Center ring
           canvas.drawCircle(
             pt,
             6.5,
@@ -3240,19 +3144,23 @@ class _CurveChartPainter extends CustomPainter {
           // Normal point
           canvas.drawCircle(
             pt,
-            isThisTarget ? 6.0 : 4.5,
+            4.5,
             Paint()..color = isDark ? const Color(0xFF1E293B) : Colors.white,
           );
           canvas.drawCircle(
             pt,
-            isThisTarget ? 4.0 : 3.0,
+            3.0,
             Paint()..color = series.color,
           );
         }
       }
     }
 
-    // Draw Highlight Badge Tooltip for targeted point
+    // CRITICAL: Details tooltip box appears ONLY when hovering cursor over a point!
+    // NO idle fallback to peak point!
+    final int? targetPointIdx = hoveredPointIndex;
+    final int targetSeriesIdx = hoveredSeriesIndex ?? 0;
+
     if (targetPointIdx != null &&
         targetSeriesIdx < effectiveSeries.length &&
         targetPointIdx < effectiveSeries[targetSeriesIdx].points.length) {
@@ -3260,7 +3168,6 @@ class _CurveChartPainter extends CustomPainter {
       final targetPoint = targetSeries.points[targetPointIdx];
       final pt = allSeriesCoords[targetSeriesIdx][targetPointIdx];
 
-      // Format duration strictly as 00h 00m (or 00s if < 1m)
       final durationStr =
           _AdminActivityAnalyticsTabState._formatTooltipDuration(
             targetPoint.totalSeconds,
@@ -3272,7 +3179,7 @@ class _CurveChartPainter extends CustomPainter {
       final nameSpan = TextSpan(
         text: teacherName,
         style: TextStyle(
-          fontSize: 10.5,
+          fontSize: 11,
           fontWeight: FontWeight.bold,
           color: isDark ? Colors.white : const Color(0xFF0F172A),
         ),
@@ -3285,7 +3192,7 @@ class _CurveChartPainter extends CustomPainter {
       final timeSpan = TextSpan(
         text: durationStr,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 12.5,
           fontWeight: FontWeight.w800,
           fontFamily: 'monospace',
           color: targetSeries.color,
@@ -3325,12 +3232,12 @@ class _CurveChartPainter extends CustomPainter {
         maxContentWidth = tpDate.width;
       }
 
-      final badgeWidth = maxContentWidth + 20;
+      final badgeWidth = maxContentWidth + 24;
       final badgeHeight =
           tpName.height +
           tpTime.height +
           (tpDate != null ? tpDate.height + 4 : 0) +
-          14;
+          16;
 
       // Check whether tooltip fits comfortably above the point
       final fitsAbove = (pt.dy - badgeHeight - 16) >= 0;
@@ -3347,9 +3254,7 @@ class _CurveChartPainter extends CustomPainter {
       canvas.translate(badgeCenterX, badgeCenterY);
 
       // Smooth scale spring animation on hover
-      final scale = hoveredPointIndex != null
-          ? (0.85 + (0.15 * hoverAnimValue.clamp(0.0, 1.0)))
-          : 1.0;
+      final scale = 0.85 + (0.15 * hoverAnimValue.clamp(0.0, 1.0));
       canvas.scale(scale, scale);
 
       final badgeRect = RRect.fromRectAndRadius(
@@ -3358,33 +3263,46 @@ class _CurveChartPainter extends CustomPainter {
           width: badgeWidth,
           height: badgeHeight,
         ),
-        const Radius.circular(8),
+        const Radius.circular(10),
       );
 
-      // Shadow
+      // Glassmorphism soft shadow
       canvas.drawRRect(
-        badgeRect.shift(const Offset(0, 3)),
+        badgeRect.shift(const Offset(0, 4)),
         Paint()
           ..color = Colors.black.withValues(alpha: isDark ? 0.45 : 0.12)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
       );
 
-      // Background
-      canvas.drawRRect(
-        badgeRect,
-        Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
-      );
-
-      // Border with teacher color
+      // Glowing halo matching teacher color
       canvas.drawRRect(
         badgeRect,
         Paint()
-          ..color = targetSeries.color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.3,
+          ..color = targetSeries.color.withValues(
+            alpha: isDark ? 0.22 : 0.14,
+          )
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
       );
 
-      // Triangle Caret pointing towards circle dot
+      // Frosted glass background
+      canvas.drawRRect(
+        badgeRect,
+        Paint()
+          ..color = isDark
+              ? const Color(0xFF1E293B).withValues(alpha: 0.92)
+              : Colors.white.withValues(alpha: 0.95),
+      );
+
+      // Glowing border with teacher color
+      canvas.drawRRect(
+        badgeRect,
+        Paint()
+          ..color = targetSeries.color.withValues(alpha: 0.55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
+      );
+
+      // Caret pointing towards circle dot
       final caretPath = Path();
       final caretX = (pt.dx - badgeCenterX).clamp(
         -badgeWidth / 2 + 10,
@@ -3403,18 +3321,21 @@ class _CurveChartPainter extends CustomPainter {
 
       canvas.drawPath(
         caretPath,
-        Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
+        Paint()
+          ..color = isDark
+              ? const Color(0xFF1E293B).withValues(alpha: 0.92)
+              : Colors.white.withValues(alpha: 0.95),
       );
       canvas.drawPath(
         caretPath,
         Paint()
-          ..color = targetSeries.color
+          ..color = targetSeries.color.withValues(alpha: 0.55)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.3,
+          ..strokeWidth = 1.2,
       );
 
       // Paint texts inside badge
-      double currY = -badgeHeight / 2 + 6;
+      double currY = -badgeHeight / 2 + 7;
       tpName.paint(canvas, Offset(-tpName.width / 2, currY));
       currY += tpName.height + 2;
 
@@ -3460,72 +3381,649 @@ class _CurveChartPainter extends CustomPainter {
         oldDelegate.hoveredPointIndex != hoveredPointIndex ||
         oldDelegate.hoveredSeriesIndex != hoveredSeriesIndex ||
         oldDelegate.hoverAnimValue != hoverAnimValue ||
+        oldDelegate.entranceProgress != entranceProgress ||
         oldDelegate.activeFilter != activeFilter;
   }
 }
 
 // =========================================================================
-// Custom Painter: Activity Donut Chart (Inspired by Pic 4)
+// Component Mastery Style: Teacher Online Status Card (Inspired by Image 1)
 // =========================================================================
-class _TeacherActivityDonutPainter extends CustomPainter {
-  final int activeNowCount;
-  final int idleCount;
-  final int total;
+class _TeacherActivityDonutCard extends StatefulWidget {
   final bool isDark;
+  final int activeNowCount;
+  final int totalTrackedTeachers;
 
-  _TeacherActivityDonutPainter({
-    required this.activeNowCount,
-    required this.idleCount,
-    required this.total,
+  const _TeacherActivityDonutCard({
     required this.isDark,
+    required this.activeNowCount,
+    required this.totalTrackedTeachers,
+  });
+
+  @override
+  State<_TeacherActivityDonutCard> createState() =>
+      _TeacherActivityDonutCardState();
+}
+
+class _TeacherActivityDonutCardState extends State<_TeacherActivityDonutCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _donutAnimController;
+  late final Animation<double> _donutAnimation;
+  int? _hoveredIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _donutAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    );
+    _donutAnimation = CurvedAnimation(
+      parent: _donutAnimController,
+      curve: Curves.easeOutCubic,
+    );
+    _donutAnimController.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TeacherActivityDonutCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeNowCount != widget.activeNowCount ||
+        oldWidget.totalTrackedTeachers != widget.totalTrackedTeachers) {
+      _donutAnimController.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _donutAnimController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final idleCount =
+        math.max(0, widget.totalTrackedTeachers - widget.activeNowCount);
+    final totalSafe = math.max(1, widget.totalTrackedTeachers);
+    final onlinePct = widget.totalTrackedTeachers > 0
+        ? ((widget.activeNowCount / widget.totalTrackedTeachers) * 100).round()
+        : 0;
+    final offlinePct = widget.totalTrackedTeachers > 0 ? 100 - onlinePct : 0;
+
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: widget.isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: widget.isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: widget.isDark ? 0.2 : 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header matching Image 1
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppTheme.catGreen.withValues(
+                    alpha: widget.isDark ? 0.2 : 0.1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  LucideIcons.pieChart,
+                  size: 16,
+                  color: AppTheme.catGreen,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Teacher Online Status',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Current teacher login status and system usage',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: widget.isDark
+                            ? Colors.white54
+                            : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Donut Chart + Component status rows
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final donutWidget = SizedBox(
+                width: 140,
+                height: 140,
+                child: AnimatedBuilder(
+                  animation: _donutAnimation,
+                  builder: (context, _) {
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CustomPaint(
+                          size: const Size(140, 140),
+                          painter: _ActivityDonutPainter(
+                            slices: [
+                              _ActivityDonutSliceData(
+                                count: widget.activeNowCount,
+                                pct: onlinePct.toDouble(),
+                                color: AppTheme.catGreen,
+                              ),
+                              _ActivityDonutSliceData(
+                                count: idleCount,
+                                pct: offlinePct.toDouble(),
+                                color: widget.isDark
+                                    ? Colors.white24
+                                    : const Color(0xFFCBD5E1),
+                              ),
+                            ],
+                            progress: _donutAnimation.value,
+                            strokeWidth: 14,
+                            isDark: widget.isDark,
+                            hoveredIndex: _hoveredIndex,
+                          ),
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Online Rate',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                                color: widget.isDark
+                                    ? Colors.white54
+                                    : const Color(0xFF64748B),
+                              ),
+                            ),
+                            Text(
+                              '$onlinePct%',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                color: theme.colorScheme.onSurface,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            Text(
+                              '${widget.activeNowCount}/${widget.totalTrackedTeachers} Online',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: widget.isDark
+                                    ? Colors.white54
+                                    : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              );
+
+              final rightColumnWidget = Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildComponentStatusRow(
+                    title: 'Online Now',
+                    countText: '${widget.activeNowCount} Faculty',
+                    badgeText: '$onlinePct% Active',
+                    progressValue: (widget.activeNowCount / totalSafe),
+                    color: AppTheme.catGreen,
+                    initials: 'ON',
+                    isDark: widget.isDark,
+                    isHovered: _hoveredIndex == 0,
+                    onEnter: () => setState(() => _hoveredIndex = 0),
+                    onExit: () => setState(() => _hoveredIndex = null),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildComponentStatusRow(
+                    title: 'Offline',
+                    countText: '$idleCount Faculty',
+                    badgeText: '$offlinePct% Idle',
+                    progressValue: (idleCount / totalSafe),
+                    color: widget.isDark
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFF64748B),
+                    initials: 'OFF',
+                    isDark: widget.isDark,
+                    isHovered: _hoveredIndex == 1,
+                    onEnter: () => setState(() => _hoveredIndex = 1),
+                    onExit: () => setState(() => _hoveredIndex = null),
+                  ),
+                ],
+              );
+
+              if (constraints.maxWidth < 420) {
+                return Column(
+                  children: [
+                    Center(child: donutWidget),
+                    const SizedBox(height: 14),
+                    rightColumnWidget,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  donutWidget,
+                  const SizedBox(width: 16),
+                  Expanded(child: rightColumnWidget),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          Divider(
+            height: 1,
+            color: widget.isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'FACULTY STATUS BREAKDOWN',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: widget.isDark ? Colors.white54 : const Color(0xFF64748B),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDescriptorCard(
+                  title: 'Online Faculty',
+                  range: 'In Active Session',
+                  count: '${widget.activeNowCount}',
+                  color: AppTheme.catGreen,
+                  isDark: widget.isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildDescriptorCard(
+                  title: 'Offline Faculty',
+                  range: 'Logged Out / Idle',
+                  count: '$idleCount',
+                  color: const Color(0xFF64748B),
+                  isDark: widget.isDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDescriptorCard(
+                  title: 'Total Monitored',
+                  range: 'Assigned Teachers',
+                  count: '${widget.totalTrackedTeachers}',
+                  color: const Color(0xFF3B82F6),
+                  isDark: widget.isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildDescriptorCard(
+                  title: 'Engagement Rate',
+                  range: 'Active / Total Ratio',
+                  count: '$onlinePct%',
+                  color: const Color(0xFFF59E0B),
+                  isDark: widget.isDark,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDescriptorCard({
+    required String title,
+    required String range,
+    required String count,
+    required Color color,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.12 : 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: color.withValues(alpha: isDark ? 0.28 : 0.18),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  range,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+              ),
+            ),
+            child: Text(
+              count,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComponentStatusRow({
+    required String title,
+    required String countText,
+    required String badgeText,
+    required double progressValue,
+    required Color color,
+    required String initials,
+    required bool isDark,
+    required bool isHovered,
+    required VoidCallback onEnter,
+    required VoidCallback onExit,
+  }) {
+    return MouseRegion(
+      onEnter: (_) => onEnter(),
+      onExit: (_) => onExit(),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isHovered
+              ? color.withValues(alpha: isDark ? 0.16 : 0.08)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isHovered
+                ? color.withValues(alpha: isDark ? 0.6 : 0.45)
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFE2E8F0)),
+            width: isHovered ? 1.5 : 1.0,
+          ),
+          boxShadow: isHovered
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: isDark ? 0.25 : 0.12),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: isDark ? 0.25 : 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                initials,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            countText,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? Colors.white70
+                                  : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(
+                                alpha: isDark ? 0.22 : 0.12,
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: color.withValues(
+                                  alpha: isDark ? 0.4 : 0.25,
+                                ),
+                              ),
+                            ),
+                            child: Text(
+                              badgeText,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: progressValue.clamp(0.0, 1.0),
+                      minHeight: 3.5,
+                      backgroundColor: isDark
+                          ? Colors.white10
+                          : const Color(0xFFE2E8F0),
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityDonutSliceData {
+  final int count;
+  final double pct;
+  final Color color;
+
+  const _ActivityDonutSliceData({
+    required this.count,
+    required this.pct,
+    required this.color,
+  });
+}
+
+class _ActivityDonutPainter extends CustomPainter {
+  final List<_ActivityDonutSliceData> slices;
+  final double progress;
+  final double strokeWidth;
+  final bool isDark;
+  final int? hoveredIndex;
+
+  _ActivityDonutPainter({
+    required this.slices,
+    required this.progress,
+    required this.strokeWidth,
+    required this.isDark,
+    this.hoveredIndex,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width, size.height) / 2 - 8;
-    const strokeWidth = 16.0;
+    final radius = (math.min(size.width, size.height) - strokeWidth) / 2;
 
-    final backgroundPaint = Paint()
+    // Track Ring
+    final trackPaint = Paint()
       ..color = isDark ? Colors.white10 : const Color(0xFFF1F5F9)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth;
+    canvas.drawCircle(center, radius, trackPaint);
 
-    canvas.drawCircle(center, radius, backgroundPaint);
+    if (slices.isEmpty) return;
 
-    final activePct = activeNowCount / total;
-    final idlePct = idleCount / total;
+    var startAngle = -math.pi / 2;
 
-    final rect = Rect.fromCircle(center: center, radius: radius);
+    for (int i = 0; i < slices.length; i++) {
+      final slice = slices[i];
+      if (slice.pct <= 0) continue;
+      final sweepAngle = (slice.pct / 100) * 2 * math.pi * progress;
 
-    double startAngle = -math.pi / 2;
+      final isHovered = hoveredIndex == i;
+      final effectiveStroke = isHovered ? strokeWidth + 3.0 : strokeWidth;
 
-    void drawSegment(double pct, Color color) {
-      if (pct <= 0) return;
-      final sweepAngle =
-          (pct * 2 * math.pi) - 0.08; // Small gap between segments
-      final paint = Paint()
-        ..color = color
+      if (isHovered) {
+        final glowPaint = Paint()
+          ..color = slice.color.withValues(alpha: 0.35)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = effectiveStroke + 4
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius),
+          startAngle,
+          sweepAngle,
+          false,
+          glowPaint,
+        );
+      }
+
+      final slicePaint = Paint()
+        ..color = slice.color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
+        ..strokeWidth = effectiveStroke
         ..strokeCap = StrokeCap.round;
 
-      if (sweepAngle > 0) {
-        canvas.drawArc(rect, startAngle, sweepAngle, false, paint);
+      if (sweepAngle > 0.02) {
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius),
+          startAngle,
+          sweepAngle - 0.02,
+          false,
+          slicePaint,
+        );
       }
-      startAngle += pct * 2 * math.pi;
-    }
 
-    drawSegment(activePct, AppTheme.catGreen);
-    drawSegment(idlePct, isDark ? Colors.white24 : const Color(0xFFCBD5E1));
+      startAngle += (slice.pct / 100) * 2 * math.pi;
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _TeacherActivityDonutPainter oldDelegate) {
-    return oldDelegate.activeNowCount != activeNowCount ||
-        oldDelegate.idleCount != idleCount ||
-        oldDelegate.total != total ||
-        oldDelegate.isDark != isDark;
+  bool shouldRepaint(covariant _ActivityDonutPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.slices != slices ||
+        oldDelegate.isDark != isDark ||
+        oldDelegate.hoveredIndex != hoveredIndex;
   }
 }
 

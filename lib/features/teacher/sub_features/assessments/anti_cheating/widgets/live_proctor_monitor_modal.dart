@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/item_analysis/item_difficulty_stat.dart';
@@ -59,7 +58,6 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
   List<StudentLiveProctorState> _students = [];
   String _searchQuery = '';
   String _genderFilter = 'all'; // 'all', 'male', 'female'
-  bool _soundEnabled = true;
   int _selectedTab = 0; // 0: Live Proctoring, 1: Item Analysis
   StreamSubscription<List<StudentLiveProctorState>>? _channelSub;
 
@@ -268,11 +266,6 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
     _channelSub?.cancel();
     _channelSub = _channelService.studentStatesStream.listen((updated) {
       if (mounted) {
-        final prevSevereCount = _students.where((s) => s.isSevere).length;
-        final newSevereCount = updated.where((s) => s.isSevere).length;
-        if (_soundEnabled && newSevereCount > prevSevereCount) {
-          SystemSound.play(SystemSoundType.alert);
-        }
         setState(() {
           _students = updated;
         });
@@ -492,24 +485,6 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                       ),
                     ],
                   ),
-                ),
-                // Sound Alert Toggle
-                IconButton(
-                  tooltip: _soundEnabled
-                      ? 'Proctor Alert Chime: Active'
-                      : 'Proctor Alert Chime: Muted',
-                  icon: Icon(
-                    _soundEnabled
-                        ? Icons.volume_up_rounded
-                        : Icons.volume_off_rounded,
-                    color: _soundEnabled
-                        ? AppTheme.catPurple
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                    size: 20,
-                  ),
-                  onPressed: () {
-                    setState(() => _soundEnabled = !_soundEnabled);
-                  },
                 ),
                 IconButton(
                   icon: const Icon(Icons.close),

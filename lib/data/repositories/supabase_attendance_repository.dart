@@ -904,14 +904,22 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     try {
       final offeringRes = await _client
           .from('subject_offerings')
-          .select('section, subjects(name)')
+          .select('''
+            sections ( section_name ),
+            subjects ( subject_name )
+          ''')
           .eq('id', subjectOfferingId)
           .maybeSingle();
       if (offeringRes != null) {
-        section = offeringRes['section']?.toString() ?? 'General';
+        final secMap = offeringRes['sections'];
+        if (secMap is Map && secMap['section_name'] != null) {
+          section = secMap['section_name'].toString().trim();
+        } else if (offeringRes['section'] != null) {
+          section = offeringRes['section'].toString().trim();
+        }
         final subMap = offeringRes['subjects'];
-        if (subMap is Map && subMap['name'] != null) {
-          subjectName = subMap['name'].toString();
+        if (subMap is Map) {
+          subjectName = (subMap['subject_name'] ?? subMap['name'] ?? subjectName).toString().trim();
         }
       }
     } catch (_) {}

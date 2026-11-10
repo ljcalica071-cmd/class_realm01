@@ -41,11 +41,14 @@ BEGIN
         RETURN;
     END IF;
 
-    -- 3. Resolve Subject & Section Metadata
-    SELECT s.name, so.section
+    -- 3. Resolve Subject & Section Metadata (joining subjects and sections tables)
+    SELECT 
+        COALESCE(s.subject_name, 'Class'), 
+        COALESCE(sec.section_name, 'General')
     INTO v_subject_name, v_section
     FROM public.subject_offerings so
-    JOIN public.subjects s ON s.id = so.subject_id
+    LEFT JOIN public.subjects s ON s.id = so.subject_id
+    LEFT JOIN public.sections sec ON sec.id = so.section_id
     WHERE so.id = p_subject_offering_id;
 
     v_subject_name := COALESCE(v_subject_name, 'Class');

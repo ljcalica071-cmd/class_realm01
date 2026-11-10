@@ -1056,37 +1056,54 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
       // 2. Persist individual question responses for review & item analysis
       if (attemptId != null && attemptId.isNotEmpty) {
-        await client
-            .from('assessment_responses')
-            .delete()
-            .eq('attempt_id', attemptId);
+        try {
+          await client
+              .from('assessment_responses')
+              .delete()
+              .eq('attempt_id', attemptId);
 
-        final responsesToInsert = <Map<String, dynamic>>[];
-        for (final q in _orderedQuestions) {
-          final studentAns = (_studentAnswers[q.id] ?? '').trim();
-          final isMatching =
-              q.type == QuestionType.matching &&
-              q.matchingPairs.isNotEmpty &&
-              q.matchingPairs.entries.every(
-                (pair) => studentAns.toLowerCase().contains(
-                  '${pair.key.toLowerCase()}=${pair.value.toLowerCase()}',
-                ),
-              );
-          final isCorrect = isMatching || q.matchesStudentAnswer(studentAns);
-          final pointsEarned = isCorrect ? q.points : 0.0;
+          final responsesToInsert = <Map<String, dynamic>>[];
+          for (final q in _orderedQuestions) {
+            final studentAns = (_studentAnswers[q.id] ?? '').trim();
+            final isMatching =
+                q.type == QuestionType.matching &&
+                q.matchingPairs.isNotEmpty &&
+                q.matchingPairs.entries.every(
+                  (pair) => studentAns.toLowerCase().contains(
+                    '${pair.key.toLowerCase()}=${pair.value.toLowerCase()}',
+                  ),
+                );
+            final isCorrect = isMatching || q.matchesStudentAnswer(studentAns);
+            final pointsEarned = isCorrect ? q.points : 0.0;
 
-          responsesToInsert.add({
-            'attempt_id': attemptId,
-            'question_id': q.id,
-            'text_response': studentAns,
-            'is_correct': isCorrect,
-            'points_earned': pointsEarned,
-            'answered_at': submittedUtc.toIso8601String(),
-          });
-        }
+            responsesToInsert.add({
+              'attempt_id': attemptId,
+              'question_id': q.id,
+              'text_response': studentAns,
+              'is_correct': isCorrect,
+              'points_earned': pointsEarned,
+              'answered_at': submittedUtc.toIso8601String(),
+            });
+          }
 
-        if (responsesToInsert.isNotEmpty) {
-          await client.from('assessment_responses').insert(responsesToInsert);
+          if (responsesToInsert.isNotEmpty) {
+            try {
+              await client.from('assessment_responses').insert(responsesToInsert);
+            } catch (insErr) {
+              // Fallback without text_response column in case schema lacks it
+              debugPrint('assessment_responses insert fallback: $insErr');
+              final fallbackRows = responsesToInsert.map((r) => {
+                'attempt_id': r['attempt_id'],
+                'question_id': r['question_id'],
+                'is_correct': r['is_correct'],
+                'points_earned': r['points_earned'],
+                'answered_at': r['answered_at'],
+              }).toList();
+              await client.from('assessment_responses').insert(fallbackRows);
+            }
+          }
+        } catch (respErr) {
+          debugPrint('assessment_responses persistence notice: $respErr');
         }
       }
 

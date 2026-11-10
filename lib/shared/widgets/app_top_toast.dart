@@ -222,7 +222,7 @@ class _AppTopToastViewState extends State<_AppTopToastView>
     );
 
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, -1.35),
+      begin: const Offset(0, -1.0),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _controller,
@@ -323,32 +323,32 @@ class _AppTopToastViewState extends State<_AppTopToastView>
         switch (_type) {
       AppToastType.success => (
           const Color(0xFF047857),
-          isDark ? const Color(0xFF064E3B) : const Color(0xFFD1FAE5),
+          isDark ? const Color(0xFF064E3B) : const Color(0xFFECFDF5),
           isDark ? const Color(0xFF10B981) : const Color(0xFF059669),
-          isDark ? const Color(0xFFECFDF5) : const Color(0xFF064E3B),
+          isDark ? const Color(0xFFECFDF5) : const Color(0xFF065F46),
         ),
       AppToastType.warning => (
           const Color(0xFFB45309),
-          isDark ? const Color(0xFF451A03) : const Color(0xFFFEF3C7),
+          isDark ? const Color(0xFF451A03) : const Color(0xFFFFFBEB),
           isDark ? const Color(0xFFF59E0B) : const Color(0xFFD97706),
-          isDark ? const Color(0xFFFFFBEB) : const Color(0xFF78350F),
+          isDark ? const Color(0xFFFEF3C7) : const Color(0xFF92400E),
         ),
       AppToastType.error => (
           const Color(0xFFB91C1C),
-          isDark ? const Color(0xFF450A0A) : const Color(0xFFFEE2E2),
+          isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2),
           isDark ? const Color(0xFFEF4444) : const Color(0xFFDC2626),
-          isDark ? const Color(0xFFFEF2F2) : const Color(0xFF7F1D1D),
+          isDark ? const Color(0xFFFEE2E2) : const Color(0xFF991B1B),
         ),
       AppToastType.info => (
           const Color(0xFF1D4ED8),
-          isDark ? const Color(0xFF1E293B) : const Color(0xFFDBEAFE),
+          isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
           isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB),
-          isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E3A8A),
+          isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E40AF),
         ),
     };
 
     return Positioned(
-      top: media.padding.top + 54,
+      top: media.padding.top + 32,
       left: 16,
       right: 16,
       child: IgnorePointer(
@@ -365,12 +365,12 @@ class _AppTopToastViewState extends State<_AppTopToastView>
                   color: Colors.transparent,
                   child: Container(
                     constraints: const BoxConstraints(
-                      minWidth: 380,
-                      maxWidth: 680,
+                      minWidth: 320,
+                      maxWidth: 620,
                     ),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 26,
-                      vertical: 13,
+                      horizontal: 22,
+                      vertical: 11,
                     ),
                     decoration: BoxDecoration(
                       color: bgCard,

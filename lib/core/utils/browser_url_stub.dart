@@ -6,6 +6,8 @@ void updateBrowserUrlPath(String path) {
 
 String getBrowserUrlPathWeb() => '/';
 
+Map<String, String> getBrowserUrlQueryParamsWeb() => const {};
+
 bool _mobileWarmSession = false;
 
 bool isWarmSessionWeb() => _mobileWarmSession;

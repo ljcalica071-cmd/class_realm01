@@ -150,7 +150,7 @@ class ParentDrawer extends StatelessWidget {
                                   Text(
                                     student == null
                                         ? 'No Linked Student'
-                                        : student.fullName,
+                                        : student.lastFirstMi,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(

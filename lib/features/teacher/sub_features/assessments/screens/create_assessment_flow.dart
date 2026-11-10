@@ -3911,7 +3911,7 @@ class _CreateAssessmentFlowDialogState
                 const SizedBox(height: 6),
                 TextField(
                   controller: _qStatementCtrl,
-                  minLines: 2,
+                  minLines: 3,
                   maxLines: 6,
                   maxLength: 500,
                   keyboardType: TextInputType.multiline,

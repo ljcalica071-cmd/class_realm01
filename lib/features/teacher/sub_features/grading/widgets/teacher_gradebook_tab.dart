@@ -704,6 +704,28 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
       final scoresMap = payload['scores'] as Map<String, dynamic>? ?? {};
       final upsertRows = <Map<String, dynamic>>[];
+      final itemIds = itemList
+          .map((e) => e['id']?.toString())
+          .whereType<String>()
+          .toList();
+
+      // Check which of these classwork items are also digital_assessments
+      final digitalIds = <String>{};
+      if (itemIds.isNotEmpty) {
+        try {
+          final digitalRows = await client
+              .from('digital_assessments')
+              .select('id')
+              .inFilter('id', itemIds);
+          for (final d in (digitalRows as List? ?? [])) {
+            final dId = d['id']?.toString();
+            if (dId != null && dId.isNotEmpty) digitalIds.add(dId);
+          }
+        } catch (_) {}
+      }
+
+      final attemptUpserts = <Map<String, dynamic>>[];
+      final nowIso = DateTime.now().toUtc().toIso8601String();
 
       for (final item in itemList) {
         final itemId = item['id']?.toString();
@@ -727,15 +749,25 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 'student_id': studentId,
                 'score': scoreVal.toDouble(),
                 'status': 'graded',
-                'updated_at': DateTime.now().toUtc().toIso8601String(),
+                'updated_at': nowIso,
               });
+              if (digitalIds.contains(itemId)) {
+                attemptUpserts.add({
+                  'assessment_id': itemId,
+                  'student_id': studentId,
+                  'attempt_number': 1,
+                  'status': 'submitted',
+                  'score_earned': scoreVal.toDouble(),
+                  'submitted_at': nowIso,
+                });
+              }
             } else if (scoreVal == null) {
               upsertRows.add({
                 'classwork_id': itemId,
                 'student_id': studentId,
                 'score': null,
                 'status': 'submitted',
-                'updated_at': DateTime.now().toUtc().toIso8601String(),
+                'updated_at': nowIso,
               });
             }
           }
@@ -747,6 +779,16 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             .from('student_classwork_submissions')
             .upsert(upsertRows, onConflict: 'classwork_id,student_id');
         AppDataCache.instance.invalidatePrefix('student_dashboard_');
+      }
+      if (attemptUpserts.isNotEmpty) {
+        try {
+          await client.from('assessment_attempts').upsert(
+                attemptUpserts,
+                onConflict: 'assessment_id,student_id,attempt_number',
+              );
+        } catch (attErr) {
+          debugPrint('Notice syncing gradebook scores to assessment_attempts: $attErr');
+        }
       }
     } catch (e) {
       debugPrint('Notice on syncing gradebook scores to submissions: $e');

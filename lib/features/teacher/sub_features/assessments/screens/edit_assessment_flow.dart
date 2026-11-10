@@ -505,9 +505,16 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
                         // Left Column: Active Question Editor (Flex 6)
                         Expanded(
                           flex: 6,
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.only(right: 20),
-                            child: _buildQuestionEditor(context),
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  padding: const EdgeInsets.only(right: 20),
+                                  child: _buildQuestionEditor(context),
+                                ),
+                              ),
+                              _buildStepperButtons(context),
+                            ],
                           ),
                         ),
 
@@ -692,8 +699,10 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
         // Statement TextField
         TextField(
           controller: _statementCtrl,
-          maxLines: 3,
+          minLines: 3,
+          maxLines: 6,
           maxLength: 500,
+          keyboardType: TextInputType.multiline,
           buildCounter: (_, {required currentLength, required isFocused, maxLength}) =>
               const SizedBox.shrink(),
           onChanged: (_) {
@@ -769,6 +778,9 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
                   Expanded(
                     child: TextField(
                       controller: _choiceCtrls[i],
+                      minLines: 1,
+                      maxLines: 3,
+                      keyboardType: TextInputType.multiline,
                       onChanged: (val) {
                         setState(() {
                           _choicesError = null;
@@ -1004,65 +1016,88 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
             ),
           ),
         ],
+      ],
+    );
+  }
 
-        const SizedBox(height: 20),
-
-        // Navigation Stepper Buttons (Previous / Next)
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            if (_activeQuestionIndex > 0)
-              OutlinedButton.icon(
-                onPressed: () {
-                  if (_saveCurrentEditorState()) {
-                    _loadQuestionIntoEditor(_activeQuestionIndex - 1);
-                  }
-                },
-                icon: const Icon(Icons.arrow_back, size: 16),
-                label: const Text('Previous Question'),
-                style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+  Widget _buildStepperButtons(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.only(right: 20, top: 12, bottom: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          if (_activeQuestionIndex > 0)
+            OutlinedButton.icon(
+              onPressed: () {
+                if (_saveCurrentEditorState()) {
+                  _loadQuestionIntoEditor(_activeQuestionIndex - 1);
+                }
+              },
+              icon: const Icon(Icons.arrow_back, size: 16),
+              label: const Text('Previous Question'),
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              )
-            else
-              const SizedBox.shrink(),
-            if (_activeQuestionIndex < _questions.length - 1)
-              ElevatedButton.icon(
-                onPressed: () {
-                  if (_saveCurrentEditorState()) {
-                    _loadQuestionIntoEditor(_activeQuestionIndex + 1);
-                  }
-                },
-                icon: const Icon(Icons.arrow_forward, size: 16),
-                label: const Text('Next Question'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              )
-            else
-              ElevatedButton.icon(
-                onPressed: () {
-                  _saveCurrentEditorState();
-                },
-                icon: const Icon(Icons.check, size: 16),
-                label: const Text('Review Complete'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.catGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
                 ),
               ),
-          ],
-        ),
-      ],
+            )
+          else
+            const SizedBox.shrink(),
+          if (_activeQuestionIndex < _questions.length - 1)
+            ElevatedButton.icon(
+              onPressed: () {
+                if (_saveCurrentEditorState()) {
+                  _loadQuestionIntoEditor(_activeQuestionIndex + 1);
+                }
+              },
+              icon: const Icon(Icons.arrow_forward, size: 16),
+              label: const Text('Next Question'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+              ),
+            )
+          else
+            ElevatedButton.icon(
+              onPressed: () {
+                _saveCurrentEditorState();
+              },
+              icon: const Icon(Icons.check, size: 16),
+              label: const Text('Review Complete'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.catGreen,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 

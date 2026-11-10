@@ -275,6 +275,23 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
     });
 
     final initialPath = _normalizeRoutePath(getBrowserUrlPath());
+    final initialQuery = getBrowserUrlQueryParams();
+    if (initialPath == AppRoutes.teacherClasswork && initialQuery.isNotEmpty) {
+      final tabParam = initialQuery['tab']?.toLowerCase();
+      int? catIdx;
+      if (tabParam == 'ww') {
+        catIdx = 0;
+      } else if (tabParam == 'pt') {
+        catIdx = 1;
+      } else if (tabParam == 'ex') {
+        catIdx = 2;
+      }
+      LocalStorageService.saveTeacherClassworkNavState(
+        categoryTabIndex: catIdx,
+        activeAssessmentId: initialQuery['assessment'],
+        activeActivityId: initialQuery['activity'],
+      );
+    }
     const restorableRoutes = {
       AppRoutes.adminDashboard,
       AppRoutes.adminBroadcasts,
@@ -317,7 +334,22 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
     }
     _initialDestination = _determineInitialDestination();
     if (widget.isWarmBoot) {
-      updateBrowserUrl(_initialDestination);
+      if (_initialDestination == AppRoutes.teacherClasswork) {
+        final nav = LocalStorageService.getTeacherClassworkNavState();
+        final catIdx = (nav['categoryTabIndex'] as num?)?.toInt() ?? 0;
+        final tabParam = catIdx == 0 ? 'ww' : (catIdx == 1 ? 'pt' : 'ex');
+        final assessId = nav['activeAssessmentId']?.toString();
+        final actId = nav['activeActivityId']?.toString();
+        if (assessId != null && assessId.isNotEmpty) {
+          updateBrowserUrl('$_initialDestination?tab=$tabParam&assessment=$assessId');
+        } else if (actId != null && actId.isNotEmpty) {
+          updateBrowserUrl('$_initialDestination?tab=$tabParam&activity=$actId');
+        } else {
+          updateBrowserUrl('$_initialDestination?tab=$tabParam');
+        }
+      } else {
+        updateBrowserUrl(_initialDestination);
+      }
     }
   }
 

@@ -331,11 +331,15 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                   ),
                 ),
-                Text(
-                  'Tap subject for teacher & schedule',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                Flexible(
+                  child: Text(
+                    'Tap subject for details',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
                   ),
                 ),
               ],
@@ -471,11 +475,9 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
                     backgroundColor: Colors.white.withValues(alpha: 0.2),
                     radius: 26,
                     child: Text(
-                      student.firstName?.isNotEmpty == true
-                          ? student.firstName![0].toUpperCase()
-                          : (student.fullName.isNotEmpty
-                                ? student.fullName[0].toUpperCase()
-                                : 'S'),
+                      student.lastFirstMi.isNotEmpty
+                          ? student.lastFirstMi[0].toUpperCase()
+                          : 'S',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 21,
@@ -490,82 +492,69 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Expanded(
                             child: Material(
                               color: Colors.transparent,
                               child: InkWell(
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(8),
                                 onTap: widget.onSwitchChildTap,
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 2,
                                   ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          student.fullName,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                      if (widget.onSwitchChildTap != null) ...[
-                                        const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.all(3),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.22,
-                                            ),
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.35,
-                                              ),
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.keyboard_arrow_down_rounded,
-                                            size: 16,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
+                                  child: Text(
+                                    student.lastFirstMi,
+                                    maxLines: 2,
+                                    softWrap: true,
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      height: 1.2,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              student.parentGuardianRelationship ?? 'Guardian',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                          if (widget.onSwitchChildTap != null) ...[
+                            const SizedBox(width: 8),
+                            Tooltip(
+                              message: 'Switch Student',
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(999),
+                                  onTap: widget.onSwitchChildTap,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.22,
+                                      ),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.38,
+                                        ),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: const Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      size: 20,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       Text(
                         '$gradeSection · LRN: $lrnDisplay',
                         style: TextStyle(
@@ -684,7 +673,10 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           if (subjectCode.isNotEmpty)
                             Container(
@@ -692,7 +684,6 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
                                 horizontal: 6,
                                 vertical: 2,
                               ),
-                              margin: const EdgeInsets.only(right: 6),
                               decoration: BoxDecoration(
                                 color: theme.colorScheme.primary.withValues(
                                   alpha: 0.12,

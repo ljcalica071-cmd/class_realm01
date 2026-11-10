@@ -17,6 +17,17 @@ String getBrowserUrlPathWeb() {
   }
 }
 
+Map<String, String> getBrowserUrlQueryParamsWeb() {
+  try {
+    final search = html.window.location.search ?? '';
+    if (search.isEmpty) return const {};
+    final clean = search.startsWith('?') ? search.substring(1) : search;
+    return Uri.splitQueryString(clean);
+  } catch (_) {
+    return const {};
+  }
+}
+
 bool isWarmSessionWeb() {
   try {
     return html.window.sessionStorage['classrealm_warm_session'] == '1';

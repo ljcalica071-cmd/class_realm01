@@ -10,7 +10,13 @@ import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheat
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/services/teacher_proctor_channel_service.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/widgets/proctoring_roster_table.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/item_analysis/item_difficulty_stat.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/data/repositories/subject_repository.dart';
+import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
+import 'package:class_realm/widgets/common/app_date_picker_field.dart';
+import 'package:class_realm/widgets/common/app_time_picker_field.dart';
 import 'package:class_realm/shared/widgets/app_top_toast.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 enum ProctorViewTab { liveMonitor, itemAnalysis }
 
@@ -38,7 +44,6 @@ class _AssessmentProctoringScreenState
   ProctorViewTab _activeTab = ProctorViewTab.liveMonitor;
   String _searchQuery = '';
   bool _isLoading = true;
-  bool _soundEnabled = true;
   bool _resultsReleased = false;
 
   List<StudentLiveProctorState> _rosterStudents = [];
@@ -67,11 +72,14 @@ class _AssessmentProctoringScreenState
     );
     _tabController.addListener(() {
       if (!mounted) return;
-      if (_tabController.index == 1 && !_isTestingFinished) {
+      final hasSubmitted = _rosterStudents.any(
+        (s) => s.status == ProctorSessionStatus.submitted,
+      );
+      if (_tabController.index == 1 && !_isTestingFinished && !hasSubmitted) {
         _tabController.index = 0;
         AppTopToast.warning(
           context,
-          'Item Analysis unlocks after the examination time window ends.',
+          'Item Analysis unlocks once learners submit or after the examination window ends.',
         );
       } else {
         setState(() {
@@ -79,6 +87,9 @@ class _AssessmentProctoringScreenState
               ? ProctorViewTab.liveMonitor
               : ProctorViewTab.itemAnalysis;
         });
+        if (_activeTab == ProctorViewTab.itemAnalysis) {
+          _loadItemAnalysis();
+        }
       }
     });
 
@@ -87,7 +98,6 @@ class _AssessmentProctoringScreenState
     );
 
     _proctorService.startListening();
-    _proctorService.loadHistoricalViolations();
 
     _proctorSub = _proctorService.studentStatesStream.listen((liveList) {
       if (!mounted) return;
@@ -102,9 +112,11 @@ class _AssessmentProctoringScreenState
               violations: live.violations,
               lastActiveAt: live.lastActiveAt,
               kickedReason: live.kickedReason,
-              score: live.score ?? st.score,
+              score: live.score,
+              clearScore: live.score == null && live.status == ProctorSessionStatus.retakeRequested,
               totalPoints: live.totalPoints ?? st.totalPoints,
               isEntryAllowed: live.isEntryAllowed,
+              isMissing: live.isMissing,
               currentQuestionNumber:
                   live.currentQuestionNumber ?? st.currentQuestionNumber,
             );
@@ -113,6 +125,9 @@ class _AssessmentProctoringScreenState
         }).toList();
       });
     });
+
+    TeacherGradebookTab.classworkSyncNotifier.addListener(_onGradebookSynced);
+    TeacherGradebookTab.gradebookRefreshNotifier.addListener(_onGradebookSynced);
 
     _loadLearners();
     if (widget.assessment.isExam) {
@@ -124,8 +139,18 @@ class _AssessmentProctoringScreenState
     });
   }
 
+  void _onGradebookSynced() {
+    if (!mounted) return;
+    _loadLearners(silent: true);
+    if (widget.assessment.isExam) {
+      _loadItemAnalysis();
+    }
+  }
+
   @override
   void dispose() {
+    TeacherGradebookTab.classworkSyncNotifier.removeListener(_onGradebookSynced);
+    TeacherGradebookTab.gradebookRefreshNotifier.removeListener(_onGradebookSynced);
     _tabController.dispose();
     _lateCheckTimer?.cancel();
     _proctorSub?.cancel();
@@ -133,8 +158,10 @@ class _AssessmentProctoringScreenState
     super.dispose();
   }
 
-  Future<void> _loadLearners() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadLearners({bool silent = false}) async {
+    if (!silent && _rosterStudents.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       final client = SupabaseService().client;
 
@@ -143,11 +170,21 @@ class _AssessmentProctoringScreenState
       try {
         assessmentRow = await client
             .from('digital_assessments')
-            .select('subject_offering_id, results_released')
+            .select(
+              'subject_offering_id, results_released, available_from, assessment_type, grading_category',
+            )
             .eq('id', widget.assessment.id)
             .maybeSingle();
       } catch (e) {
         debugPrint('digital_assessments metadata notice: $e');
+      }
+
+      final availStr = assessmentRow?['available_from']?.toString();
+      if (availStr != null) {
+        final parsed = DateTime.tryParse(availStr);
+        if (parsed != null && _overrideScheduleDate == null) {
+          _overrideScheduleDate = parsed.toLocal();
+        }
       }
 
       String? offeringId = assessmentRow?['subject_offering_id']?.toString() ??
@@ -155,18 +192,19 @@ class _AssessmentProctoringScreenState
       final totalPoints = widget.assessment.totalPoints;
       _resultsReleased = assessmentRow?['results_released'] == true;
 
-      // 1b. If offeringId is still null/empty, check classwork_items
-      if (offeringId == null || offeringId.isEmpty) {
-        try {
-          final cwRow = await client
-              .from('classwork_items')
-              .select('subject_offering_id')
-              .eq('id', widget.assessment.id)
-              .maybeSingle();
-          offeringId = cwRow?['subject_offering_id']?.toString();
-        } catch (e) {
-          debugPrint('classwork_items subject_offering_id notice: $e');
-        }
+      // 1b. Fetch classwork_items metadata for gradebook column & term sync
+      Map<String, dynamic>? cwRow;
+      try {
+        cwRow = await client
+            .from('classwork_items')
+            .select(
+              'subject_offering_id, term_number, gradebook_column_index, grading_category',
+            )
+            .eq('id', widget.assessment.id)
+            .maybeSingle();
+        offeringId ??= cwRow?['subject_offering_id']?.toString();
+      } catch (e) {
+        debugPrint('classwork_items metadata notice: $e');
       }
 
       // 1c. If offeringId is still null/empty, find offering by section name & subject
@@ -371,12 +409,14 @@ class _AssessmentProctoringScreenState
         }
       }
 
-      // 3. Fetch existing attempts safely
+      // 3. Fetch existing attempts safely (using real columns of assessment_attempts)
       final attemptsMap = <String, Map<String, dynamic>>{};
       try {
         final attemptsData = await client
             .from('assessment_attempts')
-            .select('student_id, status, score_earned, current_question_index')
+            .select(
+              'id, student_id, status, score_earned, started_at, submitted_at',
+            )
             .eq('assessment_id', widget.assessment.id);
         for (final a in (attemptsData as List? ?? [])) {
           final sId = a['student_id']?.toString() ?? '';
@@ -384,6 +424,72 @@ class _AssessmentProctoringScreenState
         }
       } catch (attErr) {
         debugPrint('attempts query notice: $attErr');
+      }
+
+      // 3b. Fetch scores from student_classwork_submissions (Gradebook / Classwork sync)
+      final submissionsMap = <String, Map<String, dynamic>>{};
+      try {
+        final subsData = await client
+            .from('student_classwork_submissions')
+            .select('student_id, status, score, submitted_at')
+            .eq('classwork_id', widget.assessment.id);
+        for (final s in (subsData as List? ?? [])) {
+          final sId = s['student_id']?.toString() ?? '';
+          if (sId.isNotEmpty) {
+            submissionsMap[sId] = Map<String, dynamic>.from(s);
+          }
+        }
+      } catch (subErr) {
+        debugPrint('submissions query notice: $subErr');
+      }
+
+      // 3c. Fetch scores from gradebook_term_sheets (Single Source of Truth when teacher edits Gradebook)
+      final gradebookScoresMap = <String, double>{};
+      try {
+        final termNum =
+            (cwRow?['term_number'] as num?)?.toInt() ??
+            widget.assessment.termNumber;
+        final assessType =
+            assessmentRow?['assessment_type']?.toString().toLowerCase() ??
+            widget.assessment.examType;
+        final colIdx =
+            (cwRow?['gradebook_column_index'] as num?)?.toInt() ??
+            widget.assessment.gradebookColumnIndex ??
+            (assessType == 'st1'
+                ? 1
+                : (assessType == 'st2'
+                      ? 2
+                      : (assessType == 'term_exam' ? 3 : null)));
+        final catKey =
+            cwRow?['grading_category']?.toString().toLowerCase() ??
+            assessmentRow?['grading_category']?.toString().toLowerCase() ??
+            (widget.assessment.isExam ? 'ex' : 'ww');
+
+        if (offeringId != null && offeringId.isNotEmpty && colIdx != null) {
+          final sheet = await SubjectRepository.instance.getGradebookTermSheet(
+            offeringId,
+            termNum,
+          );
+          if (sheet != null && sheet['scores'] is Map) {
+            final scoresMap = sheet['scores'] as Map;
+            final colKey = catKey == 'ex'
+                ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
+                : colIdx.toString();
+            for (final entry in scoresMap.entries) {
+              final sId = entry.key.toString();
+              final sVal = entry.value;
+              if (sVal is Map && sVal[catKey] is Map) {
+                final catScores = sVal[catKey] as Map;
+                final rawScore = catScores[colKey] ?? catScores[colIdx.toString()];
+                if (rawScore is num) {
+                  gradebookScoresMap[sId] = rawScore.toDouble();
+                }
+              }
+            }
+          }
+        }
+      } catch (gbErr) {
+        debugPrint('gradebook sheet score query notice: $gbErr');
       }
 
       // 4. Fetch allow/disallow overrides from anti_cheating_logs safely
@@ -422,13 +528,29 @@ class _AssessmentProctoringScreenState
             [firstName, middleName, lastName].where((s) => s.isNotEmpty).join(' ');
 
         final attempt = attemptsMap[sId];
-        final rawStatus = attempt?['status']?.toString() ?? 'pending';
-        final score = (attempt?['score_earned'] as num?)?.toDouble();
-        final currentQ =
-            (attempt?['current_question_index'] as num?)?.toInt();
+        final sub = submissionsMap[sId];
+        final gbScore = gradebookScoresMap[sId];
 
-        final hasStarted = attempt != null &&
-            (rawStatus == 'in_progress' || rawStatus == 'submitted');
+        final rawStatus = (attempt?['status']?.toString() ?? '').toLowerCase();
+        final subStatus = (sub?['status']?.toString() ?? '').toLowerCase();
+
+        double? score = (attempt?['score_earned'] as num?)?.toDouble() ??
+            (sub?['score'] as num?)?.toDouble() ??
+            gbScore;
+        if (gbScore != null) {
+          // Gradebook is the Single Source of Truth if teacher edited the score
+          score = gbScore;
+        }
+
+        final isCompletedInDb = rawStatus == 'submitted' ||
+            rawStatus == 'auto_submitted' ||
+            subStatus == 'submitted' ||
+            subStatus == 'graded' ||
+            gbScore != null;
+        final isInProgressInDb = rawStatus == 'in_progress' && !isCompletedInDb;
+        final isDisqualifiedInDb = rawStatus == 'disqualified';
+
+        final hasStarted = isInProgressInDb || isCompletedInDb || isDisqualifiedInDb;
         final isMissing = pastLateCutoff && !hasStarted;
 
         // Entry allowed check: default false if past 15m and never started, unless overridden
@@ -440,10 +562,12 @@ class _AssessmentProctoringScreenState
         }
 
         ProctorSessionStatus status;
-        if (rawStatus == 'in_progress') {
-          status = ProctorSessionStatus.inProgress;
-        } else if (rawStatus == 'submitted') {
+        if (isDisqualifiedInDb) {
+          status = ProctorSessionStatus.kicked;
+        } else if (isCompletedInDb) {
           status = ProctorSessionStatus.submitted;
+        } else if (isInProgressInDb) {
+          status = ProctorSessionStatus.inProgress;
         } else {
           status = ProctorSessionStatus.notStarted;
         }
@@ -460,8 +584,7 @@ class _AssessmentProctoringScreenState
             score: score,
             totalPoints: totalPoints,
             isEntryAllowed: isAllowed,
-            currentQuestionNumber: currentQ != null ? currentQ + 1 : null,
-            isMissing: isMissing,
+            isMissing: isMissing && !isAllowed,
             lastName: lastName,
             firstName: firstName,
             middleName: middleName,
@@ -480,7 +603,7 @@ class _AssessmentProctoringScreenState
         return aFirst.compareTo(bFirst);
       });
 
-      // Synchronize live proctor service roster
+      // Synchronize live proctor service roster first
       _proctorService.initializeRoster(parsedList.map((s) => {
         'id': s.studentId,
         'name': s.studentName,
@@ -499,7 +622,10 @@ class _AssessmentProctoringScreenState
         'current_question_number': s.currentQuestionNumber,
       }).toList());
 
-      // Merge any already-present live state from proctor service
+      // Load historical violations & session events AFTER roster is initialized so all logs match studentIds!
+      await _proctorService.loadHistoricalViolations();
+
+      // Merge updated states from proctor service
       if (_proctorService.currentStates.isNotEmpty) {
         final liveMap = {
           for (final s in _proctorService.currentStates) s.studentId: s,
@@ -511,12 +637,14 @@ class _AssessmentProctoringScreenState
               status: live.status,
               violationCount: live.violationCount,
               violations: live.violations,
-              score: live.score ?? parsedList[i].score,
+              score: parsedList[i].score ?? live.score,
               totalPoints: live.totalPoints ?? parsedList[i].totalPoints,
               isEntryAllowed: live.isEntryAllowed,
               currentQuestionNumber:
                   live.currentQuestionNumber ?? parsedList[i].currentQuestionNumber,
-              isMissing: live.isMissing,
+              isMissing: live.status == ProctorSessionStatus.notStarted &&
+                  pastLateCutoff &&
+                  !live.isEntryAllowed,
             );
           }
         }
@@ -536,14 +664,24 @@ class _AssessmentProctoringScreenState
 
   void _evaluateLateWindowStatus() {
     final pastLate = _isPastLateCutoff;
-    if (!pastLate) return;
+    if (!pastLate) {
+      setState(() {
+        _rosterStudents = _rosterStudents.map((s) {
+          if (s.status == ProctorSessionStatus.notStarted && s.isMissing) {
+            return s.copyWith(isMissing: false);
+          }
+          return s;
+        }).toList();
+      });
+      return;
+    }
 
     setState(() {
       _rosterStudents = _rosterStudents.map((s) {
         if (s.status == ProctorSessionStatus.notStarted) {
-          return s.copyWith(isMissing: true);
+          return s.copyWith(isMissing: !s.isEntryAllowed);
         }
-        return s;
+        return s.copyWith(isMissing: false);
       }).toList();
     });
   }
@@ -551,25 +689,76 @@ class _AssessmentProctoringScreenState
   Future<void> _loadItemAnalysis() async {
     try {
       final client = SupabaseService().client;
-      final questionsRes = await client
-          .from('assessment_questions')
-          .select('id, question_text, order_index')
-          .eq('assessment_id', widget.assessment.id)
-          .order('order_index');
+      // 1. Query assessment_questions using real 'position' column (fallback to widget.assessment.questions)
+      List<Map<String, dynamic>> questions = [];
+      try {
+        final questionsRes = await client
+            .from('assessment_questions')
+            .select('id, question_text, position, points')
+            .eq('assessment_id', widget.assessment.id)
+            .order('position', ascending: true);
+        questions = List<Map<String, dynamic>>.from(questionsRes as List? ?? []);
+      } catch (qErr) {
+        debugPrint('assessment_questions query notice: $qErr');
+      }
 
-      final questions = questionsRes as List<dynamic>? ?? [];
-      final responsesRes = await client
-          .from('assessment_responses')
-          .select('question_id, is_correct')
-          .eq('assessment_id', widget.assessment.id);
-      final responses = responsesRes as List<dynamic>? ?? [];
+      if (questions.isEmpty && widget.assessment.questions.isNotEmpty) {
+        for (int i = 0; i < widget.assessment.questions.length; i++) {
+          final q = widget.assessment.questions[i];
+          questions.add({
+            'id': q.id,
+            'question_text': q.questionText,
+            'position': i + 1,
+            'points': q.points,
+          });
+        }
+      }
+
+      // 2. Query assessment_attempts for this assessment to get attempt IDs, then query assessment_responses
+      List<Map<String, dynamic>> responses = [];
+      try {
+        final attemptsRes = await client
+            .from('assessment_attempts')
+            .select('id, status')
+            .eq('assessment_id', widget.assessment.id);
+        final attemptIds = (attemptsRes as List? ?? [])
+            .where((a) {
+              final st = a['status']?.toString().toLowerCase() ?? '';
+              return st == 'submitted' || st == 'auto_submitted';
+            })
+            .map((a) => a['id']?.toString())
+            .whereType<String>()
+            .toList();
+
+        if (attemptIds.isNotEmpty) {
+          final responsesRes = await client
+              .from('assessment_responses')
+              .select('question_id, is_correct, attempt_id')
+              .inFilter('attempt_id', attemptIds);
+          responses = List<Map<String, dynamic>>.from(responsesRes as List? ?? []);
+        } else if (questions.isNotEmpty) {
+          final qIds = questions
+              .map((q) => q['id']?.toString())
+              .whereType<String>()
+              .toList();
+          if (qIds.isNotEmpty) {
+            final responsesRes = await client
+                .from('assessment_responses')
+                .select('question_id, is_correct, attempt_id')
+                .inFilter('question_id', qIds);
+            responses = List<Map<String, dynamic>>.from(responsesRes as List? ?? []);
+          }
+        }
+      } catch (rErr) {
+        debugPrint('assessment_responses query notice: $rErr');
+      }
 
       final statsList = <ItemDifficultyStat>[];
       for (int i = 0; i < questions.length; i++) {
         final q = questions[i];
-        final qId = q['id'];
+        final qId = q['id']?.toString();
         final itemResponses =
-            responses.where((r) => r['question_id'] == qId).toList();
+            responses.where((r) => r['question_id']?.toString() == qId).toList();
         final total = itemResponses.length;
         final correct =
             itemResponses.where((r) => r['is_correct'] == true).length;
@@ -577,7 +766,7 @@ class _AssessmentProctoringScreenState
         statsList.add(
           ItemDifficultyStat(
             itemNumber: i + 1,
-            questionText: q['question_text'] ?? 'Question ${i + 1}',
+            questionText: q['question_text']?.toString() ?? 'Question ${i + 1}',
             totalAttempts: total,
             correctCount: correct,
           ),
@@ -791,6 +980,7 @@ class _AssessmentProctoringScreenState
   Future<void> _showUpdateScheduleDialog() async {
     DateTime selectedDate = _scheduleDate;
     TimeOfDay selectedTime = TimeOfDay.fromDateTime(_scheduleDate);
+    final initialSchedule = _scheduleDate;
     String? validationError;
     bool isSaving = false;
 
@@ -801,6 +991,7 @@ class _AssessmentProctoringScreenState
         return StatefulBuilder(
           builder: (context, setModalState) {
             final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
             final candidate = DateTime(
               selectedDate.year,
               selectedDate.month,
@@ -809,6 +1000,14 @@ class _AssessmentProctoringScreenState
               selectedTime.minute,
             );
             final isPast = candidate.isBefore(now.subtract(const Duration(minutes: 1)));
+            final isUnchanged = selectedDate.year == initialSchedule.year &&
+                selectedDate.month == initialSchedule.month &&
+                selectedDate.day == initialSchedule.day &&
+                selectedTime.hour == initialSchedule.hour &&
+                selectedTime.minute == initialSchedule.minute;
+            final isSelectedToday = selectedDate.year == today.year &&
+                selectedDate.month == today.month &&
+                selectedDate.day == today.day;
 
             return AlertDialog(
               shape: RoundedRectangleBorder(
@@ -854,11 +1053,47 @@ class _AssessmentProctoringScreenState
                       'Adjust the scheduled start time for this examination. Entrance window and late cut-offs will automatically synchronize.',
                       style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 14),
+
+                    // Current Schedule Banner
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF0F8A48).withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.schedule,
+                            size: 16,
+                            color: Color(0xFF0F8A48),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Current Schedule: ${_formatDate(_scheduleDate)} ${_formatTime(_scheduleDate)}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF0F8A48),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
                     // Date Picker Tile
                     const Text(
-                      'Examination Date',
+                      'Update Schedule Date *',
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
@@ -870,13 +1105,17 @@ class _AssessmentProctoringScreenState
                       onTap: isSaving
                           ? null
                           : () async {
-                              final picked = await showDatePicker(
-                                context: context,
-                                initialDate: selectedDate.isBefore(now) ? now : selectedDate,
-                                firstDate: DateTime(now.year - 1),
-                                lastDate: DateTime(now.year + 5),
+                              final picked = await showAppDatePickerDialog(
+                                dialogCtx,
+                                initialDate: selectedDate,
+                                firstDate: today,
+                                lastDate: DateTime(today.year + 5, 12, 31),
+                                title: 'Update Schedule',
+                                icon: Icons.calendar_month_outlined,
+                                highlightDate: _scheduleDate,
+                                highlightLabel: 'Current Schedule',
                               );
-                              if (picked != null) {
+                              if (picked != null && dialogCtx.mounted) {
                                 setModalState(() {
                                   selectedDate = picked;
                                   validationError = null;
@@ -921,66 +1160,24 @@ class _AssessmentProctoringScreenState
                     ),
                     const SizedBox(height: 14),
 
-                    // Time Picker Tile
-                    const Text(
-                      'Start Time',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF334155),
+                    // Time Picker (AppTimePickerField with presets and minTime)
+                    AppTimePickerField(
+                      key: ValueKey(
+                        '${selectedDate.year}-${selectedDate.month}-${selectedDate.day}-${selectedTime.hour}-${selectedTime.minute}',
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    InkWell(
-                      onTap: isSaving
-                          ? null
-                          : () async {
-                              final picked = await showTimePicker(
-                                context: context,
-                                initialTime: selectedTime,
-                              );
-                              if (picked != null) {
-                                setModalState(() {
-                                  selectedTime = picked;
-                                  validationError = null;
-                                });
-                              }
-                            },
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              LucideIcons.clock,
-                              size: 16,
-                              color: Color(0xFF2563EB),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                selectedTime.format(context),
-                                style: const TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_drop_down,
-                              color: Color(0xFF64748B),
-                            ),
-                          ],
-                        ),
-                      ),
+                      label: 'Start Time *',
+                      initialTime: selectedTime,
+                      minTime: isSelectedToday
+                          ? TimeOfDay.fromDateTime(
+                              now.add(const Duration(minutes: 1)),
+                            )
+                          : null,
+                      onTimeSelected: (picked) {
+                        setModalState(() {
+                          selectedTime = picked;
+                          validationError = null;
+                        });
+                      },
                     ),
 
                     if (isPast) ...[
@@ -1016,6 +1213,15 @@ class _AssessmentProctoringScreenState
                           ],
                         ),
                       ),
+                    ] else if (isUnchanged) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Select a different date or time to update the schedule.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
                     ],
 
                     if (validationError != null) ...[
@@ -1038,7 +1244,7 @@ class _AssessmentProctoringScreenState
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: (isSaving || isPast)
+                  onPressed: (isSaving || isPast || isUnchanged)
                       ? null
                       : () async {
                           setModalState(() {
@@ -1048,12 +1254,43 @@ class _AssessmentProctoringScreenState
 
                           try {
                             final client = SupabaseService().client;
+                            final candidateUtc = candidate.toUtc().toIso8601String();
+                            final durationMinutes = widget.assessment.durationMinutes > 0
+                                ? widget.assessment.durationMinutes
+                                : 60;
+                            final deadlineUtc = candidate
+                                .add(Duration(minutes: durationMinutes))
+                                .toUtc()
+                                .toIso8601String();
+
+                            // 1. Update digital_assessments
                             await client
                                 .from('digital_assessments')
                                 .update({
-                                  'schedule_date': candidate.toIso8601String(),
+                                  'available_from': candidateUtc,
+                                  'deadline': deadlineUtc,
                                 })
                                 .eq('id', widget.assessment.id);
+
+                            // 2. Also update classwork_items if linked
+                            try {
+                              await client
+                                  .from('classwork_items')
+                                  .update({
+                                    'assigned_at': candidateUtc,
+                                    'deadline': deadlineUtc,
+                                  })
+                                  .eq('id', widget.assessment.id);
+                            } catch (cwErr) {
+                              debugPrint('classwork_items update non-fatal: $cwErr');
+                            }
+
+                            // 3. Invalidate caches across the app
+                            AppDataCache.instance.invalidatePrefix('teacher_assessments_');
+                            AppDataCache.instance.invalidatePrefix('teacher_activities_');
+                            AppDataCache.instance.invalidatePrefix('student_dashboard_');
+                            AppDataCache.instance.invalidatePrefix('gradebook_');
+                            TeacherGradebookTab.gradebookRefreshNotifier.value++;
 
                             if (mounted) {
                               setState(() {
@@ -1238,26 +1475,6 @@ class _AssessmentProctoringScreenState
                   ],
                 ),
               ),
-              // Controls
-              IconButton(
-                tooltip: _soundEnabled
-                    ? 'Mute Alert Sounds'
-                    : 'Enable Alert Sounds',
-                icon: Icon(
-                  _soundEnabled ? LucideIcons.volume2 : LucideIcons.volumeX,
-                  size: 19,
-                ),
-                onPressed: () =>
-                    setState(() => _soundEnabled = !_soundEnabled),
-              ),
-              IconButton(
-                tooltip: 'Refresh Roster',
-                icon: const Icon(LucideIcons.refreshCw, size: 18),
-                onPressed: () {
-                  _loadLearners();
-                  if (widget.assessment.isExam) _loadItemAnalysis();
-                },
-              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -1300,7 +1517,7 @@ class _AssessmentProctoringScreenState
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          _isTestingFinished
+                          (_isTestingFinished || completedCount > 0)
                               ? LucideIcons.barChart2
                               : LucideIcons.lock,
                           size: 16,
@@ -1431,10 +1648,7 @@ class _AssessmentProctoringScreenState
 
           // ── ACTIVE TAB CONTENT ──
           if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(child: CircularProgressIndicator()),
-            )
+            _buildProctoringSkeleton(theme, isDark)
           else if (_activeTab == ProctorViewTab.liveMonitor)
             ProctoringRosterTable(
               students: _rosterStudents,
@@ -1446,10 +1660,157 @@ class _AssessmentProctoringScreenState
               isScheduleExpired: _isTestingFinished,
               onUpdateSchedule: _showUpdateScheduleDialog,
               scheduleDateFormatted: _formatDateOnly(_scheduleDate),
+              onRefresh: () async {
+                await _loadLearners(silent: true);
+                if (widget.assessment.isExam) {
+                  await _loadItemAnalysis();
+                }
+              },
             )
           else
             _buildItemAnalysisView(theme, isDark),
         ],
+      ),
+    );
+  }
+
+  Widget _buildProctoringSkeleton(ThemeData theme, bool isDark) {
+    final borderColor = isDark
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.12)
+        : const Color(0xFFE2E8F0);
+    return ShimmerLoading(
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: borderColor),
+        ),
+        child: Column(
+          children: [
+            // Toolbar skeleton
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: borderColor)),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  ShimmerBox(width: 280, height: 32, borderRadius: 8),
+                  Row(
+                    children: [
+                      ShimmerBox(width: 220, height: 34, borderRadius: 8),
+                      SizedBox(width: 10),
+                      ShimmerBox(width: 210, height: 34, borderRadius: 8),
+                      SizedBox(width: 8),
+                      ShimmerBox(width: 88, height: 34, borderRadius: 8),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Table header skeleton
+            Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: borderColor)),
+              ),
+              child: const Row(
+                children: [
+                  ShimmerBox(width: 24, height: 14, borderRadius: 4),
+                  SizedBox(width: 20),
+                  Expanded(
+                    flex: 3,
+                    child: ShimmerBox(height: 14, borderRadius: 4),
+                  ),
+                  SizedBox(width: 20),
+                  Expanded(
+                    flex: 2,
+                    child: ShimmerBox(height: 14, borderRadius: 4),
+                  ),
+                  SizedBox(width: 20),
+                  Expanded(
+                    flex: 2,
+                    child: ShimmerBox(height: 14, borderRadius: 4),
+                  ),
+                  SizedBox(width: 20),
+                  Expanded(
+                    flex: 2,
+                    child: ShimmerBox(height: 14, borderRadius: 4),
+                  ),
+                  SizedBox(width: 20),
+                  Expanded(
+                    flex: 3,
+                    child: ShimmerBox(height: 14, borderRadius: 4),
+                  ),
+                ],
+              ),
+            ),
+            // 7 Row skeletons
+            for (int i = 0; i < 7; i++)
+              Container(
+                height: 52,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: borderColor)),
+                ),
+                child: const Row(
+                  children: [
+                    ShimmerBox(width: 24, height: 14, borderRadius: 4),
+                    SizedBox(width: 20),
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ShimmerBox(width: 160, height: 13, borderRadius: 4),
+                          SizedBox(height: 5),
+                          ShimmerBox(width: 110, height: 10, borderRadius: 4),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 20),
+                    Expanded(
+                      flex: 2,
+                      child: Center(
+                        child: ShimmerBox(width: 76, height: 22, borderRadius: 6),
+                      ),
+                    ),
+                    SizedBox(width: 20),
+                    Expanded(
+                      flex: 2,
+                      child: Center(
+                        child: ShimmerBox(width: 32, height: 18, borderRadius: 4),
+                      ),
+                    ),
+                    SizedBox(width: 20),
+                    Expanded(
+                      flex: 2,
+                      child: Center(
+                        child: ShimmerBox(width: 64, height: 16, borderRadius: 4),
+                      ),
+                    ),
+                    SizedBox(width: 20),
+                    Expanded(
+                      flex: 3,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ShimmerBox(width: 28, height: 28, borderRadius: 6),
+                          SizedBox(width: 6),
+                          ShimmerBox(width: 28, height: 28, borderRadius: 6),
+                          SizedBox(width: 8),
+                          ShimmerBox(width: 92, height: 28, borderRadius: 6),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1776,6 +2137,8 @@ class _AssessmentProctoringScreenState
                               badgeColor = Colors.teal;
                             case 'Difficult':
                               badgeColor = Colors.orange;
+                            case 'Pending Submissions':
+                              badgeColor = AppTheme.catSlate;
                             default:
                               badgeColor = Colors.red;
                           }
@@ -1826,11 +2189,15 @@ class _AssessmentProctoringScreenState
                                   width: 160,
                                   child: Center(
                                     child: Text(
-                                      '${stat.correctCount} / ${stat.totalAttempts} correct',
+                                      stat.totalAttempts > 0
+                                          ? '${stat.correctCount} / ${stat.totalAttempts} correct'
+                                          : '0 / 0 attempts',
                                       style: TextStyle(
                                         fontSize: 12.5,
                                         fontWeight: FontWeight.w600,
-                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                                        color: theme.colorScheme.onSurface.withValues(
+                                          alpha: stat.totalAttempts > 0 ? 0.8 : 0.45,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1839,11 +2206,15 @@ class _AssessmentProctoringScreenState
                                   width: 160,
                                   child: Center(
                                     child: Text(
-                                      '${(stat.pIndex * 100).toStringAsFixed(1)}% (P = ${stat.pIndex.toStringAsFixed(2)})',
+                                      stat.totalAttempts > 0
+                                          ? '${(stat.pIndex * 100).toStringAsFixed(1)}% (P = ${stat.pIndex.toStringAsFixed(2)})'
+                                          : '—',
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w700,
-                                        color: theme.colorScheme.onSurface,
+                                        color: stat.totalAttempts > 0
+                                            ? theme.colorScheme.onSurface
+                                            : theme.colorScheme.onSurface.withValues(alpha: 0.4),
                                       ),
                                     ),
                                   ),

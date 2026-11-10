@@ -176,48 +176,161 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Row(
-            children: [
-              Icon(
-                Icons.warning_amber_rounded,
-                color: AppTheme.catOrange,
-                size: 28,
+        final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
+
+        // Strict 60-30-10 Color Architecture
+        // 60% Dominant: Card Surface (#FFFFFF Light, #263040 Dark)
+        final cardBg =
+            isDark ? const Color(0xFF263040) : const Color(0xFFFFFFFF);
+        // 30% Secondary: Borders & Supporting elements
+        final borderColor = isDark
+            ? Colors.white.withValues(alpha: 0.10)
+            : const Color(0xFFE2E8F0);
+        final primaryTextColor =
+            isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111827);
+        final secondaryTextColor =
+            isDark ? const Color(0xFF94A3B8) : const Color(0xFF4B5563);
+        // 10% Accent: Steel Blue #487898 (Light) / Sky Blue #60A5FA (Dark)
+        final accentColor =
+            isDark ? const Color(0xFF60A5FA) : const Color(0xFF487898);
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: Container(
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor, width: 1),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              SizedBox(width: 12),
-              Text(
-                'Inactivity Warning',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-            ],
-          ),
-          content: const Text(
-            'Are you still there? You will be logged out in 2 minutes due to inactivity. Click "Stay Logged In" to continue your session.',
-            style: TextStyle(fontSize: 14, height: 1.4),
-          ),
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.catGreen,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              onPressed: () {
-                _recordInteraction();
-                _isWarningDialogShowing = false;
-                Navigator.of(dialogContext).pop();
-              },
-              child: const Text(
-                'Stay Logged In',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title Row: 20px badge icon + 15px primary title
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: AppTheme.catOrange.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            Icons.warning_amber_rounded,
+                            color: AppTheme.catOrange,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Inactivity Warning',
+                          style: TextStyle(
+                            fontSize: 15.0,
+                            fontWeight: FontWeight.w700,
+                            color: primaryTextColor,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Body text: 12.5px-13px, weight 500, height 1.45
+                  Text(
+                    'Are you still there? You will be logged out in 2 minutes due to inactivity. Click "Stay Logged In" to continue your session.',
+                    style: TextStyle(
+                      fontSize: 13.0,
+                      fontWeight: FontWeight.w500,
+                      height: 1.45,
+                      color: secondaryTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Compact Action Buttons: height 36px, fontSize 13px, FontWeight.w600, borderRadius 8px
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      SizedBox(
+                        height: 36,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: secondaryTextColor,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: () {
+                            _isWarningDialogShowing = false;
+                            Navigator.of(dialogContext).pop();
+                            _triggerAutoLogout('inactivity');
+                          },
+                          child: const Text(
+                            'Log Out',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        height: 36,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: accentColor,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: () {
+                            _recordInteraction();
+                            _isWarningDialogShowing = false;
+                            Navigator.of(dialogContext).pop();
+                          },
+                          child: const Text(
+                            'Stay Logged In',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         );
       },
     ).then((_) {

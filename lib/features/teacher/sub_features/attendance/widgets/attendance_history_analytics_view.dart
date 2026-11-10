@@ -92,6 +92,8 @@ class AttendanceHistoryAnalyticsViewState
   List<AttendanceWorkspaceRecord> _historyRows = [];
   int _historyCurrentPage = 1;
   static const int _historyPageSize = 20;
+  int _atRiskCurrentPage = 1;
+  static const int _atRiskPageSize = 10;
   bool _isExportingCsv = false;
 
   String _getStudentDisplayName(String studentId) {
@@ -487,9 +489,9 @@ class AttendanceHistoryAnalyticsViewState
         else ...[
           _buildKpiCards(theme, summary),
           const SizedBox(height: 20),
-          _buildAtRiskSection(theme, summary),
-          const SizedBox(height: 20),
           _buildChartsSection(theme, summary),
+          const SizedBox(height: 20),
+          _buildAtRiskSection(theme, summary),
         ],
         const SizedBox(height: 24),
         _buildHistorySection(theme),
@@ -1763,143 +1765,226 @@ class AttendanceHistoryAnalyticsViewState
                 ],
               ),
             )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: summary.atRiskStudents.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (ctx, i) {
-                final student = summary.atRiskStudents[i];
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.catRed.withValues(
-                      alpha: isDark ? 0.12 : 0.05,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: AppTheme.catRed.withValues(
-                        alpha: isDark ? 0.35 : 0.22,
-                      ),
-                    ),
-                  ),
-                  child: Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: AppTheme.catRed.withValues(
-                                alpha: isDark ? 0.25 : 0.14,
-                              ),
-                              shape: BoxShape.circle,
+          else ...[
+            Builder(
+              builder: (context) {
+                final totalAtRisk = summary.atRiskStudents.length;
+                final totalPages = (totalAtRisk / _atRiskPageSize).ceil().clamp(1, 99999);
+                final safePage = _atRiskCurrentPage.clamp(1, totalPages);
+                final startIdx = (safePage - 1) * _atRiskPageSize;
+                final endIdx = (startIdx + _atRiskPageSize).clamp(0, totalAtRisk);
+                final pagedStudents = summary.atRiskStudents.sublist(startIdx, endIdx);
+
+                return Column(
+                  children: [
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: pagedStudents.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (ctx, i) {
+                        final student = pagedStudents[i];
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.catRed.withValues(
+                              alpha: isDark ? 0.12 : 0.05,
                             ),
-                            child: Icon(
-                              LucideIcons.alertTriangle,
-                              size: 16,
-                              color: isDark
-                                  ? const Color(0xFFF87171)
-                                  : AppTheme.catRed,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppTheme.catRed.withValues(
+                                alpha: isDark ? 0.35 : 0.22,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              Text(
-                                student.studentName,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13.5,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Section: ${student.section} • ID: ${student.studentId}',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.68,
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.catRed.withValues(
+                                        alpha: isDark ? 0.25 : 0.14,
+                                      ),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      LucideIcons.alertTriangle,
+                                      size: 16,
+                                      color: isDark
+                                          ? const Color(0xFFF87171)
+                                          : AppTheme.catRed,
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 12),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        student.studentName,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13.5,
+                                          color: theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Section: ${student.section} • ID: ${student.studentId}',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: theme.colorScheme.onSurface.withValues(
+                                            alpha: 0.68,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 9,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? const Color(0xFFFBBF24)
+                                                .withValues(alpha: 0.18)
+                                          : const Color(0xFFFEF3C7),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? const Color(0xFFFBBF24)
+                                                  .withValues(alpha: 0.4)
+                                            : const Color(0xFFF59E0B)
+                                                  .withValues(alpha: 0.4),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '${student.absenceCount} Absences',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? const Color(0xFFFDE047)
+                                            : const Color(0xFFB45309),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.catRed,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: const Text(
+                                      '3+ Absences — Intervention Needed',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? const Color(0xFFFBBF24)
-                                        .withValues(alpha: 0.18)
-                                  : const Color(0xFFFEF3C7),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: isDark
-                                    ? const Color(0xFFFBBF24)
-                                          .withValues(alpha: 0.4)
-                                    : const Color(0xFFF59E0B)
-                                          .withValues(alpha: 0.4),
-                              ),
-                            ),
-                            child: Text(
-                              '${student.absenceCount} Absences',
+                        );
+                      },
+                    ),
+                    if (totalAtRisk > _atRiskPageSize) ...[
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Showing ${totalAtRisk == 0 ? 0 : startIdx + 1} to $endIdx of $totalAtRisk at-risk learners',
                               style: TextStyle(
-                                color: isDark
-                                    ? const Color(0xFFFDE047)
-                                    : const Color(0xFFB45309),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.65,
+                                ),
                               ),
                             ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(
+                                    LucideIcons.chevronLeft,
+                                    size: 18,
+                                  ),
+                                  onPressed: safePage > 1
+                                      ? () => setState(
+                                          () => _atRiskCurrentPage = safePage - 1,
+                                        )
+                                      : null,
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'Page $safePage of $totalPages',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    LucideIcons.chevronRight,
+                                    size: 18,
+                                  ),
+                                  onPressed: safePage < totalPages
+                                      ? () => setState(
+                                          () => _atRiskCurrentPage = safePage + 1,
+                                        )
+                                      : null,
+                                ),
+                              ],
                             ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.catRed,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: const Text(
-                              '3+ Absences — Intervention Needed',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
-                  ),
+                  ],
                 );
               },
             ),
+          ],
         ],
       ),
     );

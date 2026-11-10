@@ -50,13 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     _passwordFocusNode.addListener(() {
       if (_passwordFocusNode.hasFocus) {
-        final text = _passwordController.text;
-        if (!_passwordController.selection.isValid ||
-            _passwordController.selection.start == -1) {
-          _passwordController.selection = TextSelection.collapsed(
-            offset: text.length,
-          );
-        }
+        _healPasswordSelection();
       }
     });
 
@@ -170,7 +164,24 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleEmailChanged() {}
 
-  void _handlePasswordChanged() {}
+  void _healPasswordSelection() {
+    final text = _passwordController.text;
+    final sel = _passwordController.selection;
+    if (!sel.isValid ||
+        sel.start < 0 ||
+        sel.end < 0 ||
+        sel.start > text.length ||
+        sel.end > text.length) {
+      _passwordController.selection =
+          TextSelection.collapsed(offset: text.length);
+    }
+  }
+
+  void _handlePasswordChanged() {
+    if (_passwordFocusNode.hasFocus) {
+      _healPasswordSelection();
+    }
+  }
 
   void _beginLockoutCountdown(Duration remaining) {
     _lockoutTimer?.cancel();
@@ -654,64 +665,98 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    focusNode: _passwordFocusNode,
-                    autofillHints: const [AutofillHints.password],
-                    textInputAction: TextInputAction.done,
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    onTap: () {
-                      final text = _passwordController.text;
-                      if (!_passwordController.selection.isValid ||
-                          _passwordController.selection.start == -1) {
-                        _passwordController.selection = TextSelection.collapsed(
-                          offset: text.length,
-                        );
+                  Focus(
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent) {
+                        final text = _passwordController.text;
+                        final sel = _passwordController.selection;
+                        // Edge-case recovery for browser password managers freezing selection at -1:
+                        if (!sel.isValid || sel.start == -1) {
+                          if (event.logicalKey == LogicalKeyboardKey.backspace) {
+                            if (text.isNotEmpty) {
+                              final newText =
+                                  text.substring(0, text.length - 1);
+                              _passwordController.value = TextEditingValue(
+                                text: newText,
+                                selection: TextSelection.collapsed(
+                                  offset: newText.length,
+                                ),
+                              );
+                              return KeyEventResult.handled;
+                            }
+                          } else if (event.character != null &&
+                              event.character!.isNotEmpty &&
+                              event.logicalKey != LogicalKeyboardKey.enter &&
+                              event.logicalKey != LogicalKeyboardKey.tab) {
+                            final newText = text + event.character!;
+                            _passwordController.value = TextEditingValue(
+                              text: newText,
+                              selection: TextSelection.collapsed(
+                                offset: newText.length,
+                              ),
+                            );
+                            return KeyEventResult.handled;
+                          }
+                        }
                       }
+                      return KeyEventResult.ignored;
                     },
-                    onFieldSubmitted: (_) {
-                      if (!_isLoading && !_isRateLimited) {
-                        _handleLogin();
-                      }
-                    },
-                    obscureText: _obscurePassword,
-                    style: const TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    inputFormatters: AppValidators.passwordFormatters,
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Password is required';
-                      }
-                      return null;
-                    },
-                    decoration: AuthResponsiveScaffold.inputDecoration(
-                      hintText: 'Password',
-                      prefixIcon: const Icon(
-                        LucideIcons.lock,
-                        color: Color(0xFF475569),
-                        size: 20,
+                    child: TextFormField(
+                      controller: _passwordController,
+                      focusNode: _passwordFocusNode,
+                      autofillHints: const [AutofillHints.password],
+                      keyboardType: TextInputType.visiblePassword,
+                      textInputAction: TextInputAction.done,
+                      enableSuggestions: false,
+                      autocorrect: false,
+                      onTap: () {
+                        _healPasswordSelection();
+                      },
+                      onFieldSubmitted: (_) {
+                        if (!_isLoading && !_isRateLimited) {
+                          _handleLogin();
+                        }
+                      },
+                      obscureText: _obscurePassword,
+                      style: const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                       ),
-                      suffixIcon: IconButton(
-                        tooltip: _obscurePassword
-                            ? 'Show password'
-                            : 'Hide password',
-                        icon: Icon(
-                          _obscurePassword
-                              ? LucideIcons.eyeOff
-                              : LucideIcons.eye,
-                          color: const Color(0xFF64748B),
+                      inputFormatters: [
+                        LengthLimitingTextInputFormatter(100),
+                      ],
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Password is required';
+                        }
+                        return null;
+                      },
+                      decoration: AuthResponsiveScaffold.inputDecoration(
+                        hintText: 'Password',
+                        prefixIcon: const Icon(
+                          LucideIcons.lock,
+                          color: Color(0xFF475569),
                           size: 20,
                         ),
-                        onPressed: () => setState(() {
-                          _obscurePassword = !_obscurePassword;
-                          final text = _passwordController.text;
-                          _passwordController.selection =
-                              TextSelection.collapsed(offset: text.length);
-                        }),
+                        suffixIcon: IconButton(
+                          tooltip: _obscurePassword
+                              ? 'Show password'
+                              : 'Hide password',
+                          icon: Icon(
+                            _obscurePassword
+                                ? LucideIcons.eyeOff
+                                : LucideIcons.eye,
+                            color: const Color(0xFF64748B),
+                            size: 20,
+                          ),
+                          onPressed: () => setState(() {
+                            _obscurePassword = !_obscurePassword;
+                            final text = _passwordController.text;
+                            _passwordController.selection =
+                                TextSelection.collapsed(offset: text.length);
+                          }),
+                        ),
                       ),
                     ),
                   ),

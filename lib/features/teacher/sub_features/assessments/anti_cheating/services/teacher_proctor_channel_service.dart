@@ -71,7 +71,7 @@ class TeacherProctorChannelService {
     }
   }
 
-  /// Subscribe to live Realtime Supabase inserts on `anti_cheating_logs`
+  /// Subscribe to live Realtime Supabase changes on `anti_cheating_logs` and `assessment_attempts`
   void startListening() {
     try {
       if (_subscriptionChannel != null) return;
@@ -91,9 +91,65 @@ class TeacherProctorChannelService {
               _broadcast();
             },
           )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'assessment_attempts',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'assessment_id',
+              value: assessmentId,
+            ),
+            callback: (payload) {
+              _handleAttemptRecord(payload.newRecord);
+              _broadcast();
+            },
+          )
           .subscribe();
     } catch (e) {
       debugPrint('Notice starting realtime proctor listener: $e');
+    }
+  }
+
+  void _handleAttemptRecord(Map<String, dynamic> record) {
+    final studentId = record['student_id']?.toString() ?? '';
+    if (studentId.isEmpty) return;
+    final current = _studentStates[studentId];
+    if (current == null) return;
+
+    final rawStatus = record['status']?.toString().toLowerCase() ?? '';
+    final scoreVal = (record['score_earned'] as num?)?.toDouble();
+
+    if (rawStatus == 'in_progress') {
+      _studentStates[studentId] = current.copyWith(
+        status: ProctorSessionStatus.inProgress,
+        isMissing: false,
+        lastActiveAt: DateTime.now(),
+      );
+    } else if (rawStatus == 'submitted' || rawStatus == 'auto_submitted') {
+      _studentStates[studentId] = current.copyWith(
+        status: ProctorSessionStatus.submitted,
+        score: scoreVal ?? current.score,
+        isMissing: false,
+        lastActiveAt: DateTime.now(),
+      );
+    } else if (rawStatus == 'disqualified') {
+      _studentStates[studentId] = current.copyWith(
+        status: ProctorSessionStatus.kicked,
+        score: 0,
+        lastActiveAt: DateTime.now(),
+      );
+    } else if (rawStatus == 'reset') {
+      _studentStates[studentId] = current.copyWith(
+        status: ProctorSessionStatus.retakeRequested,
+        violationCount: 0,
+        violations: const [],
+        clearScore: true,
+        clearKickedReason: true,
+        isMissing: false,
+        isEntryAllowed: true,
+        lastActiveAt: DateTime.now(),
+      );
     }
   }
 
@@ -115,7 +171,12 @@ class TeacherProctorChannelService {
     if (eventType == 'session_started') {
       registerStudentStarted(studentId);
     } else if (eventType == 'session_submitted') {
-      registerStudentSubmitted(studentId);
+      double? parsedScore;
+      final scoreMatch = RegExp(r'Score:\s*(\d+(?:\.\d+)?)').firstMatch(details);
+      if (scoreMatch != null) {
+        parsedScore = double.tryParse(scoreMatch.group(1) ?? '');
+      }
+      registerStudentSubmitted(studentId, score: parsedScore);
     } else if (eventType == 'kicked') {
       kickStudent(studentId, details, writeToDb: false);
     } else if (eventType == 'retake_authorized' || eventType == 'reset') {
@@ -127,7 +188,7 @@ class TeacherProctorChannelService {
     } else if (eventType == 'entry_disallowed') {
       toggleAllowStudent(studentId, false, writeToDb: false);
     } else {
-      // Focus lost / blur / tab switch violation
+      // Focus lost / blur / tab switch / network violation
       final current = _studentStates[studentId];
       final vType = eventType.contains('background')
           ? ProctorViolationType.appBackgrounded
@@ -155,8 +216,11 @@ class TeacherProctorChannelService {
   void registerStudentStarted(String studentId) {
     final current = _studentStates[studentId];
     if (current != null) {
+      // Don't overwrite a submitted status if replaying an older start log
+      if (current.status == ProctorSessionStatus.submitted) return;
       _studentStates[studentId] = current.copyWith(
         status: ProctorSessionStatus.inProgress,
+        isMissing: false,
         lastActiveAt: DateTime.now(),
       );
       _broadcast();
@@ -234,9 +298,10 @@ class TeacherProctorChannelService {
         status: ProctorSessionStatus.retakeRequested,
         violationCount: 0,
         violations: const [],
-        kickedReason: null,
+        clearKickedReason: true,
         currentQuestionNumber: 1,
-        score: null,
+        clearScore: true,
+        isEntryAllowed: true,
         isMissing: false,
         lastActiveAt: DateTime.now(),
       );
@@ -244,36 +309,56 @@ class TeacherProctorChannelService {
     }
 
     if (writeToDb) {
-      try {
-        SupabaseService().client
-            .from('anti_cheating_logs')
-            .insert({
-              'assessment_id': assessmentId,
-              'student_id': studentId,
-              'event_type': 'reset',
-              'details': reason,
-              'event_at': DateTime.now().toUtc().toIso8601String(),
-            })
-            .catchError((_) {});
+      unawaited(_resetStudentInDatabase(studentId, reason));
+    }
+  }
 
-        SupabaseService().client
-            .from('assessment_attempts')
-            .update({
-              'status': 'in_progress',
-              'score_earned': 0,
-              'current_question_index': 0,
-            })
-            .eq('assessment_id', assessmentId)
-            .eq('student_id', studentId)
-            .catchError((_) {});
-
-        SupabaseService().client
-            .from('student_assessment_responses')
+  Future<void> _resetStudentInDatabase(String studentId, String reason) async {
+    try {
+      final client = SupabaseService().client;
+      // 1. Delete existing responses linked to this student's attempt(s)
+      final attempts = await client
+          .from('assessment_attempts')
+          .select('id')
+          .eq('assessment_id', assessmentId)
+          .eq('student_id', studentId);
+      final attemptIds = (attempts as List? ?? [])
+          .map((a) => a['id']?.toString())
+          .whereType<String>()
+          .toList();
+      if (attemptIds.isNotEmpty) {
+        await client
+            .from('assessment_responses')
             .delete()
-            .eq('assessment_id', assessmentId)
-            .eq('student_id', studentId)
-            .catchError((_) {});
+            .inFilter('attempt_id', attemptIds);
+      }
+
+      // 2. Delete the attempt row so the student can start a clean attempt (or update if active)
+      await client
+          .from('assessment_attempts')
+          .delete()
+          .eq('assessment_id', assessmentId)
+          .eq('student_id', studentId);
+
+      // 3. Also delete any classwork submission mirror for this student
+      try {
+        await client
+            .from('student_classwork_submissions')
+            .delete()
+            .eq('classwork_id', assessmentId)
+            .eq('student_id', studentId);
       } catch (_) {}
+
+      // 4. Insert reset event into anti_cheating_logs so active student client receives signal
+      await client.from('anti_cheating_logs').insert({
+        'assessment_id': assessmentId,
+        'student_id': studentId,
+        'event_type': 'reset',
+        'details': reason,
+        'event_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('Notice resetting student attempt in database: $e');
     }
   }
 
@@ -352,11 +437,13 @@ class TeacherProctorChannelService {
   }
 
   /// Register student submission
-  void registerStudentSubmitted(String studentId) {
+  void registerStudentSubmitted(String studentId, {double? score}) {
     final current = _studentStates[studentId];
     if (current != null) {
       _studentStates[studentId] = current.copyWith(
         status: ProctorSessionStatus.submitted,
+        score: score ?? current.score,
+        isMissing: false,
         lastActiveAt: DateTime.now(),
       );
       _broadcast();

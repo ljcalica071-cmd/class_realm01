@@ -109,8 +109,8 @@ class _ParentGradesScreenState extends State<ParentGradesScreen> {
                             ? theme.colorScheme.primary
                             : theme.colorScheme.primary.withValues(alpha: 0.14),
                         child: Text(
-                          child.fullName.isNotEmpty
-                              ? child.fullName[0].toUpperCase()
+                          child.lastFirstMi.isNotEmpty
+                              ? child.lastFirstMi[0].toUpperCase()
                               : 'S',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -121,7 +121,7 @@ class _ParentGradesScreenState extends State<ParentGradesScreen> {
                         ),
                       ),
                       title: Text(
-                        child.fullName,
+                        child.lastFirstMi,
                         style: TextStyle(
                           fontWeight: isSelected
                               ? FontWeight.bold

@@ -5,6 +5,8 @@ import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheat
 
 enum ProctorRosterFilter { allActives, male, female, all }
 
+enum ProctorSortColumn { studentName, violations, score }
+
 class ProctoringRosterTable extends StatefulWidget {
   final List<StudentLiveProctorState> students;
   final String searchQuery;
@@ -15,6 +17,7 @@ class ProctoringRosterTable extends StatefulWidget {
   final bool isScheduleExpired;
   final VoidCallback? onUpdateSchedule;
   final String? scheduleDateFormatted;
+  final Future<void> Function()? onRefresh;
 
   const ProctoringRosterTable({
     super.key,
@@ -27,25 +30,35 @@ class ProctoringRosterTable extends StatefulWidget {
     this.isScheduleExpired = false,
     this.onUpdateSchedule,
     this.scheduleDateFormatted,
+    this.onRefresh,
   });
 
   @override
   State<ProctoringRosterTable> createState() => _ProctoringRosterTableState();
 }
 
-class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
+class _ProctoringRosterTableState extends State<ProctoringRosterTable>
+    with SingleTickerProviderStateMixin {
   static const double _headerHeight = 44.0;
   static const double _rowHeight = 52.0;
 
   static const double _colNumWidth = 44.0;
 
   ProctorRosterFilter _filter = ProctorRosterFilter.all;
+  ProctorSortColumn _sortColumn = ProctorSortColumn.studentName;
+  bool _sortAscending = true;
+  bool _isRefreshing = false;
+  late final AnimationController _refreshSpinController;
   late final TextEditingController _searchController;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController(text: widget.searchQuery);
+    _refreshSpinController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
   }
 
   @override
@@ -59,8 +72,49 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
 
   @override
   void dispose() {
+    _refreshSpinController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _triggerRefresh() async {
+    if (_isRefreshing || widget.onRefresh == null) return;
+    setState(() => _isRefreshing = true);
+    _refreshSpinController.repeat();
+    try {
+      await Future.wait([
+        widget.onRefresh!(),
+        Future<void>.delayed(const Duration(milliseconds: 650)),
+      ]);
+    } finally {
+      if (mounted) {
+        _refreshSpinController.stop();
+        _refreshSpinController.reset();
+        setState(() => _isRefreshing = false);
+      }
+    }
+  }
+
+  void _toggleSort(ProctorSortColumn column) {
+    setState(() {
+      if (_sortColumn == column) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortColumn = column;
+        // Default direction: A-Z for studentName, Highest-to-Lowest for violations & score
+        _sortAscending = column == ProctorSortColumn.studentName;
+      }
+    });
+  }
+
+  int _compareByNameAsc(StudentLiveProctorState a, StudentLiveProctorState b) {
+    final aLast = (a.lastName ?? a.studentName).trim().toLowerCase();
+    final bLast = (b.lastName ?? b.studentName).trim().toLowerCase();
+    final lnCmp = aLast.compareTo(bLast);
+    if (lnCmp != 0) return lnCmp;
+    final aFirst = (a.firstName ?? '').trim().toLowerCase();
+    final bFirst = (b.firstName ?? '').trim().toLowerCase();
+    return aFirst.compareTo(bFirst);
   }
 
   bool _isMale(StudentLiveProctorState s) {
@@ -100,13 +154,31 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
     }).toList();
 
     filtered.sort((a, b) {
-      final aLast = (a.lastName ?? a.studentName).trim().toLowerCase();
-      final bLast = (b.lastName ?? b.studentName).trim().toLowerCase();
-      final lnCmp = aLast.compareTo(bLast);
-      if (lnCmp != 0) return lnCmp;
-      final aFirst = (a.firstName ?? '').trim().toLowerCase();
-      final bFirst = (b.firstName ?? '').trim().toLowerCase();
-      return aFirst.compareTo(bFirst);
+      switch (_sortColumn) {
+        case ProctorSortColumn.studentName:
+          final cmp = _compareByNameAsc(a, b);
+          return _sortAscending ? cmp : -cmp;
+        case ProctorSortColumn.violations:
+          final vCmp = a.violationCount.compareTo(b.violationCount);
+          if (vCmp != 0) {
+            return _sortAscending ? vCmp : -vCmp;
+          }
+          return _compareByNameAsc(a, b);
+        case ProctorSortColumn.score:
+          final aHasScore = a.score != null;
+          final bHasScore = b.score != null;
+          if (aHasScore != bHasScore) {
+            // Always place students with recorded scores before ungraded '—' rows
+            return aHasScore ? -1 : 1;
+          }
+          if (aHasScore && bHasScore) {
+            final sCmp = a.score!.compareTo(b.score!);
+            if (sCmp != 0) {
+              return _sortAscending ? sCmp : -sCmp;
+            }
+          }
+          return _compareByNameAsc(a, b);
+      }
     });
 
     return filtered;
@@ -302,9 +374,56 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
                 const SizedBox(width: 10),
                 _buildScheduleDatePill(theme, isDark),
               ],
+              if (widget.onRefresh != null) ...[
+                const SizedBox(width: 8),
+                _buildRefreshButton(theme, isDark),
+              ],
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRefreshButton(ThemeData theme, bool isDark) {
+    return Tooltip(
+      message: 'Refresh Proctoring Roster & Scores',
+      child: InkWell(
+        onTap: _isRefreshing ? null : _triggerRefresh,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RotationTransition(
+                turns: _refreshSpinController,
+                child: Icon(
+                  LucideIcons.refreshCw,
+                  size: 14,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Refresh',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -444,10 +563,12 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
                         label: '#',
                         alignment: Alignment.center,
                       ),
-                      _buildHeaderCell(
+                      _buildSortableHeaderCell(
                         theme: theme,
                         flex: 3,
                         label: 'STUDENT NAME',
+                        column: ProctorSortColumn.studentName,
+                        alignment: Alignment.centerLeft,
                       ),
                       _buildHeaderCell(
                         theme: theme,
@@ -455,16 +576,18 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
                         label: 'STATUS',
                         alignment: Alignment.center,
                       ),
-                      _buildHeaderCell(
+                      _buildSortableHeaderCell(
                         theme: theme,
                         flex: 2,
                         label: 'VIOLATIONS',
+                        column: ProctorSortColumn.violations,
                         alignment: Alignment.center,
                       ),
-                      _buildHeaderCell(
+                      _buildSortableHeaderCell(
                         theme: theme,
                         flex: 2,
                         label: 'SCORE',
+                        column: ProctorSortColumn.score,
                         alignment: Alignment.center,
                       ),
                       _buildHeaderCell(
@@ -709,6 +832,105 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
     return Expanded(child: cell);
   }
 
+  Widget _buildSortableHeaderCell({
+    required ThemeData theme,
+    required int flex,
+    required String label,
+    required ProctorSortColumn column,
+    Alignment alignment = Alignment.center,
+    bool hasRightBorder = true,
+  }) {
+    final isActive = _sortColumn == column;
+    String badgeText = '';
+    if (isActive) {
+      if (column == ProctorSortColumn.studentName) {
+        badgeText = _sortAscending ? 'A–Z' : 'Z–A';
+      } else {
+        badgeText = _sortAscending ? 'Low–High' : 'High–Low';
+      }
+    }
+
+    final IconData sortIcon = !isActive
+        ? LucideIcons.arrowUpDown
+        : (_sortAscending ? LucideIcons.arrowUp : LucideIcons.arrowDown);
+
+    return Expanded(
+      flex: flex,
+      child: InkWell(
+        onTap: () => _toggleSort(column),
+        child: Container(
+          height: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: alignment,
+          decoration: BoxDecoration(
+            color: isActive
+                ? theme.colorScheme.primary.withValues(alpha: 0.08)
+                : null,
+            border: hasRightBorder
+                ? Border(
+                    right: BorderSide(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                    ),
+                  )
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: alignment == Alignment.centerLeft
+                ? MainAxisAlignment.start
+                : MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                    color: isActive
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 5),
+              Icon(
+                sortIcon,
+                size: 13,
+                color: isActive
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.45),
+              ),
+              if (isActive && badgeText.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildStudentNameCell(ThemeData theme, StudentLiveProctorState s) {
     final ln = (s.lastName ?? '').trim();
     final fn = (s.firstName ?? '').trim();
@@ -912,84 +1134,106 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
     final isExpired = widget.isScheduleExpired;
     final isCompleted = student.status == ProctorSessionStatus.submitted;
     final isInProgress = student.status == ProctorSessionStatus.inProgress;
+    final isKicked = student.status == ProctorSessionStatus.kicked;
 
-    // Disabling rules per instructions:
-    // 1. Reset progress is disabled if schedule has expired
-    final canReset = !isExpired;
+    // 1. Reset progress: enabled when student is actively taking, completed, or disqualified (and schedule not expired)
+    final canReset = !isExpired && (isInProgress || isCompleted || isKicked);
 
-    // 2. Force submit is disabled if completed or if not in progress or if schedule expired
+    // 2. Force submit: enabled ONLY when student is actively answering (in_progress) and schedule not expired
     final canForceSubmit = !isExpired && isInProgress;
 
     // 3. Allow entry / disallow toggle:
     // Disabled if schedule expired, completed, or actively in progress (teacher cannot disallow active student)
     final canToggleAllow = !isExpired && !isCompleted && !isInProgress;
 
+    final String toggleLabel = isCompleted
+        ? 'Completed'
+        : isInProgress
+            ? 'Answering'
+            : (isAllowed ? 'Disallow' : 'Allow Entry');
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Reset Button
+        // Reset Button (Fixed 28x28)
         Tooltip(
           message: isExpired
               ? 'Examination schedule has ended'
-              : 'Reset Student Progress',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(6),
-            onTap: canReset ? () => widget.onReset(student) : null,
-            child: Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
+              : !canReset
+                  ? 'Student has not started the assessment yet'
+                  : 'Reset Student Attempt & Progress',
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: canReset ? () => widget.onReset(student) : null,
+              child: Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
                   color: canReset
-                      ? theme.colorScheme.onSurface.withValues(alpha: 0.15)
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                      ? AppTheme.catOrange.withValues(alpha: 0.08)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: canReset
+                        ? AppTheme.catOrange.withValues(alpha: 0.45)
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                  ),
                 ),
-              ),
-              child: Icon(
-                LucideIcons.rotateCcw,
-                size: 14,
-                color: canReset
-                    ? theme.colorScheme.onSurface.withValues(alpha: 0.8)
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                child: Icon(
+                  LucideIcons.rotateCcw,
+                  size: 14,
+                  color: canReset
+                      ? AppTheme.catOrange
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                ),
               ),
             ),
           ),
         ),
         const SizedBox(width: 6),
-        // Force Submit Button
+        // Force Submit Button (Fixed 28x28)
         Tooltip(
           message: isCompleted
               ? 'Assessment already completed'
               : isExpired
                   ? 'Examination schedule has ended'
                   : !isInProgress
-                      ? 'Student has not started the assessment'
+                      ? 'Student is not currently answering'
                       : 'Force Submit Assessment',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(6),
-            onTap: canForceSubmit ? () => widget.onForceSubmit(student) : null,
-            child: Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: canForceSubmit ? () => widget.onForceSubmit(student) : null,
+              child: Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
                   color: canForceSubmit
-                      ? AppTheme.catBlue.withValues(alpha: 0.5)
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                      ? AppTheme.catBlue.withValues(alpha: 0.08)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: canForceSubmit
+                        ? AppTheme.catBlue.withValues(alpha: 0.5)
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                  ),
                 ),
-              ),
-              child: Icon(
-                LucideIcons.send,
-                size: 14,
-                color: canForceSubmit
-                    ? AppTheme.catBlue
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                child: Icon(
+                  LucideIcons.send,
+                  size: 14,
+                  color: canForceSubmit
+                      ? AppTheme.catBlue
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                ),
               ),
             ),
           ),
         ),
         const SizedBox(width: 8),
-        // Allow / Disallow Toggle Pill Button
+        // Allow / Disallow Toggle Pill Button (Fixed Width 92px so Reset & Force Submit NEVER shift)
         Tooltip(
           message: isExpired
               ? 'Examination schedule has ended'
@@ -998,37 +1242,43 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
                   : isInProgress
                       ? 'Cannot lock out student while test is in progress'
                       : (isAllowed ? 'Disallow Learner Entry' : 'Allow Learner Entry'),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(6),
-            onTap: canToggleAllow ? () => widget.onToggleAllow(student) : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: !canToggleAllow
-                    ? theme.colorScheme.onSurface.withValues(alpha: 0.04)
-                    : isAllowed
-                        ? AppTheme.catRed.withValues(alpha: 0.08)
-                        : AppTheme.catGreen.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
+          child: SizedBox(
+            width: 92,
+            height: 28,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: canToggleAllow ? () => widget.onToggleAllow(student) : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
                   color: !canToggleAllow
-                      ? theme.colorScheme.onSurface.withValues(alpha: 0.1)
+                      ? theme.colorScheme.onSurface.withValues(alpha: 0.04)
                       : isAllowed
-                          ? AppTheme.catRed.withValues(alpha: 0.3)
-                          : AppTheme.catGreen.withValues(alpha: 0.4),
+                          ? AppTheme.catRed.withValues(alpha: 0.08)
+                          : AppTheme.catGreen.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: !canToggleAllow
+                        ? theme.colorScheme.onSurface.withValues(alpha: 0.1)
+                        : isAllowed
+                            ? AppTheme.catRed.withValues(alpha: 0.3)
+                            : AppTheme.catGreen.withValues(alpha: 0.4),
+                  ),
                 ),
-              ),
-              child: Text(
-                isAllowed ? 'Disallow' : 'Allow Entry',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: !canToggleAllow
-                      ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
-                      : isAllowed
-                          ? AppTheme.catRed
-                          : AppTheme.catGreen,
+                child: Text(
+                  toggleLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: !canToggleAllow
+                        ? theme.colorScheme.onSurface.withValues(alpha: 0.32)
+                        : isAllowed
+                            ? AppTheme.catRed
+                            : AppTheme.catGreen,
+                  ),
                 ),
               ),
             ),

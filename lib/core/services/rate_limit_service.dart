@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -145,6 +146,15 @@ class RateLimitService {
       );
     }
 
+    // Local cached attempt state
+    final localState = LocalStorageService.getLocalRateLimitState(scopeKey);
+    int localFailed = (localState?['failed_attempts'] as num?)?.toInt() ?? 0;
+    final localWindow = localState?['window_started_at'] as DateTime?;
+    if (localWindow != null &&
+        now.difference(localWindow) > slidingWindowDuration) {
+      localFailed = 0;
+    }
+
     // 2. Remote database lookup in auth_rate_limits
     try {
       final record = await _supabaseClient
@@ -192,8 +202,10 @@ class RateLimitService {
           currentFailed = 0;
         }
 
+        final combinedFailed = math.max(localFailed, currentFailed);
+
         return RateLimitStatus.unlocked(
-          failedAttempts: currentFailed,
+          failedAttempts: combinedFailed,
           maxAttempts: maxAttempts,
           resendCount: currentResend,
         );
@@ -203,7 +215,7 @@ class RateLimitService {
     }
 
     return RateLimitStatus.unlocked(
-      failedAttempts: 0,
+      failedAttempts: localFailed,
       maxAttempts: maxAttempts,
       resendCount: 0,
     );
@@ -226,7 +238,14 @@ class RateLimitService {
 
     final now = DateTime.now().toUtc();
 
-    // 1. Fetch current rate limit row
+    // 0. Load local state
+    final localState = LocalStorageService.getLocalRateLimitState(scopeKey);
+    int localFailed = (localState?['failed_attempts'] as num?)?.toInt() ?? 0;
+    final localWindow = localState?['window_started_at'] as DateTime?;
+    int localTier = (localState?['lockout_tier'] as num?)?.toInt() ?? 0;
+    final localTierEsc = localState?['tier_escalated_at'] as DateTime?;
+
+    // 1. Fetch current rate limit row from remote Supabase
     Map<String, dynamic>? existing;
     try {
       existing = await _supabaseClient
@@ -239,17 +258,21 @@ class RateLimitService {
       debugPrint('[RateLimitService] recordFailure fetch notice: $e');
     }
 
-    int currentTier = (existing?['lockout_tier'] as num?)?.toInt() ?? 0;
-    int failedAttempts = (existing?['failed_attempts'] as num?)?.toInt() ?? 0;
+    int remoteTier = (existing?['lockout_tier'] as num?)?.toInt() ?? 0;
+    int remoteFailed = (existing?['failed_attempts'] as num?)?.toInt() ?? 0;
     int resendCount = (existing?['resend_count'] as num?)?.toInt() ?? 0;
+    int currentTier = math.max(localTier, remoteTier);
+
     DateTime windowStartedAt = existing?['window_started_at'] != null
-        ? DateTime.tryParse(existing!['window_started_at'].toString())
-                  ?.toUtc() ??
-              now
-        : now;
+        ? DateTime.tryParse(existing!['window_started_at'].toString())?.toUtc() ??
+            localWindow ??
+            now
+        : localWindow ?? now;
     DateTime? tierEscalatedAt = existing?['tier_escalated_at'] != null
         ? DateTime.tryParse(existing!['tier_escalated_at'].toString())?.toUtc()
-        : null;
+        : localTierEsc;
+
+    int failedAttempts = math.max(localFailed, remoteFailed);
 
     // Sliding window check: If > 5 minutes passed, reset attempts counter
     if (now.difference(windowStartedAt) > slidingWindowDuration) {
@@ -258,6 +281,15 @@ class RateLimitService {
     } else {
       failedAttempts += 1;
     }
+
+    // Always immediately save to local storage (instant fallback against network delays)
+    await LocalStorageService.saveLocalRateLimitState(
+      scopeKey: scopeKey,
+      failedAttempts: failedAttempts,
+      windowStartedAt: windowStartedAt,
+      lockoutTier: currentTier,
+      tierEscalatedAt: tierEscalatedAt,
+    );
 
     // Check if lockout threshold reached
     if (failedAttempts >= maxAttempts) {
@@ -274,6 +306,16 @@ class RateLimitService {
 
       final lockoutDuration = getDurationForTier(nextTier);
       final lockedUntil = now.add(lockoutDuration);
+
+      // Fast local storage cache
+      await LocalStorageService.setOtpLockout(scopeKey, lockoutDuration);
+      await LocalStorageService.saveLocalRateLimitState(
+        scopeKey: scopeKey,
+        failedAttempts: failedAttempts,
+        windowStartedAt: windowStartedAt,
+        lockoutTier: nextTier,
+        tierEscalatedAt: now,
+      );
 
       // Save to Supabase
       try {
@@ -293,9 +335,6 @@ class RateLimitService {
       } catch (e) {
         debugPrint('[RateLimitService] Supabase lockout upsert error: $e');
       }
-
-      // Fast local storage cache
-      await LocalStorageService.setOtpLockout(scopeKey, lockoutDuration);
 
       // If Tier 4+ reached, log a security warning in audit_logs if valid user_id known
       if (nextTier >= 4) {
@@ -454,7 +493,7 @@ class RateLimitService {
     );
 
     // 1. Clear local cache
-    await LocalStorageService.clearOtpLockout(scopeKey);
+    await LocalStorageService.clearLocalRateLimitState(scopeKey);
 
     // 2. Clear remote row or reset counters
     try {

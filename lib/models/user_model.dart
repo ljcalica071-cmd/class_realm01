@@ -113,6 +113,51 @@ class UserModel {
   bool get effectiveHideFinalGradesFromParent =>
       isLegalAdult && hideFinalGradesFromParent;
 
+  /// Formats name as `LastName, FirstName M.I.` (e.g. "Cruz, Carlos D.").
+  /// Falls back cleanly if individual fields are not set.
+  String get lastFirstMi {
+    final l = lastName?.trim() ?? '';
+    final f = firstName?.trim() ?? '';
+    final m = middleName?.trim() ?? '';
+
+    String? mi;
+    if (m.isNotEmpty) {
+      final cleanM = m.replaceAll('.', '').trim();
+      if (cleanM.isNotEmpty) {
+        mi = '${cleanM[0].toUpperCase()}.';
+      }
+    }
+
+    if (l.isNotEmpty && f.isNotEmpty) {
+      return mi != null ? '$l, $f $mi' : '$l, $f';
+    }
+
+    // Fallback: parse from fullName if individual fields are absent
+    final trimmedFull = fullName.trim();
+    if (trimmedFull.contains(',')) {
+      return trimmedFull;
+    }
+
+    final parts = trimmedFull
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.length >= 3 && parts[1].length <= 2) {
+      // e.g. ["Carlos", "D.", "Cruz"] or ["Carlos", "D", "Cruz"]
+      final last = parts.last;
+      final first = parts.first;
+      final mid = parts[1].replaceAll('.', '').toUpperCase();
+      return '$last, $first $mid.';
+    } else if (parts.length >= 2) {
+      // e.g. ["Carlos", "Cruz"]
+      final last = parts.last;
+      final first = parts.sublist(0, parts.length - 1).join(' ');
+      return '$last, $first';
+    }
+
+    return trimmedFull.isNotEmpty ? trimmedFull : 'Student';
+  }
+
   UserModel copyWith({
     String? id,
     String? username,

@@ -11,6 +11,11 @@ String getBrowserUrlPath() {
   return getBrowserUrlPathWeb();
 }
 
+/// Retrieves query parameters from the current browser URL (e.g. {'tab': 'ex', 'assessment': '...'})
+Map<String, String> getBrowserUrlQueryParams() {
+  return getBrowserUrlQueryParamsWeb();
+}
+
 /// Checks whether the current session is already initialized (e.g. across browser F5 refresh).
 bool isWarmSession() {
   return isWarmSessionWeb();

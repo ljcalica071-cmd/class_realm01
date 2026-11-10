@@ -16,6 +16,7 @@ class ItemDifficultyStat {
 
   /// Classification based on DepEd assessment standards
   String get classification {
+    if (totalAttempts == 0) return 'Pending Submissions';
     if (pIndex > 0.85) return 'Very Easy';
     if (pIndex > 0.75) return 'Easy';
     if (pIndex >= 0.25) return 'Moderate / Ideal';

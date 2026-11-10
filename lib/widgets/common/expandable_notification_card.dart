@@ -13,6 +13,7 @@ class ExpandableNotificationCard extends StatefulWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onTap;
   final bool showDelete;
+  final int maxCollapsedLines;
 
   const ExpandableNotificationCard({
     super.key,
@@ -20,6 +21,7 @@ class ExpandableNotificationCard extends StatefulWidget {
     this.onDelete,
     this.onTap,
     this.showDelete = false,
+    this.maxCollapsedLines = 2,
   });
 
   /// Injects zero-width spaces (\u200B) every 20 characters into strings without spaces
@@ -148,6 +150,31 @@ class _ExpandableNotificationCardState
         .trim();
   }
 
+  /// Extracts subject and section metadata if present in title or message
+  Map<String, String>? _extractSubjectAndSection(String title, String message) {
+    final combined = '$title $message';
+    final regIn = RegExp(r'in\s+([^()]+?)\s*\(([^)]+)\)', caseSensitive: false);
+    final matchIn = regIn.firstMatch(combined);
+    if (matchIn != null) {
+      final subj = matchIn.group(1)?.trim();
+      final sec = matchIn.group(2)?.trim();
+      if (subj != null && subj.isNotEmpty && sec != null && sec.isNotEmpty) {
+        return {'subject': subj, 'section': sec};
+      }
+    }
+
+    final regDash = RegExp(r'([A-Za-z0-9\s]+)\s*[-—•]\s*(Section\s*[A-Za-z0-9]+)', caseSensitive: false);
+    final matchDash = regDash.firstMatch(combined);
+    if (matchDash != null) {
+      final subj = matchDash.group(1)?.trim();
+      final sec = matchDash.group(2)?.trim();
+      if (subj != null && subj.isNotEmpty && sec != null && sec.isNotEmpty) {
+        return {'subject': subj, 'section': sec};
+      }
+    }
+    return null;
+  }
+
   String _formatTime(DateTime dt) {
     final now = DateTime.now();
     final diff = now.difference(dt);
@@ -171,9 +198,27 @@ class _ExpandableNotificationCardState
 
     final formattedTitle = ExpandableNotificationCard.wrapUnbrokenString(_cleanTitle(n.title));
     final formattedMessage = ExpandableNotificationCard.wrapUnbrokenString(n.message);
-    final bool canExpand = n.message.length > 90 || n.message.contains('\n');
+    final subjectSection = _extractSubjectAndSection(n.title, n.message);
 
-    return Container(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double textMaxWidth = (constraints.maxWidth - 36).clamp(100.0, 2000.0);
+        const textStyle = TextStyle(
+          fontSize: 13,
+          height: 1.45,
+        );
+
+        final textSpan = TextSpan(text: formattedMessage, style: textStyle);
+        final textPainter = TextPainter(
+          text: textSpan,
+          textDirection: Directionality.of(context),
+          maxLines: widget.maxCollapsedLines,
+        )..layout(maxWidth: textMaxWidth);
+
+        final bool didExceedMaxLines = textPainter.didExceedMaxLines;
+        final bool canExpand = didExceedMaxLines;
+
+        return Container(
       margin: const EdgeInsets.symmetric(vertical: 5),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -256,6 +301,37 @@ class _ExpandableNotificationCardState
                             ),
                           ),
                         ),
+                        if (subjectSection != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.12)
+                                    : const Color(0xFFE2E8F0),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              '${subjectSection['subject']} • ${subjectSection['section']}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? const Color(0xFF94A3B8)
+                                    : _crSlateBody,
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 8),
 
                         // Timestamp
@@ -303,14 +379,12 @@ class _ExpandableNotificationCardState
                     // Message Body (Strict 2-line preview when collapsed)
                     Text(
                       formattedMessage,
-                      maxLines: _isExpanded ? null : 2,
+                      maxLines: _isExpanded ? null : widget.maxCollapsedLines,
                       softWrap: true,
                       overflow: _isExpanded
                           ? TextOverflow.visible
                           : TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.45,
+                      style: textStyle.copyWith(
                         color: isDark
                             ? const Color(0xFFCBD5E1)
                             : _crSlateBody,
@@ -356,6 +430,8 @@ class _ExpandableNotificationCardState
           ),
         ),
       ),
+    );
+      },
     );
   }
 }

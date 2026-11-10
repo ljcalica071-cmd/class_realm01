@@ -416,8 +416,8 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                                     alpha: 0.14,
                                   ),
                             child: Text(
-                              child.fullName.trim().isNotEmpty
-                                  ? child.fullName.trim()[0].toUpperCase()
+                              child.lastFirstMi.trim().isNotEmpty
+                                  ? child.lastFirstMi.trim()[0].toUpperCase()
                                   : 'S',
                               style: TextStyle(
                                 fontSize: 15,
@@ -432,7 +432,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  child.fullName,
+                                  child.lastFirstMi,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
@@ -639,7 +639,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             const Center(
               child: Padding(
                 padding: EdgeInsets.only(right: 10, left: 4),
-                child: SyncStatusBadge(),
+                child: SyncStatusBadge(onAppBar: true),
               ),
             ),
           ],

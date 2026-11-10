@@ -254,6 +254,68 @@ class LocalStorageService {
     );
   }
 
+  // Progressive Rate Limiting Attempts & Window Persistence
+  static Future<void> saveLocalRateLimitState({
+    required String scopeKey,
+    required int failedAttempts,
+    required DateTime windowStartedAt,
+    int lockoutTier = 0,
+    DateTime? tierEscalatedAt,
+  }) async {
+    final cleanKey = scopeKey.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-zA-Z0-9]'),
+      '_',
+    );
+    final prefs = await _prefs;
+    await _ensureSaved(await prefs.setInt('${_authPrefix}rl_fails_$cleanKey', failedAttempts));
+    await _ensureSaved(await prefs.setInt(
+      '${_authPrefix}rl_window_$cleanKey',
+      windowStartedAt.millisecondsSinceEpoch,
+    ));
+    await _ensureSaved(await prefs.setInt('${_authPrefix}rl_tier_$cleanKey', lockoutTier));
+    if (tierEscalatedAt != null) {
+      await _ensureSaved(await prefs.setInt(
+        '${_authPrefix}rl_tier_time_$cleanKey',
+        tierEscalatedAt.millisecondsSinceEpoch,
+      ));
+    }
+  }
+
+  static Map<String, dynamic>? getLocalRateLimitState(String scopeKey) {
+    final cleanKey = scopeKey.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-zA-Z0-9]'),
+      '_',
+    );
+    final fails = _preferences?.getInt('${_authPrefix}rl_fails_$cleanKey');
+    final windowMs = _preferences?.getInt('${_authPrefix}rl_window_$cleanKey');
+    if (fails == null || windowMs == null) return null;
+
+    final tier = _preferences?.getInt('${_authPrefix}rl_tier_$cleanKey') ?? 0;
+    final tierTimeMs = _preferences?.getInt('${_authPrefix}rl_tier_time_$cleanKey');
+
+    return {
+      'failed_attempts': fails,
+      'window_started_at': DateTime.fromMillisecondsSinceEpoch(windowMs, isUtc: true),
+      'lockout_tier': tier,
+      'tier_escalated_at': tierTimeMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(tierTimeMs, isUtc: true)
+          : null,
+    };
+  }
+
+  static Future<void> clearLocalRateLimitState(String scopeKey) async {
+    final cleanKey = scopeKey.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-zA-Z0-9]'),
+      '_',
+    );
+    final prefs = await _prefs;
+    await _ensureSaved(await prefs.remove('${_authPrefix}rl_fails_$cleanKey'));
+    await _ensureSaved(await prefs.remove('${_authPrefix}rl_window_$cleanKey'));
+    await _ensureSaved(await prefs.remove('${_authPrefix}rl_tier_$cleanKey'));
+    await _ensureSaved(await prefs.remove('${_authPrefix}rl_tier_time_$cleanKey'));
+    await clearOtpLockout(scopeKey);
+  }
+
   static Future<void> saveString(String key, String value) async {
     final prefs = await _prefs;
     await _ensureSaved(await prefs.setString('$_settingsPrefix$key', value));
@@ -502,6 +564,55 @@ class LocalStorageService {
 
   static int getActiveDashboardTab(String role) {
     return _preferences?.getInt('session.tab_$role') ?? 0;
+  }
+
+  // Teacher Classwork Sub-Navigation State (Category Tab, Filters, Opened Activity/Assessment)
+  static Future<void> saveTeacherClassworkNavState({
+    int? categoryTabIndex,
+    int? gradeLevel,
+    String? subjectName,
+    String? sectionName,
+    String? activeAssessmentId,
+    String? activeActivityId,
+    bool clearActiveAssessment = false,
+    bool clearActiveActivity = false,
+  }) async {
+    try {
+      final current = getTeacherClassworkNavState();
+      if (categoryTabIndex != null) {
+        current['categoryTabIndex'] = categoryTabIndex;
+      }
+      if (gradeLevel != null) {
+        current['gradeLevel'] = gradeLevel;
+      }
+      if (subjectName != null) {
+        current['subjectName'] = subjectName;
+      }
+      if (sectionName != null) {
+        current['sectionName'] = sectionName;
+      }
+      if (clearActiveAssessment) {
+        current.remove('activeAssessmentId');
+      } else if (activeAssessmentId != null) {
+        current['activeAssessmentId'] = activeAssessmentId;
+        current.remove('activeActivityId');
+      }
+      if (clearActiveActivity) {
+        current.remove('activeActivityId');
+      } else if (activeActivityId != null) {
+        current['activeActivityId'] = activeActivityId;
+        current.remove('activeAssessmentId');
+      }
+      await saveJson('teacher_classwork_nav_state', current);
+    } catch (_) {}
+  }
+
+  static Map<String, dynamic> getTeacherClassworkNavState() {
+    final raw = getJson('teacher_classwork_nav_state');
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    return <String, dynamic>{};
   }
 
   static Future<void> saveSelectedParentChildId(
