@@ -17,6 +17,7 @@ import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/shared/widgets/app_top_toast.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// DepEd-style Strengthened SHS Class Record (Gradebook).
 /// Mirrors the official DepEd grading spreadsheet layout with
@@ -39,7 +40,12 @@ class TeacherGradebookTab extends StatefulWidget {
   State<TeacherGradebookTab> createState() => _TeacherGradebookTabState();
 }
 
-class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
+class _TeacherGradebookTabState extends State<TeacherGradebookTab>
+    with SingleTickerProviderStateMixin {
+  DateTime _refreshedAt = DateTime.now();
+  late AnimationController _refreshAnimController;
+  late Animation<double> _refreshAnim;
+
   // Selected schedule determines the section + subject context
   String? _selectedSubject;
   String? _selectedSection;
@@ -81,6 +87,14 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
   @override
   void initState() {
     super.initState();
+    _refreshAnimController = AnimationController(
+      duration: const Duration(milliseconds: 700),
+      vsync: this,
+    );
+    _refreshAnim = CurvedAnimation(
+      parent: _refreshAnimController,
+      curve: Curves.easeInOutCubic,
+    );
     TeacherGradebookTab.gradebookRefreshNotifier.addListener(
       _handleExternalGradebookRefresh,
     );
@@ -246,6 +260,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       _sheetLoadError = null;
       _studentLoadError = null;
     });
+    _refreshAnimController.repeat();
 
     try {
       for (final term in const [1, 2, 3]) {
@@ -273,7 +288,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       if (mounted) {
         setState(() {
           _isRefreshingGradebookContent = false;
+          _refreshedAt = DateTime.now();
         });
+        _refreshAnimController.stop();
+        _refreshAnimController.forward(from: 0.0);
       }
     }
   }
@@ -394,6 +412,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
 
   @override
   void dispose() {
+    _refreshAnimController.dispose();
     TeacherGradebookTab.gradebookRefreshNotifier.removeListener(
       _handleExternalGradebookRefresh,
     );
@@ -1574,57 +1593,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           ),
         ),
         const SizedBox(width: 8),
-        // Refresh Gradebook Content Only button
-        Tooltip(
-          message: 'Refresh gradebook scores and HPS synced from Classwork submissions',
-          child: InkWell(
-            onTap: _isRefreshingGradebookContent
-                ? null
-                : () => unawaited(_refreshGradebookContentOnly()),
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? theme.colorScheme.surfaceContainerHighest
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_isRefreshingGradebookContent)
-                    SizedBox(
-                      width: 15,
-                      height: 15,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: theme.colorScheme.primary,
-                      ),
-                    )
-                  else
-                    Icon(
-                      Icons.refresh_rounded,
-                      size: 16,
-                      color: theme.colorScheme.primary,
-                    ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Refresh',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+        _buildRefreshButton(isDark, theme),
         const Spacer(),
         // Gender filter controls (Male, Female, All with counts)
         Container(
@@ -1674,6 +1643,61 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRefreshButton(bool isDark, ThemeData theme) {
+    final hour = _refreshedAt.hour == 0
+        ? 12
+        : (_refreshedAt.hour > 12 ? _refreshedAt.hour - 12 : _refreshedAt.hour);
+    final period = _refreshedAt.hour >= 12 ? 'PM' : 'AM';
+    final timeStr =
+        '${hour.toString().padLeft(2, '0')}:${_refreshedAt.minute.toString().padLeft(2, '0')} $period';
+
+    return Tooltip(
+      message: 'Refresh gradebook scores and HPS synced from Classwork submissions',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(LucideIcons.clock, size: 12, color: Color(0xFF64748B)),
+            const SizedBox(width: 5),
+            Text(
+              'Refreshed at $timeStr',
+              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(width: 6),
+            InkWell(
+              onTap: _isRefreshingGradebookContent
+                  ? null
+                  : () {
+                      _refreshAnimController.forward(from: 0.0);
+                      unawaited(_refreshGradebookContentOnly());
+                    },
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: RotationTransition(
+                  turns: _refreshAnim,
+                  child: const Icon(
+                    LucideIcons.refreshCw,
+                    size: 12,
+                    color: Color(0xFF3B82F6),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2690,12 +2714,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
       child: Row(
         children: isLeft
             ? [
-                // # column
-                _headerCell(numW, '#', text, bg),
-                // Name column header
+                _headerCell(numW, '', text, bg),
                 _headerCell(
                   nameW,
-                  "LEARNERS' NAMES",
+                  '',
                   text,
                   bg,
                   align: Alignment.centerLeft,
@@ -3051,6 +3073,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     const numW = 30.0;
 
     final hpsBg = isDark ? const Color(0xFF1E3A5F) : const Color(0xFFE0ECFF);
+    final hpsComputedBg =
+        isDark ? const Color(0xFF162A45) : const Color(0xFFD2E3FC);
 
     List<Widget> buildHpsCols(
       String category,
@@ -3073,7 +3097,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         );
       }
       if (category != 'ex' && count < maxCategoryColumns) {
-        cols.add(_emptyGridCell(colW, hpsBg, borderColor, cellText));
+        cols.add(_emptyGridCell(colW, hpsComputedBg, borderColor, cellText));
       }
       // Total HPS
       if (category == 'ex') {
@@ -3087,7 +3111,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
             _computedCell(
               computedW,
               _formatUnits(subWeight),
-              hpsBg,
+              hpsComputedBg,
               cellText,
               borderColor,
             ),
@@ -3099,7 +3123,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
           _computedCell(
             computedW,
             totalHps > 0 ? totalHps.toStringAsFixed(0) : '',
-            hpsBg,
+            hpsComputedBg,
             cellText,
             borderColor,
             isBold: true,
@@ -3110,7 +3134,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         _computedCell(
           computedW,
           '100',
-          hpsBg,
+          hpsComputedBg,
           accent,
           borderColor,
           isBold: true,
@@ -3120,7 +3144,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         _computedCell(
           computedW,
           '${weight.toStringAsFixed(0)}%',
-          hpsBg,
+          hpsComputedBg,
           const Color(
             0xFFD4AF37,
           ), // Elegant gold color that works on both light/dark backgrounds
@@ -3161,8 +3185,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 ...buildHpsCols('ww', _wwColumns, AppTheme.catBlue, wwWeight),
                 ...buildHpsCols('pt', _ptColumns, AppTheme.catGreen, ptWeight),
                 ...buildHpsCols('ex', exColumns, AppTheme.catOrange, exWeight),
-                _computedCell(computedW, '', hpsBg, cellText, borderColor),
-                _computedCell(computedW, '', hpsBg, cellText, borderColor),
+                _computedCell(computedW, '', hpsComputedBg, cellText, borderColor),
+                _computedCell(computedW, '', hpsComputedBg, cellText, borderColor),
               ],
       ),
     );
@@ -3247,6 +3271,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         final isFirst = idx == 0;
         final isAlt = idx.isOdd;
         final rowBg = isAlt ? altRowBg : cellBg;
+        final emptyComputedBg =
+            isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
         return Container(
           height: 32,
           decoration: BoxDecoration(
@@ -3302,19 +3328,19 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                       (_) => _emptyGridCell(colW, rowBg, borderColor, cellText),
                     ),
                     if (_wwColumns < maxCategoryColumns)
-                      _emptyGridCell(colW, rowBg, borderColor, cellText),
-                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
-                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
-                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                      _emptyGridCell(colW, emptyComputedBg, borderColor, cellText),
+                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
+                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
+                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
                     ...List.generate(
                       _ptColumns,
                       (_) => _emptyGridCell(colW, rowBg, borderColor, cellText),
                     ),
                     if (_ptColumns < maxCategoryColumns)
-                      _emptyGridCell(colW, rowBg, borderColor, cellText),
-                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
-                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
-                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                      _emptyGridCell(colW, emptyComputedBg, borderColor, cellText),
+                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
+                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
+                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
                     ...List.generate(
                       exColumns,
                       (_) => _emptyGridCell(colW, rowBg, borderColor, cellText),
@@ -3323,15 +3349,15 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                       exColumns,
                       (_) => _emptyGridCell(
                         computedW,
-                        rowBg,
+                        emptyComputedBg,
                         borderColor,
                         cellText,
                       ),
                     ),
-                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
-                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
-                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
-                    _emptyGridCell(computedW, rowBg, borderColor, cellText),
+                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
+                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
+                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
+                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
                   ],
           ),
         );
@@ -3341,6 +3367,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     return List.generate(students.length, (idx) {
       final s = students[idx];
       final rowBg = idx.isOdd ? altRowBg : cellBg;
+      final computedBg = isDark
+          ? (idx.isOdd ? const Color(0xFF1E293B) : const Color(0xFF172333))
+          : (idx.isOdd ? const Color(0xFFF1F5F9) : const Color(0xFFE9EFF5));
 
       if (isLeft) {
         return RepaintBoundary(
@@ -3427,7 +3456,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                 );
               }
               if (category != 'ex' && count < maxCategoryColumns) {
-                cells.add(_emptyGridCell(colW, rowBg, borderColor, cellText));
+                cells.add(_emptyGridCell(colW, computedBg, borderColor, cellText));
               }
               return cells;
             }
@@ -3459,7 +3488,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           _computedCell(
                             computedW,
                             m.totalRaw?.toStringAsFixed(0) ?? '',
-                            rowBg,
+                            computedBg,
                             cellText,
                             borderColor,
                             isBold: true,
@@ -3467,7 +3496,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           _computedCell(
                             computedW,
                             m.ps?.toStringAsFixed(2) ?? '',
-                            rowBg,
+                            computedBg,
                             AppTheme.catBlue,
                             borderColor,
                             isBold: true,
@@ -3475,7 +3504,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           _computedCell(
                             computedW,
                             m.ws?.toStringAsFixed(2) ?? '',
-                            rowBg,
+                            computedBg,
                             AppTheme.catBlue,
                             borderColor,
                             isBold: true,
@@ -3501,7 +3530,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           _computedCell(
                             computedW,
                             m.totalRaw?.toStringAsFixed(0) ?? '',
-                            rowBg,
+                            computedBg,
                             cellText,
                             borderColor,
                             isBold: true,
@@ -3509,7 +3538,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           _computedCell(
                             computedW,
                             m.ps?.toStringAsFixed(2) ?? '',
-                            rowBg,
+                            computedBg,
                             AppTheme.catGreen,
                             borderColor,
                             isBold: true,
@@ -3517,7 +3546,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           _computedCell(
                             computedW,
                             m.ws?.toStringAsFixed(2) ?? '',
-                            rowBg,
+                            computedBg,
                             AppTheme.catGreen,
                             borderColor,
                             isBold: true,
@@ -3561,14 +3590,14 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                             _computedCell(
                               computedW,
                               score?.toStringAsFixed(2) ?? '',
-                              rowBg,
+                              computedBg,
                               AppTheme.catOrange,
                               borderColor,
                             ),
                           _computedCell(
                             computedW,
                             exM.exPs?.toStringAsFixed(2) ?? '',
-                            rowBg,
+                            computedBg,
                             AppTheme.catOrange,
                             borderColor,
                             isBold: true,
@@ -3576,7 +3605,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           _computedCell(
                             computedW,
                             exM.exWs?.toStringAsFixed(2) ?? '',
-                            rowBg,
+                            computedBg,
                             AppTheme.catOrange,
                             borderColor,
                             isBold: true,
@@ -3584,7 +3613,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           _computedCell(
                             computedW,
                             ig?.toStringAsFixed(2) ?? '',
-                            rowBg,
+                            computedBg,
                             cellText,
                             borderColor,
                             isBold: true,
@@ -3592,7 +3621,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
                           _computedCell(
                             computedW,
                             tg?.toString() ?? '',
-                            rowBg,
+                            computedBg,
                             tg != null
                                 ? (tg >= 75
                                       ? AppTheme.catGreen

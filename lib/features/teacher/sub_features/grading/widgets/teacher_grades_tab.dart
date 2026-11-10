@@ -2142,27 +2142,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             style: const TextStyle(fontSize: 11, color: crSlateMuted),
           ),
           const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth < 440) {
-                return Column(
-                  children: [
-                    Center(child: donutWidget),
-                    const SizedBox(height: 14),
-                    rightColumnWidget,
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  donutWidget,
-                  const SizedBox(width: 16),
-                  Expanded(child: rightColumnWidget),
-                ],
-              );
-            },
-          ),
+          Center(child: donutWidget),
+          const SizedBox(height: 16),
+          rightColumnWidget,
           if (_donutMode == 'components') ...[
             const SizedBox(height: 16),
             Divider(height: 1, color: isDark ? Colors.white12 : crBorder),

@@ -572,32 +572,41 @@ class GradebookAnalyticsCalculator {
     final distTotal = encodedCount > 0 ? encodedCount : totalCount;
     final pAdv = distTotal > 0 ? (advancingCount / distTotal) * 100 : 0.0;
     final pBench = distTotal > 0 ? (benchmarkingCount / distTotal) * 100 : 0.0;
-    final pBelow80 = distTotal > 0 ? ((connectingCount + developingCount) / distTotal) * 100 : 0.0;
+    final pConn = distTotal > 0 ? (connectingCount / distTotal) * 100 : 0.0;
+    final pDev = distTotal > 0 ? (developingCount / distTotal) * 100 : 0.0;
 
     final distSlices = <DonutSliceData>[
       DonutSliceData(
-        label: 'Benchmarking ($benchmarkingCount)',
-        pct: DepEdGradingEngine.round2(pBench),
-        badgeVal: benchmarkingCount.toDouble(),
-        sub: 'Good',
-        color: crSteelBlue,
-        dotLabel: 'Good (80-89)',
-      ),
-      DonutSliceData(
-        label: 'Advancing ($advancingCount)',
+        label: 'Advancing',
         pct: DepEdGradingEngine.round2(pAdv),
         badgeVal: advancingCount.toDouble(),
-        sub: 'Excellent',
+        sub: '90–100',
         color: crEmerald,
-        dotLabel: 'Excellent (90+)',
+        dotLabel: 'Advancing (90–100)',
       ),
       DonutSliceData(
-        label: 'Below 80 (${connectingCount + developingCount})',
-        pct: DepEdGradingEngine.round2(pBelow80),
-        badgeVal: (connectingCount + developingCount).toDouble(),
-        sub: 'Needs Aid',
+        label: 'Benchmarking',
+        pct: DepEdGradingEngine.round2(pBench),
+        badgeVal: benchmarkingCount.toDouble(),
+        sub: '80–89',
+        color: crSteelBlue,
+        dotLabel: 'Benchmarking (80–89)',
+      ),
+      DonutSliceData(
+        label: 'Connecting',
+        pct: DepEdGradingEngine.round2(pConn),
+        badgeVal: connectingCount.toDouble(),
+        sub: '75–79',
         color: crAmber,
-        dotLabel: 'Needs Aid (<80)',
+        dotLabel: 'Connecting (75–79)',
+      ),
+      DonutSliceData(
+        label: 'Developing',
+        pct: DepEdGradingEngine.round2(pDev),
+        badgeVal: developingCount.toDouble(),
+        sub: '< 75',
+        color: crRed,
+        dotLabel: 'Developing (< 75)',
       ),
     ];
 
