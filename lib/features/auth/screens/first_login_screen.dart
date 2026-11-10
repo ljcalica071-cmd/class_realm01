@@ -316,6 +316,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
     }
 
     if (!mounted) return;
+    TextInput.finishAutofillContext(shouldSave: true);
     final isUserDark = LocalStorageService.isUserDarkMode(
       user.id,
       email: user.email,
@@ -446,25 +447,27 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
   Widget _buildFormContent(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_userRole == UserRole.parent) ...[
-          _buildParentIdentityVerificationSection(theme),
-          const SizedBox(height: 20),
-        ],
+    return AutofillGroup(
+      onDisposeAction: AutofillContextAction.commit,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_userRole == UserRole.parent) ...[
+            _buildParentIdentityVerificationSection(theme),
+            const SizedBox(height: 20),
+          ],
 
-        // New Password
-        TextField(
-          controller: _newPassCtrl,
-          focusNode: _newPassFocusNode,
-          enabled: !_isLoading,
-          obscureText: _obscureNew,
-          autofillHints: const <String>[],
-          enableSuggestions: false,
-          autocorrect: false,
-          textInputAction: TextInputAction.next,
+          // New Password
+          TextField(
+            controller: _newPassCtrl,
+            focusNode: _newPassFocusNode,
+            enabled: !_isLoading,
+            obscureText: _obscureNew,
+            autofillHints: const [AutofillHints.newPassword],
+            enableSuggestions: false,
+            autocorrect: false,
+            textInputAction: TextInputAction.next,
           maxLength: 50,
           onTap: () => _handleFieldTap(_newPassCtrl, _newPassFocusNode),
           onSubmitted: (_) {
@@ -543,7 +546,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
           focusNode: _confirmPassFocusNode,
           enabled: !_isLoading,
           obscureText: _obscureConfirm,
-          autofillHints: const <String>[],
+          autofillHints: const [AutofillHints.newPassword],
           enableSuggestions: false,
           autocorrect: false,
           textInputAction: TextInputAction.done,
@@ -663,6 +666,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
           ),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 }

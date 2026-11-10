@@ -93,7 +93,23 @@ class AdminRepository {
       }
     }
 
-    return merged.fold<int>(0, (acc, r) => acc + r.duration.inSeconds);
+    // Group merged intervals by local calendar day and enforce a strict 24h (86,400s) ceiling per day
+    final Map<String, int> dailyTotals = {};
+    for (final r in merged) {
+      final slices = splitIntervalAtMidnight(
+        r.start.toLocal(),
+        r.end.toLocal(),
+      );
+      for (final slice in slices) {
+        final d = slice.start;
+        final dayKey = '${d.year}-${d.month}-${d.day}';
+        final current = dailyTotals[dayKey] ?? 0;
+        final next = current + slice.duration.inSeconds;
+        dailyTotals[dayKey] = next > 86400 ? 86400 : next;
+      }
+    }
+
+    return dailyTotals.values.fold<int>(0, (acc, sec) => acc + sec);
   }
 
   /// Splits an interval across midnight into separate daily slices
@@ -643,11 +659,13 @@ class AdminRepository {
           .from('notifications')
           .select()
           .eq('is_archived', false)
+          .eq('notification_type', 'announcement')
           .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
 
       return (res as List)
           .map((r) => AppNotificationModel.fromJson(r as Map<String, dynamic>))
+          .where((n) => n.type.toLowerCase() == 'announcement')
           .toList();
     } catch (e) {
       debugPrint('AdminRepository getBroadcastAnnouncements error: $e');
@@ -727,9 +745,22 @@ class AdminRepository {
           final lastActiveDt = lastActiveStr != null
               ? DateTime.tryParse(lastActiveStr)
               : null;
-          final dur = (loginAt != null && lastActiveDt != null)
+          int dur = (loginAt != null && lastActiveDt != null)
               ? lastActiveDt.difference(loginAt).inSeconds
               : 0;
+          if (loginAt != null) {
+            final localLogin = loginAt.toLocal();
+            final nextMidnight = DateTime(
+              localLogin.year,
+              localLogin.month,
+              localLogin.day + 1,
+            );
+            final maxDaySec = nextMidnight.difference(localLogin).inSeconds;
+            if (maxDaySec > 0 && dur > maxDaySec) {
+              dur = maxDaySec;
+            }
+          }
+          if (dur > 86400) dur = 86400;
 
           if (sId != null) {
             await _client

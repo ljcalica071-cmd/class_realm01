@@ -233,10 +233,10 @@ void main() {
       // Graded status pill
       expect(find.text('Graded'), findsOneWidget);
 
-      // Score in metadata and banner
-      expect(find.text('95 / 100 pts'), findsOneWidget);
+      // Score in metadata and banner (clean Score: X / Y pts without 'Score Recorded by Teacher' or star icon)
+      expect(find.text('Score: 95 / 100 pts'), findsOneWidget);
       expect(find.text('100 points'), findsOneWidget);
-      expect(find.text('Score Recorded by Teacher'), findsOneWidget);
+      expect(find.text('Score Recorded by Teacher'), findsNothing);
 
       // Teacher remarks
       expect(find.text('Teacher remarks: Excellent critical thinking!'), findsOneWidget);

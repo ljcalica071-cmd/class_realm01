@@ -208,13 +208,13 @@ class AppModals {
         data: theme,
         child: Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
           ),
           elevation: 16,
           backgroundColor: theme.colorScheme.surface,
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 440),
-            padding: const EdgeInsets.all(24),
+            constraints: const BoxConstraints(maxWidth: 380),
+            padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -222,7 +222,7 @@ class AppModals {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: AppTheme.catRed.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
@@ -230,43 +230,44 @@ class AppModals {
                       child: const Icon(
                         Icons.error_outline_rounded,
                         color: AppTheme.catRed,
-                        size: 24,
+                        size: 20,
                       ),
                     ),
-                    const SizedBox(width: 14),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         title,
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: theme.colorScheme.onSurface,
+                          letterSpacing: -0.2,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Text(
                   userFriendlyMessage,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13.5,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                    height: 1.5,
+                    height: 1.45,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 Align(
                   alignment: Alignment.centerRight,
                   child: AppPrimaryButton(
                     label: 'Understood',
-                    backgroundColor: AppTheme.catRed,
+                    backgroundColor: theme.colorScheme.primary,
                     onPressed: () {
                       Navigator.of(ctx).pop();
                       if (onConfirm != null) onConfirm();
                     },
-                    width: 120,
-                    height: 40,
+                    width: 110,
+                    height: 38,
                   ),
                 ),
               ],

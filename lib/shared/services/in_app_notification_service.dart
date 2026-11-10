@@ -89,6 +89,10 @@ class InAppNotificationService {
     }
 
     final normalizedRole = role.toLowerCase().trim();
+    // Admin only sends broadcasts and is strictly excluded from receiving student/teacher/parent notifications
+    if (normalizedRole == 'admin') {
+      return;
+    }
 
     _announcementsChannel = Supabase.instance.client
         .channel('global_announcements_channel_${DateTime.now().millisecondsSinceEpoch}')
@@ -98,6 +102,7 @@ class InAppNotificationService {
           table: 'notifications',
           callback: (payload) {
             try {
+              if (normalizedRole == 'admin') return;
               final newRecord = payload.newRecord;
               if (newRecord.isEmpty) return;
 
@@ -109,7 +114,7 @@ class InAppNotificationService {
               final message = newRecord['message'] as String? ?? '';
 
               bool audienceMatches = false;
-              if (targetAudience == 'all') {
+              if (targetAudience == 'all' && normalizedRole != 'admin') {
                 audienceMatches = true;
               } else if (normalizedRole == 'teacher' && targetAudience == 'teachers') {
                 audienceMatches = true;

@@ -415,10 +415,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       return;
     }
 
-    setState(() {
-      _activeFilter = 'custom';
-      _selectedCustomDate = picked;
-    });
+    _activeFilter = 'custom';
+    _selectedCustomDate = picked;
 
     _loadData(isFilterSwitch: true);
   }
@@ -704,14 +702,59 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     );
   }
 
+  static const int _maxDailyDurationSeconds = 86400; // 24h strict daily ceiling
+
+  /// Clamps a single session's duration so it never exceeds the remaining seconds
+  /// in its login calendar day or 24 hours (86,400s).
+  static int _effectiveSessionSeconds(UserSessionLog log, DateTime currentNow) {
+    int sessionSec = log.durationSeconds;
+    if (log.isActive) {
+      final activeSec = currentNow.difference(log.loginAt).inSeconds;
+      if (activeSec > sessionSec) sessionSec = activeSec;
+    }
+    if (sessionSec < 0) sessionSec = 0;
+
+    // A session logged on a calendar day cannot exceed the time remaining until midnight of that day
+    final localLogin = log.loginAt.toLocal();
+    final nextMidnight = DateTime(
+      localLogin.year,
+      localLogin.month,
+      localLogin.day + 1,
+    );
+    final maxSecondsInLoginDay = nextMidnight.difference(localLogin).inSeconds;
+    if (maxSecondsInLoginDay > 0 && sessionSec > maxSecondsInLoginDay) {
+      sessionSec = maxSecondsInLoginDay;
+    }
+    return sessionSec.clamp(0, _maxDailyDurationSeconds);
+  }
+
+  /// Calculates total usage seconds across logs while strictly enforcing a max of
+  /// 24 hours (86,400s) per teacher per calendar day across all filters.
+  static int _calculateCappedTotalSeconds(
+    List<UserSessionLog> logs,
+    DateTime currentNow,
+  ) {
+    final Map<String, int> dailyTeacherTotals = {};
+    for (final s in logs) {
+      final localLogin = s.loginAt.toLocal();
+      final dayKey =
+          '${s.userId}_${localLogin.year}-${localLogin.month}-${localLogin.day}';
+      final sec = _effectiveSessionSeconds(s, currentNow);
+      final currentTotal = dailyTeacherTotals[dayKey] ?? 0;
+      dailyTeacherTotals[dayKey] =
+          (currentTotal + sec).clamp(0, _maxDailyDurationSeconds);
+    }
+    return dailyTeacherTotals.values.fold<int>(0, (sum, val) => sum + val);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Use skeleton loading if still fetching AND cache is empty
-    if (!_hasInitialLoaded || _isSwitchingFilter) {
+    // Use skeleton loading ONLY on initial load when cache is empty (prevents double animation on filter switch)
+    if (!_hasInitialLoaded) {
       return _buildSkeletonLoading(context, isDark);
     }
 
@@ -730,14 +773,10 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         : (_workloadSummaries.isNotEmpty
             ? _workloadSummaries.length
             : math.max(activeNowCount, 1));
-    final totalDurationSeconds = effectiveDisplayLogs.fold<int>(0, (sum, s) {
-      if (s.isActive) {
-        final liveSec = currentNow.difference(s.loginAt).inSeconds;
-        return sum +
-            (liveSec > s.durationSeconds ? liveSec : s.durationSeconds);
-      }
-      return sum + s.durationSeconds;
-    });
+    final totalDurationSeconds = _calculateCappedTotalSeconds(
+      effectiveDisplayLogs,
+      currentNow,
+    );
 
     return Stack(
       children: [
@@ -896,7 +935,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     return InkWell(
       onTap: () {
         if (_activeFilter == key) return;
-        setState(() => _activeFilter = key);
+        _activeFilter = key;
         _loadData(isFilterSwitch: true);
       },
       borderRadius: BorderRadius.circular(8),
@@ -1286,6 +1325,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
               seriesList: seriesList,
               isDark: isDark,
               activeFilter: _activeFilter,
+              selectedTeacherId: _selectedTeacherId,
+              selectedCustomDate: _selectedCustomDate,
               onTeacherSelected: (teacherId) {
                 setState(() => _selectedTeacherId = teacherId);
               },
@@ -1394,15 +1435,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             if (log.loginAt.year == date.year &&
                 log.loginAt.month == date.month &&
                 log.loginAt.day == date.day) {
-              int sessionSec = log.durationSeconds;
-              if (log.isActive) {
-                final activeSec = currentNow.difference(log.loginAt).inSeconds;
-                if (activeSec > sessionSec) sessionSec = activeSec;
-              }
-              sec += sessionSec;
+              sec += _effectiveSessionSeconds(log, currentNow);
             }
           }
-          final hoursVal = sec / 3600.0;
+          // Strictly enforce 24h (86,400s) daily ceiling per teacher
+          sec = sec.clamp(0, _maxDailyDurationSeconds);
+          final hoursVal = (sec / 3600.0).clamp(0.0, 24.0);
           final dateLabel = '${_shortMonth(date.month)} ${date.day}';
           return _ChartPoint(
             label: dateLabel,
@@ -1443,15 +1481,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             if (log.loginAt.year == dayDate.year &&
                 log.loginAt.month == dayDate.month &&
                 log.loginAt.day == dayDate.day) {
-              int sessionSec = log.durationSeconds;
-              if (log.isActive) {
-                final activeSec = currentNow.difference(log.loginAt).inSeconds;
-                if (activeSec > sessionSec) sessionSec = activeSec;
-              }
-              sec += sessionSec;
+              sec += _effectiveSessionSeconds(log, currentNow);
             }
           }
-          final hoursVal = sec / 3600.0;
+          // Strictly enforce 24h (86,400s) daily ceiling per teacher
+          sec = sec.clamp(0, _maxDailyDurationSeconds);
+          final hoursVal = (sec / 3600.0).clamp(0.0, 24.0);
           return _ChartPoint(
             label: '${days[weekdayIdx]} ${dayDate.day}',
             value: hoursVal,
@@ -1483,6 +1518,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       final teacherLogs = relevantLogs
           .where((s) => s.userId == teacher.id)
           .toList();
+      int remainingDayBudget = _maxDailyDurationSeconds;
       final points = List.generate(6, (i) {
         int sec = 0;
         final bucketHour = hourBuckets[i];
@@ -1509,16 +1545,18 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
           }
 
           if (inBucket) {
-            int sessionSec = log.durationSeconds;
-            if (log.isActive) {
-              final activeSec = currentNow.difference(log.loginAt).inSeconds;
-              if (activeSec > sessionSec) sessionSec = activeSec;
-            }
-            sec += sessionSec;
+            sec += _effectiveSessionSeconds(log, currentNow);
           }
         }
 
-        final hoursVal = sec / 3600.0;
+        // Enforce 24h daily ceiling across all buckets of the day
+        sec = sec.clamp(0, remainingDayBudget);
+        remainingDayBudget = (remainingDayBudget - sec).clamp(
+          0,
+          _maxDailyDurationSeconds,
+        );
+
+        final hoursVal = (sec / 3600.0).clamp(0.0, 24.0);
         return _ChartPoint(
           label: hours[i],
           value: hoursVal,
@@ -2618,12 +2656,16 @@ class _TeacherActivityCurveChart extends StatefulWidget {
   final Color lineColor;
   final List<_TeacherSeries> seriesList;
   final String activeFilter;
+  final String? selectedTeacherId;
+  final DateTime? selectedCustomDate;
   final ValueChanged<String?>? onTeacherSelected;
 
   const _TeacherActivityCurveChart({
     required this.isDark,
     this.seriesList = const [],
     this.activeFilter = 'today',
+    this.selectedTeacherId,
+    this.selectedCustomDate,
     this.onTeacherSelected,
   }) : points = const [],
        lineColor = AppTheme.catGreen;
@@ -2668,8 +2710,13 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
   @override
   void didUpdateWidget(covariant _TeacherActivityCurveChart oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Only re-trigger entrance animation when the user explicitly changes filter,
+    // custom date, or selected teacher — never on silent background syncs!
     if (oldWidget.activeFilter != widget.activeFilter ||
-        oldWidget.seriesList != widget.seriesList) {
+        oldWidget.selectedTeacherId != widget.selectedTeacherId ||
+        oldWidget.selectedCustomDate != widget.selectedCustomDate) {
+      _hoveredPointIndex = null;
+      _hoveredSeriesIndex = null;
       _entranceAnimController.forward(from: 0.0);
     }
   }
@@ -2767,10 +2814,8 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
                       ceiling = 12.0;
                     } else if (peakVal <= 15.0) {
                       ceiling = 18.0;
-                    } else if (peakVal <= 24.0) {
-                      ceiling = 24.0;
                     } else {
-                      ceiling = (peakVal / 3.0).ceil() * 3.0;
+                      ceiling = 24.0;
                     }
 
                     for (int sIdx = 0; sIdx < effectiveSeries.length; sIdx++) {
@@ -3013,10 +3058,8 @@ class _CurveChartPainter extends CustomPainter {
       ceiling = 12.0;
     } else if (peakVal <= 15.0) {
       ceiling = 18.0;
-    } else if (peakVal <= 24.0) {
-      ceiling = 24.0;
     } else {
-      ceiling = (peakVal / 3.0).ceil() * 3.0;
+      ceiling = 24.0;
     }
 
     // Horizontal grid lines and Y-axis level labels
@@ -3426,15 +3469,6 @@ class _TeacherActivityDonutCardState extends State<_TeacherActivityDonutCard>
   }
 
   @override
-  void didUpdateWidget(covariant _TeacherActivityDonutCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.activeNowCount != widget.activeNowCount ||
-        oldWidget.totalTrackedTeachers != widget.totalTrackedTeachers) {
-      _donutAnimController.forward(from: 0.0);
-    }
-  }
-
-  @override
   void dispose() {
     _donutAnimController.dispose();
     super.dispose();
@@ -3637,149 +3671,18 @@ class _TeacherActivityDonutCardState extends State<_TeacherActivityDonutCard>
                   ],
                 );
               }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  donutWidget,
-                  const SizedBox(width: 16),
-                  Expanded(child: rightColumnWidget),
-                ],
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 22),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    donutWidget,
+                    const SizedBox(width: 16),
+                    Expanded(child: rightColumnWidget),
+                  ],
+                ),
               );
             },
-          ),
-          const SizedBox(height: 16),
-          Divider(
-            height: 1,
-            color: widget.isDark ? Colors.white10 : const Color(0xFFE2E8F0),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'FACULTY STATUS BREAKDOWN',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: widget.isDark ? Colors.white54 : const Color(0xFF64748B),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildDescriptorCard(
-                  title: 'Online Faculty',
-                  range: 'In Active Session',
-                  count: '${widget.activeNowCount}',
-                  color: AppTheme.catGreen,
-                  isDark: widget.isDark,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildDescriptorCard(
-                  title: 'Offline Faculty',
-                  range: 'Logged Out / Idle',
-                  count: '$idleCount',
-                  color: const Color(0xFF64748B),
-                  isDark: widget.isDark,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _buildDescriptorCard(
-                  title: 'Total Monitored',
-                  range: 'Assigned Teachers',
-                  count: '${widget.totalTrackedTeachers}',
-                  color: const Color(0xFF3B82F6),
-                  isDark: widget.isDark,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildDescriptorCard(
-                  title: 'Engagement Rate',
-                  range: 'Active / Total Ratio',
-                  count: '$onlinePct%',
-                  color: const Color(0xFFF59E0B),
-                  isDark: widget.isDark,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDescriptorCard({
-    required String title,
-    required String range,
-    required String count,
-    required Color color,
-    required bool isDark,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: isDark ? 0.12 : 0.06),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: color.withValues(alpha: isDark ? 0.28 : 0.18),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  range,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.white,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
-              ),
-            ),
-            child: Text(
-              count,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
           ),
         ],
       ),

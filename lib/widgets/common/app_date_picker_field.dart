@@ -333,7 +333,7 @@ Future<DateTime?> showAppDatePickerDialog(
             ),
             child: Container(
               constraints: const BoxConstraints(maxWidth: 420),
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -528,8 +528,9 @@ Future<DateTime?> showAppDatePickerDialog(
                                           selectedYear,
                                           selectedMonth,
                                         );
-                                        if (selectedDay > days)
+                                        if (selectedDay > days) {
                                           selectedDay = days;
+                                        }
                                         final testDate = DateTime(
                                           selectedYear,
                                           selectedMonth,
@@ -602,8 +603,9 @@ Future<DateTime?> showAppDatePickerDialog(
                                           selectedYear,
                                           selectedMonth,
                                         );
-                                        if (selectedDay > days)
+                                        if (selectedDay > days) {
                                           selectedDay = days;
+                                        }
                                         final testDate = DateTime(
                                           selectedYear,
                                           selectedMonth,
@@ -768,28 +770,38 @@ Future<DateTime?> showAppDatePickerDialog(
                         child: const Text('Cancel'),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isConfirmDisabled
-                              ? Colors.grey.withValues(alpha: 0.4)
-                              : theme.colorScheme.primary,
-                          foregroundColor: theme.colorScheme.onPrimary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                      Flexible(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isConfirmDisabled
+                                ? Colors.grey.withValues(alpha: 0.4)
+                                : theme.colorScheme.primary,
+                            foregroundColor: theme.colorScheme.onPrimary,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
-                        ),
-                        icon: const Icon(Icons.check, size: 18),
-                        label: const Text('Confirm Date'),
-                        onPressed: isConfirmDisabled
-                            ? null
-                            : () => Navigator.pop(
-                                ctx,
-                                DateTime(
-                                  selectedYear,
-                                  selectedMonth,
-                                  selectedDay,
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text(
+                            'Confirm Date',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onPressed: isConfirmDisabled
+                              ? null
+                              : () => Navigator.pop(
+                                  ctx,
+                                  DateTime(
+                                    selectedYear,
+                                    selectedMonth,
+                                    selectedDay,
+                                  ),
                                 ),
-                              ),
+                        ),
                       ),
                     ],
                   ),

@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/file_download_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
@@ -27,6 +29,46 @@ class StudentClassworkCard extends StatelessWidget {
   final VoidCallback? onRefresh;
 
   static bool _isOpeningAttachment = false;
+  static bool _isDownloadingAttachment = false;
+
+  static Future<String> _resolveAttachmentUrl(String rawUrl) async {
+    final cleanUrl = rawUrl.trim();
+    final isFullHttpUrl =
+        cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://');
+    final alreadySigned =
+        cleanUrl.contains('token=') || cleanUrl.contains('Signature=');
+
+    String cleanPath = cleanUrl;
+    if (!isFullHttpUrl || !alreadySigned) {
+      if (cleanPath.contains('/classwork-materials/')) {
+        cleanPath = cleanPath.split('/classwork-materials/').last;
+      } else if (cleanPath.contains('/classwork%20materials/')) {
+        cleanPath = cleanPath.split('/classwork%20materials/').last;
+      } else if (cleanPath.contains('/learning_materials/')) {
+        cleanPath = cleanPath.split('/learning_materials/').last;
+      }
+      if (cleanPath.contains('?')) {
+        cleanPath = cleanPath.split('?').first;
+      }
+      cleanPath = Uri.decodeComponent(cleanPath);
+
+      try {
+        return await SupabaseService().adminClient.storage
+            .from('classwork-materials')
+            .createSignedUrl(cleanPath, 60 * 60);
+      } catch (storageErr) {
+        debugPrint('Storage createSignedUrl notice: $storageErr');
+        if (isFullHttpUrl) {
+          return cleanUrl;
+        } else {
+          return SupabaseService().client.storage
+              .from('classwork-materials')
+              .getPublicUrl(cleanPath);
+        }
+      }
+    }
+    return cleanUrl;
+  }
 
   Future<void> _openAttachment(BuildContext context, String? signedUrl) async {
     if (_isOpeningAttachment) return;
@@ -39,51 +81,13 @@ class StudentClassworkCard extends StatelessWidget {
 
     _isOpeningAttachment = true;
     try {
-      final rawUrl = signedUrl.trim();
-      String resolvedUrl = rawUrl;
-
-      final isFullHttpUrl =
-          rawUrl.startsWith('http://') || rawUrl.startsWith('https://');
-      final alreadySigned =
-          rawUrl.contains('token=') || rawUrl.contains('Signature=');
-
-      String cleanPath = rawUrl;
-      if (!isFullHttpUrl || !alreadySigned) {
-        if (cleanPath.contains('/classwork-materials/')) {
-          cleanPath = cleanPath.split('/classwork-materials/').last;
-        } else if (cleanPath.contains('/classwork%20materials/')) {
-          cleanPath = cleanPath.split('/classwork%20materials/').last;
-        } else if (cleanPath.contains('/learning_materials/')) {
-          cleanPath = cleanPath.split('/learning_materials/').last;
-        }
-        if (cleanPath.contains('?')) {
-          cleanPath = cleanPath.split('?').first;
-        }
-        cleanPath = Uri.decodeComponent(cleanPath);
-
-        try {
-          resolvedUrl = await SupabaseService().adminClient.storage
-              .from('classwork-materials')
-              .createSignedUrl(cleanPath, 60 * 60);
-        } catch (storageErr) {
-          debugPrint('Storage createSignedUrl notice: $storageErr');
-          if (isFullHttpUrl) {
-            resolvedUrl = rawUrl;
-          } else {
-            // Bucket classwork-materials is public, fallback to public URL
-            resolvedUrl = SupabaseService().client.storage
-                .from('classwork-materials')
-                .getPublicUrl(cleanPath);
-          }
-        }
-      }
-
+      final resolvedUrl = await _resolveAttachmentUrl(signedUrl);
       final lower = resolvedUrl.toLowerCase();
       final isOfficeDoc = lower.endsWith('.doc') ||
           lower.endsWith('.docx') ||
-          cleanPath.toLowerCase().endsWith('.doc') ||
-          cleanPath.toLowerCase().endsWith('.docx');
+          signedUrl.toLowerCase().contains('.doc');
       Uri targetUri = Uri.parse(resolvedUrl);
+
       if (kIsWeb && isOfficeDoc) {
         // In Web browsers, doc/docx cannot be natively viewed without downloading.
         // Google Docs Viewer renders it inline in a new tab without downloading.
@@ -100,24 +104,31 @@ class StudentClassworkCard extends StatelessWidget {
           launched = await launchUrl(targetUri, webOnlyWindowName: '_blank');
         } else {
           // Native App (Android / iOS):
-          // 1. Try launching in external application (e.g. Word, Drive, Acrobat Reader)
-          try {
-            launched = await launchUrl(targetUri, mode: LaunchMode.externalApplication);
-          } catch (_) {}
-
-          // 2. Fallback: If no app is installed or handler fails, open via in-app browser overlay
-          if (!launched) {
+          // 1. For office docs, open via Google Docs web viewer inside the app to preview without downloading!
+          if (isOfficeDoc) {
             try {
-              final inAppUri = isOfficeDoc
-                  ? Uri.parse(
-                      'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
-                    )
-                  : targetUri;
+              final inAppUri = Uri.parse(
+                'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
+              );
               launched = await launchUrl(inAppUri, mode: LaunchMode.inAppBrowserView);
             } catch (_) {}
           }
 
-          // 3. Last-resort fallback to platform default
+          // 2. Try external application (e.g. Acrobat Reader, Word viewer)
+          if (!launched) {
+            try {
+              launched = await launchUrl(targetUri, mode: LaunchMode.externalApplication);
+            } catch (_) {}
+          }
+
+          // 3. Fallback to in-app browser view
+          if (!launched) {
+            try {
+              launched = await launchUrl(targetUri, mode: LaunchMode.inAppBrowserView);
+            } catch (_) {}
+          }
+
+          // 4. Last-resort fallback to platform default
           if (!launched) {
             launched = await launchUrl(targetUri, mode: LaunchMode.platformDefault);
           }
@@ -146,6 +157,102 @@ class StudentClassworkCard extends StatelessWidget {
     }
   }
 
+  Future<void> _downloadAttachment(
+    BuildContext context,
+    String? signedUrl,
+    String fileName,
+  ) async {
+    if (_isDownloadingAttachment) return;
+    if (signedUrl == null || signedUrl.trim().isEmpty) {
+      if (context.mounted) {
+        AppTopToast.warning(context, 'Attachment link is expired or unavailable.');
+      }
+      return;
+    }
+
+    _isDownloadingAttachment = true;
+    if (context.mounted) {
+      AppTopToast.info(context, 'Downloading $fileName...');
+    }
+
+    try {
+      final resolvedUrl = await _resolveAttachmentUrl(signedUrl);
+      final response = await http.get(Uri.parse(resolvedUrl));
+      if (response.statusCode == 200) {
+        final ext = fileName.contains('.')
+            ? fileName.split('.').last.toLowerCase()
+            : 'pdf';
+        final mimeType = ext == 'pdf'
+            ? 'application/pdf'
+            : (ext == 'docx' || ext == 'doc')
+                ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                : 'application/octet-stream';
+
+        final result = await FileDownloadHelper.downloadBytes(
+          bytes: response.bodyBytes,
+          fileName: fileName,
+          extension: ext,
+          mimeType: mimeType,
+        );
+
+        if (context.mounted) {
+          AppTopToast.success(context, result ?? 'Downloaded $fileName');
+        }
+      } else {
+        await launchUrl(
+          Uri.parse(resolvedUrl),
+          mode: LaunchMode.externalApplication,
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        AppTopToast.error(context, 'Failed to download file: $e');
+      }
+    } finally {
+      _isDownloadingAttachment = false;
+    }
+  }
+
+  String _getExamDisplayTitle() {
+    final lower = classwork.title.toLowerCase();
+    if (lower.contains('summative test 2') ||
+        lower.contains('(st2)') ||
+        lower.contains('st2') ||
+        lower.contains('st 2') ||
+        classwork.gradebookColumnIndex == 2) {
+      return 'Summative Test 2';
+    }
+    if (lower.contains('term examination') ||
+        lower.contains('(te)') ||
+        lower.contains('te') ||
+        lower.contains('periodical') ||
+        lower.contains('quarterly') ||
+        classwork.gradebookColumnIndex == 3) {
+      return 'Term Examination';
+    }
+    return 'Summative Test 1';
+  }
+
+  String _getExamDisplayCode() {
+    final lower = classwork.title.toLowerCase();
+    if (lower.contains('summative test 2') ||
+        lower.contains('(st2)') ||
+        lower.contains('st2') ||
+        lower.contains('st 2') ||
+        classwork.gradebookColumnIndex == 2) {
+      return 'ST2';
+    }
+    if (lower.contains('term examination') ||
+        lower.contains('(te)') ||
+        lower.contains('te') ||
+        lower.contains('periodical') ||
+        lower.contains('quarterly') ||
+        classwork.gradebookColumnIndex == 3) {
+      return 'TE';
+    }
+    return 'ST1';
+  }
+
   static String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
@@ -159,10 +266,9 @@ class StudentClassworkCard extends StatelessWidget {
     final isGraded = classwork.status == 'graded' || classwork.score != null;
     final isSubmitted =
         isGraded || classwork.status == 'submitted';
-    final isOverdue =
-        !isSubmitted &&
-        classwork.deadline != null &&
+    final isPastDeadline = classwork.deadline != null &&
         classwork.deadline!.isBefore(DateTime.now());
+    final isOverdue = !isSubmitted && isPastDeadline;
     final isMissing =
         !isSubmitted && (isOverdue || classwork.status == 'missing');
     final status = isGraded
@@ -222,19 +328,30 @@ class StudentClassworkCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        classwork.title,
+                        classwork.type == 'exam'
+                            ? _getExamDisplayTitle()
+                            : classwork.title,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        [
-                          classwork.subjectName,
-                          classwork.type == 'performance_task'
-                              ? 'Performance Task${classwork.gradebookColumnIndex != null ? ' (PT ${classwork.gradebookColumnIndex})' : ''}'
-                              : 'Activity${classwork.gradebookColumnIndex != null ? ' (WW ${classwork.gradebookColumnIndex})' : ''}',
-                        ].where((value) => value.isNotEmpty).join(' · '),
+                        classwork.type == 'exam'
+                            ? 'Exam · ${_getExamDisplayCode()}'
+                            : classwork.type == 'quiz'
+                                ? [classwork.subjectName, 'Quiz']
+                                    .where((value) => value.isNotEmpty)
+                                    .join(' · ')
+                                : classwork.type == 'performance_task'
+                                    ? [
+                                        classwork.subjectName,
+                                        'Performance Task${classwork.gradebookColumnIndex != null ? ' (PT ${classwork.gradebookColumnIndex})' : ''}',
+                                      ].where((value) => value.isNotEmpty).join(' · ')
+                                    : [
+                                        classwork.subjectName,
+                                        'Activity${classwork.gradebookColumnIndex != null ? ' (WW ${classwork.gradebookColumnIndex})' : ''}',
+                                      ].where((value) => value.isNotEmpty).join(' · '),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -301,7 +418,7 @@ class StudentClassworkCard extends StatelessWidget {
                 fileName: classwork.attachment!.fileName,
                 fileSizeBytes: classwork.attachment!.fileSizeBytes,
                 signedUrl: classwork.attachment!.signedUrl,
-                buttonLabel: 'View Attached File',
+                isTeacherAttachment: true,
               ),
             ],
 
@@ -324,16 +441,18 @@ class StudentClassworkCard extends StatelessWidget {
             ],
 
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 16,
-              runSpacing: 8,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _Detail(
-                  icon: Icons.event_outlined,
-                  text: classwork.deadline == null
-                      ? 'No deadline'
-                      : 'Due ${_formatDate(classwork.deadline!)}',
+                Expanded(
+                  child: _Detail(
+                    icon: Icons.event_outlined,
+                    text: classwork.deadline == null
+                        ? 'No deadline'
+                        : 'Due ${_formatDate(classwork.deadline!)}',
+                  ),
                 ),
+                const SizedBox(width: 8),
                 if (classwork.maxScore > 0)
                   _Detail(
                     icon: Icons.stars_outlined,
@@ -401,42 +520,37 @@ class StudentClassworkCard extends StatelessWidget {
                 classwork.type == 'quiz') ...[
               const SizedBox(height: 12),
               if (isSubmitted) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F8A48).withValues(alpha: isDark ? 0.15 : 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFF0F8A48).withValues(alpha: isDark ? 0.35 : 0.25),
+                if (classwork.score != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.3)
+                          : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isDark
+                            ? theme.colorScheme.outline.withValues(alpha: 0.2)
+                            : const Color(0xFFE2E8F0),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Text(
+                      'Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: theme.colorScheme.onSurface,
+                      ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.check_circle,
-                        size: 18,
-                        color: Color(0xFF0F8A48),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          classwork.score != null
-                              ? '${classwork.type == 'quiz' ? 'Quiz' : 'Examination'} Completed • Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts'
-                              : '${classwork.type == 'quiz' ? 'Quiz' : 'Examination'} Submitted • Recorded in system',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF0F8A48),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
+                  const SizedBox(height: 10),
+                ],
                 Align(
                   alignment: Alignment.centerRight,
                   child: classwork.resultsReleased
@@ -650,7 +764,8 @@ class StudentClassworkCard extends StatelessWidget {
                 ),
               ],
               // Action Buttons: Turn In Work / Resubmit Work
-              if (!isOverdue && !isGraded) ...[
+              // Locked once past deadline or once graded
+              if (!isPastDeadline && !isGraded) ...[
                 const SizedBox(height: 12),
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -705,9 +820,12 @@ class StudentClassworkCard extends StatelessWidget {
               ],
             ],
 
-            if (classwork.score != null) ...[
+            if (classwork.score != null &&
+                classwork.type != 'exam' &&
+                classwork.type != 'quiz') ...[
               const SizedBox(height: 12),
               Container(
+                width: double.infinity,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 10,
@@ -725,47 +843,13 @@ class StudentClassworkCard extends StatelessWidget {
                     width: 1.0,
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.star_rounded,
-                        size: 18,
-                        color: Color(0xFF059669),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Score Recorded by Teacher',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurfaceVariant,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                          const SizedBox(height: 1),
-                          Text(
-                            '${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  'Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
               ),
             ],
@@ -794,8 +878,9 @@ class StudentClassworkCard extends StatelessWidget {
     required String fileName,
     int? fileSizeBytes,
     String? signedUrl,
-    required String buttonLabel,
+    String? buttonLabel,
     bool isSubmittedWork = false,
+    bool isTeacherAttachment = false,
   }) {
     final isPdf = fileName.toLowerCase().endsWith('.pdf');
     final accentColor = isPdf
@@ -826,11 +911,13 @@ class StudentClassworkCard extends StatelessWidget {
             final isVeryNarrow = constraints.maxWidth < 340;
             final isNarrow = constraints.maxWidth < 420;
 
-            final String? actionLabel = isVeryNarrow
-                ? null
-                : isNarrow
-                    ? (buttonLabel.contains('Work') ? 'View Work' : 'View File')
-                    : buttonLabel;
+            final String? actionLabel = buttonLabel != null
+                ? (isVeryNarrow
+                    ? null
+                    : isNarrow
+                        ? (buttonLabel.contains('Work') ? 'View Work' : 'View File')
+                        : buttonLabel)
+                : null;
 
             return Row(
               children: [
@@ -897,8 +984,8 @@ class StudentClassworkCard extends StatelessWidget {
                       Text(
                         subtitle ??
                             (fileSizeBytes != null
-                                ? '${_formatFileSize(fileSizeBytes)} • Click to open'
-                                : 'Click to open document'),
+                                ? '${_formatFileSize(fileSizeBytes)} • Click to preview'
+                                : 'Click to preview'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -910,40 +997,70 @@ class StudentClassworkCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: actionLabel != null ? 8 : 6,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (actionLabel != null) ...[
-                        Text(
-                          actionLabel,
-                          style: TextStyle(
-                            fontSize: isNarrow ? 11 : 12,
-                            fontWeight: FontWeight.bold,
+                if (isTeacherAttachment)
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () =>
+                          _downloadAttachment(context, signedUrl, fileName),
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color:
+                              theme.colorScheme.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: theme.colorScheme.primary
+                                .withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Tooltip(
+                          message: 'Download file',
+                          child: Icon(
+                            Icons.download_rounded,
+                            size: 20,
                             color: theme.colorScheme.primary,
                           ),
                         ),
-                        const SizedBox(width: 4),
-                      ],
-                      Icon(
-                        Icons.open_in_new,
-                        size: 13,
-                        color: theme.colorScheme.primary,
                       ),
-                    ],
+                    ),
+                  )
+                else if (actionLabel != null || buttonLabel != null)
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: actionLabel != null ? 8 : 6,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (actionLabel != null) ...[
+                          Text(
+                            actionLabel,
+                            style: TextStyle(
+                              fontSize: isNarrow ? 11 : 12,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Icon(
+                          Icons.open_in_new,
+                          size: 13,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
               ],
             );
           },
@@ -1314,9 +1431,12 @@ class _Detail extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: defaultColor),
         const SizedBox(width: 5),
-        Text(
-          text,
-          style: Theme.of(context).textTheme.bodySmall,
+        Flexible(
+          child: Text(
+            text,
+            style: Theme.of(context).textTheme.bodySmall,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

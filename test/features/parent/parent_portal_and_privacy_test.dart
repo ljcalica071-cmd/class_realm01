@@ -104,9 +104,9 @@ void main() {
         expect(find.text('May 14, 1982'), findsOneWidget);
         expect(find.text('MOTHER'), findsOneWidget);
         expect(find.text('GUARDIAN'), findsOneWidget);
-        expect(find.text('Carlos D. Cruz'), findsOneWidget);
-        expect(find.text('Angela D. Cruz'), findsOneWidget);
-        expect(find.text('Marco Reyes'), findsOneWidget);
+        expect(find.text('Cruz, Carlos D.'), findsOneWidget);
+        expect(find.text('Cruz, Angela D.'), findsOneWidget);
+        expect(find.text('Reyes, Marco'), findsOneWidget);
       },
     );
   });

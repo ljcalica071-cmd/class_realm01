@@ -619,7 +619,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildLoginForm(BuildContext context) {
     return AutofillGroup(
-      onDisposeAction: AutofillContextAction.cancel,
+      onDisposeAction: AutofillContextAction.commit,
       child: Form(
         key: _formKey,
         child: Column(
@@ -705,7 +705,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _passwordController,
                       focusNode: _passwordFocusNode,
                       autofillHints: const [AutofillHints.password],
-                      keyboardType: TextInputType.visiblePassword,
+                      keyboardType: TextInputType.text,
                       textInputAction: TextInputAction.done,
                       enableSuggestions: false,
                       autocorrect: false,

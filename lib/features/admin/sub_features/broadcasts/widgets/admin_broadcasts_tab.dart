@@ -134,7 +134,15 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'notifications',
-          callback: (_) => _loadBroadcastHistory(),
+          callback: (payload) {
+            final newRec = payload.newRecord;
+            if (newRec.isNotEmpty) {
+              final type =
+                  (newRec['notification_type']?.toString() ?? '').toLowerCase();
+              if (type.isNotEmpty && type != 'announcement') return;
+            }
+            _loadBroadcastHistory();
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
@@ -146,14 +154,15 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   }
 
   Future<void> _loadInitialData() async {
-    // SWR Instant Frame 1 Cache Restoration
+    // SWR Instant Frame 1 Cache Restoration (Strictly admin announcements only)
     final cachedBroadcasts = AppDataCache.instance.getCached<List<AppNotificationModel>>(
       'admin_broadcasts_history',
       (json) => (json as List)
           .map((e) => AppNotificationModel.fromJson(e as Map<String, dynamic>))
+          .where((n) => n.type.toLowerCase() == 'announcement')
           .toList(),
     );
-    if (cachedBroadcasts != null && cachedBroadcasts.isNotEmpty) {
+    if (cachedBroadcasts != null) {
       _broadcasts = cachedBroadcasts;
       _isLoadingBroadcasts = false;
       _isInitialLoading = false;
