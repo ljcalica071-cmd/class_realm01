@@ -764,13 +764,13 @@ class StudentClassworkCard extends StatelessWidget {
                 ),
               ],
               // Action Buttons: Turn In Work / Resubmit Work
-              // Locked once past deadline or once graded
-              if (!isPastDeadline && !isGraded) ...[
+              // Locked once past deadline, once graded, or once a score has been recorded
+              if (!isPastDeadline && !isGraded && classwork.score == null) ...[
                 const SizedBox(height: 12),
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final isCompact = constraints.maxWidth < 360;
-                    final button = isSubmitted && !isGraded
+                    final button = isSubmitted && !isGraded && classwork.score == null
                         ? OutlinedButton.icon(
                             onPressed: () {
                               StudentSubmitWorkDialog.show(

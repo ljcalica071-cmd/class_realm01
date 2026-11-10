@@ -25,6 +25,14 @@ class StudentSubmitWorkDialog extends StatefulWidget {
     required StudentClassworkModel classwork,
     required VoidCallback onSubmitted,
   }) {
+    if (classwork.score != null || classwork.status == 'graded') {
+      AppTopToast.warning(
+        context,
+        'This work has already been graded. Resubmission is not allowed.',
+      );
+      return Future.value();
+    }
+
     return showDialog(
       context: context,
       barrierDismissible: false,
@@ -177,6 +185,29 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
           }
           return;
         }
+      }
+
+      // Check if work has already been graded or scored in database
+      final existingSub = await client
+          .from('student_classwork_submissions')
+          .select('id, score, status')
+          .eq('classwork_id', widget.classwork.id)
+          .eq('student_id', user.id)
+          .maybeSingle();
+
+      if (existingSub != null &&
+          (existingSub['score'] != null || existingSub['status'] == 'graded')) {
+        AppDataCache.instance.invalidatePrefix('student_dashboard_${user.id}');
+        if (mounted) {
+          Navigator.of(context).pop();
+          AppModals.showWarningDialog(
+            context: context,
+            title: 'Submission Already Graded',
+            message:
+                'Your teacher has already recorded a score for this submission. Once graded, resubmissions are no longer accepted.',
+          );
+        }
+        return;
       }
 
       String? storagePath;
