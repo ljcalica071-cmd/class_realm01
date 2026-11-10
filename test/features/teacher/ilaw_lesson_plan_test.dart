@@ -1156,4 +1156,176 @@ void main() {
       expect(find.textContaining('iLAW LESSON PLAN'), findsOneWidget);
     });
   });
+
+  group('Task 6: Lesson Plan Pagination & Date Filtering', () {
+    const activeTeacher = UserModel(
+      id: 'teacher-pagination-101',
+      username: 'teacher.pagination',
+      email: 'kakashi.pagination@classrealm.test',
+      role: UserRole.teacher,
+      fullName: 'Kakashi Hatake',
+    );
+
+    testWidgets('paginates lesson plans with 5 items per page and switches pages', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      SharedPreferences.setMockInitialValues({});
+
+      final store = TeacherLessonPlanStore(currentUserProvider: () => activeTeacher);
+
+      // Create 7 test plans
+      final now = DateTime.now();
+      for (int i = 1; i <= 7; i++) {
+        await store.savePlan(
+          IlawLessonPlan(
+            id: 'plan-item-$i',
+            teacherId: activeTeacher.id,
+            teacherName: activeTeacher.fullName,
+            gradeLevel: 'Grade 11',
+            quarter: 'Term 1',
+            subject: 'General Mathematics',
+            topic: 'Topic $i: Rational Functions',
+            durationMinutes: 60,
+            intendedOutcomes: 'Outcomes for topic $i',
+            learningContent: 'Content for topic $i',
+            assessment: 'Assessment $i',
+            workExperiences: 'Experiences $i',
+            createdAt: now.subtract(Duration(minutes: i * 5)),
+            updatedAt: now.subtract(Duration(minutes: i * 5)),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TeacherLessonPlanningTab(
+              lessonPlans: const <LessonPlanModel>[],
+              onPlanGenerated: () {},
+              store: store,
+              currentUserProvider: () => activeTeacher,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify pagination toolbar displays "Showing 1–5 of 7 lesson plans"
+      expect(find.text('Showing 1–5 of 7 lesson plans'), findsOneWidget);
+
+      // Verify first 5 are on page 1, 6 and 7 are not on page 1
+      expect(find.text('Topic 1: Rational Functions'), findsOneWidget);
+      expect(find.text('Topic 5: Rational Functions'), findsOneWidget);
+      expect(find.text('Topic 6: Rational Functions'), findsNothing);
+
+      // Tap Next page button
+      final nextBtn = find.byTooltip('Next page');
+      expect(nextBtn, findsOneWidget);
+      await tester.tap(nextBtn);
+      await tester.pumpAndSettle();
+
+      // On Page 2: Showing 6–7 of 7 lesson plans
+      expect(find.text('Showing 6–7 of 7 lesson plans'), findsOneWidget);
+      expect(find.text('Topic 6: Rational Functions'), findsOneWidget);
+      expect(find.text('Topic 7: Rational Functions'), findsOneWidget);
+      expect(find.text('Topic 1: Rational Functions'), findsNothing);
+
+      // Tap Previous page button
+      final prevBtn = find.byTooltip('Previous page');
+      await tester.tap(prevBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Showing 1–5 of 7 lesson plans'), findsOneWidget);
+      expect(find.text('Topic 1: Rational Functions'), findsOneWidget);
+    });
+
+    testWidgets('filters lesson plans by date (Today vs older plans)', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 960));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      SharedPreferences.setMockInitialValues({});
+
+      final store = TeacherLessonPlanStore(currentUserProvider: () => activeTeacher);
+
+      final now = DateTime.now();
+      // Plan 1: Created Today
+      await store.savePlan(
+        IlawLessonPlan(
+          id: 'plan-today',
+          teacherId: activeTeacher.id,
+          teacherName: activeTeacher.fullName,
+          gradeLevel: 'Grade 11',
+          quarter: 'Term 1',
+          subject: 'General Mathematics',
+          topic: 'Today Lesson: Calculus Intro',
+          durationMinutes: 60,
+          intendedOutcomes: 'Outcomes today',
+          learningContent: 'Content today',
+          assessment: 'Assessment today',
+          workExperiences: 'Experiences today',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      // Plan 2: Created 45 days ago (older month)
+      final pastDate = now.subtract(const Duration(days: 45));
+      await store.savePlan(
+        IlawLessonPlan(
+          id: 'plan-past',
+          teacherId: activeTeacher.id,
+          teacherName: activeTeacher.fullName,
+          gradeLevel: 'Grade 12',
+          quarter: 'Term 1',
+          subject: 'Statistics and Probability',
+          topic: 'Past Lesson: Probability Intro',
+          durationMinutes: 60,
+          intendedOutcomes: 'Outcomes past',
+          learningContent: 'Content past',
+          assessment: 'Assessment past',
+          workExperiences: 'Experiences past',
+          createdAt: pastDate,
+          updatedAt: pastDate,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TeacherLessonPlanningTab(
+              lessonPlans: const <LessonPlanModel>[],
+              onPlanGenerated: () {},
+              store: store,
+              currentUserProvider: () => activeTeacher,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Initially 'All Dates': both plans visible
+      expect(find.text('Today Lesson: Calculus Intro'), findsOneWidget);
+      expect(find.text('Past Lesson: Probability Intro'), findsOneWidget);
+
+      // Open Date filter dropdown and select 'Today'
+      await tester.tap(find.text('All Dates'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Today'));
+      await tester.pumpAndSettle();
+
+      // Only today's plan is visible
+      expect(find.text('Today Lesson: Calculus Intro'), findsOneWidget);
+      expect(find.text('Past Lesson: Probability Intro'), findsNothing);
+
+      // Reset filters -> both reappear
+      await tester.tap(find.text('Today'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(MenuItemButton, 'All Dates'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Today Lesson: Calculus Intro'), findsOneWidget);
+      expect(find.text('Past Lesson: Probability Intro'), findsOneWidget);
+    });
+  });
 }

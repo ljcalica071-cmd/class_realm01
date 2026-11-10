@@ -415,7 +415,19 @@ class IlawLessonPlan {
     final updated =
         DateTime.tryParse(json['updated_at']?.toString() ?? '') ?? created;
 
-    final rawSessions = json['sessions'];
+    // Support normalized relational tables (lesson_plan_sections)
+    final dynamic rawSections = json['lesson_plan_sections'];
+    final Map<String, dynamic> secMap;
+    if (rawSections is Map) {
+      secMap = Map<String, dynamic>.from(rawSections);
+    } else if (rawSections is List && rawSections.isNotEmpty && rawSections.first is Map) {
+      secMap = Map<String, dynamic>.from(rawSections.first as Map);
+    } else {
+      secMap = json;
+    }
+
+    // Support normalized relational tables (lesson_plan_sessions) or flat JSONB
+    final rawSessions = json['lesson_plan_sessions'] ?? json['sessions'];
     final List<IlawSessionData> parsedSessions = [];
     if (rawSessions is List) {
       for (final s in rawSessions) {
@@ -429,7 +441,8 @@ class IlawLessonPlan {
       }
     }
 
-    final rawRubrics = json['rubric_items'];
+    // Support normalized relational tables (lesson_plan_rubrics) or flat JSONB
+    final rawRubrics = json['lesson_plan_rubrics'] ?? json['rubric_items'];
     final List<IlawRubricItem> parsedRubrics = [];
     if (rawRubrics is List) {
       for (final r in rawRubrics) {
@@ -456,27 +469,29 @@ class IlawLessonPlan {
       durationMinutes: (json['duration_minutes'] is int)
           ? json['duration_minutes'] as int
           : (int.tryParse(json['duration_minutes']?.toString() ?? '') ?? 60),
-      teachingStrategy: (json['teaching_strategy'] ?? '').toString(),
-      learningCompetency: (json['learning_competency'] ?? '').toString(),
-      intendedOutcomes: (json['intended_outcomes'] ?? '').toString(),
-      learningContent: (json['learning_content'] ?? '').toString(),
-      assessment: (json['assessment'] ?? '').toString(),
-      workExperiences: (json['work_experiences'] ?? '').toString(),
+      teachingStrategy: (secMap['teaching_strategy'] ?? json['teaching_strategy'] ?? '').toString(),
+      learningCompetency: (secMap['learning_competency'] ?? json['learning_competency'] ?? '').toString(),
+      intendedOutcomes: (secMap['intended_outcomes'] ?? json['intended_outcomes'] ?? '').toString(),
+      learningContent: (secMap['learning_content'] ?? json['learning_content'] ?? '').toString(),
+      assessment: (secMap['assessment'] ?? json['assessment'] ?? '').toString(),
+      workExperiences: (secMap['work_experiences'] ?? json['work_experiences'] ?? '').toString(),
       templateType: IlawTemplateType.fromString(
-        json['template_type']?.toString(),
+        (secMap['template_type'] ?? json['template_type'])?.toString(),
       ),
       contentSource: IlawContentSource.fromString(
-        json['content_source']?.toString(),
+        (secMap['content_source'] ?? json['content_source'])?.toString(),
       ),
       targetProficiency: DepEdProficiencyLevel.fromString(
-        json['target_proficiency']?.toString(),
+        (secMap['target_proficiency'] ?? json['target_proficiency'])?.toString(),
       ),
-      numberOfSessions: (json['number_of_sessions'] is int)
-          ? json['number_of_sessions'] as int
-          : (int.tryParse(json['number_of_sessions']?.toString() ?? '') ?? 4),
-      language: (json['language'] ?? 'English').toString(),
+      numberOfSessions: (secMap['number_of_sessions'] is int)
+          ? secMap['number_of_sessions'] as int
+          : (int.tryParse(secMap['number_of_sessions']?.toString() ?? '') ??
+             (json['number_of_sessions'] is int ? json['number_of_sessions'] as int : 4)),
+      language: (secMap['language'] ?? json['language'] ?? 'English').toString(),
       depedOrderCitation:
-          (json['deped_order_citation'] ??
+          (secMap['deped_order_citation'] ??
+                  json['deped_order_citation'] ??
                   'DepEd Order No. 003, s. 2026 (Guidelines on the Responsible Use of AI in Basic Education)')
               .toString(),
       sessions: parsedSessions,

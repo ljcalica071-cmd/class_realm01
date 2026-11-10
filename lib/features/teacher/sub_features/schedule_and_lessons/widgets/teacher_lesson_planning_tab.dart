@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/services/gemini_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -39,6 +40,11 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _gradeFilter = 'All Grades';
   String _statusFilter = 'All Statuses';
+  String _dateFilter = 'All Dates';
+  DateTimeRange? _customDateRange;
+
+  int _currentPage = 1;
+  int _pageSize = 5;
 
   List<IlawLessonPlan> _plans = const [];
   bool _isLoading = true;
@@ -90,6 +96,9 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
       setState(() {
         _plans = loaded;
         _isLoading = false;
+        if (_currentPage > _totalPages) {
+          _currentPage = math.max(1, _totalPages);
+        }
       });
     } on LessonPlanAccessDeniedException catch (e) {
       if (!mounted) return;
@@ -224,6 +233,83 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
     }
   }
 
+  bool _matchesDateFilter(DateTime dt) {
+    final localDt = dt.toLocal();
+    final now = DateTime.now();
+
+    switch (_dateFilter) {
+      case 'Today':
+        return localDt.year == now.year &&
+            localDt.month == now.month &&
+            localDt.day == now.day;
+      case 'This Week':
+        final startOfWeek = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).subtract(Duration(days: now.weekday - 1));
+        final endOfWeek = startOfWeek.add(
+          const Duration(days: 7, microseconds: -1),
+        );
+        return !localDt.isBefore(startOfWeek) && !localDt.isAfter(endOfWeek);
+      case 'This Month':
+        return localDt.year == now.year && localDt.month == now.month;
+      case 'Custom Range':
+        if (_customDateRange == null) return true;
+        final start = DateTime(
+          _customDateRange!.start.year,
+          _customDateRange!.start.month,
+          _customDateRange!.start.day,
+        );
+        final end = DateTime(
+          _customDateRange!.end.year,
+          _customDateRange!.end.month,
+          _customDateRange!.end.day,
+          23,
+          59,
+          59,
+          999,
+        );
+        return !localDt.isBefore(start) && !localDt.isAfter(end);
+      case 'All Dates':
+      default:
+        return true;
+    }
+  }
+
+  Future<void> _handleDateFilterChange(String? value) async {
+    if (value == null) return;
+    if (value == 'Custom Range') {
+      final now = DateTime.now();
+      final picked = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2023),
+        lastDate: DateTime(2030),
+        initialDateRange: _customDateRange ??
+            DateTimeRange(
+              start: now.subtract(const Duration(days: 7)),
+              end: now,
+            ),
+      );
+      if (picked != null) {
+        setState(() {
+          _dateFilter = 'Custom Range';
+          _customDateRange = picked;
+          _currentPage = 1;
+        });
+      }
+    } else {
+      setState(() {
+        _dateFilter = value;
+        _customDateRange = null;
+        _currentPage = 1;
+      });
+    }
+  }
+
+  String _formatShortDate(DateTime dt) =>
+      '${dt.month}/${dt.day}/${dt.year}';
+
   List<IlawLessonPlan> get _filteredPlans {
     final query = _searchCtrl.text.trim().toLowerCase();
     return _plans.where((plan) {
@@ -236,6 +322,9 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
       if (_statusFilter == 'Draft' && plan.isApproved) {
         return false;
       }
+      if (!_matchesDateFilter(plan.updatedAt)) {
+        return false;
+      }
       if (query.isNotEmpty) {
         final haystack =
             '${plan.topic} ${plan.subject} ${plan.gradeLevel} ${plan.term}'
@@ -244,6 +333,23 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
       }
       return true;
     }).toList();
+  }
+
+  int get _totalPages {
+    final count = _filteredPlans.length;
+    if (count == 0) return 1;
+    return ((count - 1) ~/ _pageSize) + 1;
+  }
+
+  List<IlawLessonPlan> get _paginatedPlans {
+    final filtered = _filteredPlans;
+    if (filtered.isEmpty) return const [];
+    final total = _totalPages;
+    final page = _currentPage.clamp(1, total);
+    final start = (page - 1) * _pageSize;
+    final end = math.min(start + _pageSize, filtered.length);
+    if (start >= filtered.length) return const [];
+    return filtered.sublist(start, end);
   }
 
   @override
@@ -278,6 +384,7 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 760;
+        final cloudSyncSuccess = _store.lastSyncCloudSuccess == true;
 
         final infoSection = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -312,6 +419,18 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
                   accent: keyCount > 0
                       ? AppTheme.catGreen
                       : AppTheme.catSlate,
+                ),
+                _buildSubtlePill(
+                  theme,
+                  icon: cloudSyncSuccess
+                      ? Icons.cloud_done_outlined
+                      : Icons.cloud_outlined,
+                  label: cloudSyncSuccess
+                      ? 'Cloud Synced'
+                      : 'Local Storage Active',
+                  accent: cloudSyncSuccess
+                      ? AppTheme.catGreen
+                      : AppTheme.catOrange,
                 ),
               ],
             ),
@@ -446,11 +565,13 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 220, maxWidth: 340),
+          constraints: const BoxConstraints(minWidth: 220, maxWidth: 320),
           child: TextField(
             key: const Key('ilaw_search_field'),
             controller: _searchCtrl,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() {
+              _currentPage = 1;
+            }),
             style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface),
             decoration: InputDecoration(
               hintText: 'Search topic or subject...',
@@ -468,7 +589,9 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
                       tooltip: 'Clear search',
                       onPressed: () {
                         _searchCtrl.clear();
-                        setState(() {});
+                        setState(() {
+                          _currentPage = 1;
+                        });
                       },
                       icon: const Icon(Icons.close, size: 16),
                     )
@@ -499,7 +622,12 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
           value: _gradeFilter,
           items: const ['All Grades', 'Grade 11', 'Grade 12'],
           onChanged: (v) {
-            if (v != null) setState(() => _gradeFilter = v);
+            if (v != null) {
+              setState(() {
+                _gradeFilter = v;
+                _currentPage = 1;
+              });
+            }
           },
         ),
         _buildFilterDropdown(
@@ -507,9 +635,72 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
           value: _statusFilter,
           items: const ['All Statuses', 'Approved', 'Draft'],
           onChanged: (v) {
-            if (v != null) setState(() => _statusFilter = v);
+            if (v != null) {
+              setState(() {
+                _statusFilter = v;
+                _currentPage = 1;
+              });
+            }
           },
         ),
+        _buildFilterDropdown(
+          theme: theme,
+          value: _dateFilter,
+          items: const [
+            'All Dates',
+            'Today',
+            'This Week',
+            'This Month',
+            'Custom Range',
+          ],
+          onChanged: _handleDateFilterChange,
+        ),
+        if (_dateFilter == 'Custom Range' && _customDateRange != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.date_range,
+                  size: 14,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${_formatShortDate(_customDateRange!.start)} - ${_formatShortDate(_customDateRange!.end)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _dateFilter = 'All Dates';
+                      _customDateRange = null;
+                      _currentPage = 1;
+                    });
+                  },
+                  child: Icon(
+                    Icons.close,
+                    size: 14,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -532,7 +723,7 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(vertical: 4),
         ),
-        minimumSize: const WidgetStatePropertyAll(Size(150, 0)),
+        minimumSize: const WidgetStatePropertyAll(Size(140, 0)),
         side: WidgetStatePropertyAll(
           BorderSide(
             color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
@@ -612,7 +803,7 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
                 const SizedBox(width: 6),
                 Icon(
                   isOpen
-                      ? Icons.keyboard_arrow_up_rounded
+                        ? Icons.keyboard_arrow_up_rounded
                       : Icons.keyboard_arrow_down_rounded,
                   size: 18,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
@@ -756,6 +947,9 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
                   _searchCtrl.clear();
                   _gradeFilter = 'All Grades';
                   _statusFilter = 'All Statuses';
+                  _dateFilter = 'All Dates';
+                  _customDateRange = null;
+                  _currentPage = 1;
                 });
               },
             ),
@@ -764,11 +958,184 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
       );
     }
 
-    return ListView.separated(
-      itemCount: visible.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 14),
-      itemBuilder: (ctx, idx) => _buildLessonPlanCard(theme, visible[idx]),
+    final paginated = _paginatedPlans;
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.separated(
+            itemCount: paginated.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 14),
+            itemBuilder: (ctx, idx) => _buildLessonPlanCard(theme, paginated[idx]),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildPaginationToolbar(theme, totalItems: visible.length),
+      ],
     );
+  }
+
+  Widget _buildPaginationToolbar(ThemeData theme, {required int totalItems}) {
+    final total = _totalPages;
+    final safePage = _currentPage.clamp(1, total);
+    final start = totalItems == 0 ? 0 : ((safePage - 1) * _pageSize) + 1;
+    final end = math.min(safePage * _pageSize, totalItems);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 620;
+
+        final infoText = Text(
+          'Showing $start–$end of $totalItems lesson plans',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w500,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+          ),
+        );
+
+        final pageSizeDropdown = _buildFilterDropdown(
+          theme: theme,
+          value: '$_pageSize per page',
+          items: const ['5 per page', '10 per page', '20 per page'],
+          onChanged: (val) {
+            if (val == null) return;
+            final numVal = int.tryParse(val.split(' ').first);
+            if (numVal != null && numVal != _pageSize) {
+              setState(() {
+                _pageSize = numVal;
+                _currentPage = 1;
+              });
+            }
+          },
+        );
+
+        final pageNav = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Previous page',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.chevron_left, size: 20),
+              onPressed: safePage > 1
+                  ? () => setState(() => _currentPage = safePage - 1)
+                  : null,
+            ),
+            const SizedBox(width: 4),
+            ..._buildPageNumbers(theme, total: total, current: safePage),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: 'Next page',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.chevron_right, size: 20),
+              onPressed: safePage < total
+                  ? () => setState(() => _currentPage = safePage + 1)
+                  : null,
+            ),
+          ],
+        );
+
+        if (isNarrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  infoText,
+                  pageSizeDropdown,
+                ],
+              ),
+              const SizedBox(height: 10),
+              Center(child: pageNav),
+            ],
+          );
+        }
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                infoText,
+                const SizedBox(width: 14),
+                pageSizeDropdown,
+              ],
+            ),
+            pageNav,
+          ],
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildPageNumbers(
+    ThemeData theme, {
+    required int total,
+    required int current,
+  }) {
+    final widgets = <Widget>[];
+    final pages = <int>{};
+    pages.add(1);
+    pages.add(total);
+    for (int p = math.max(1, current - 1); p <= math.min(total, current + 1); p++) {
+      pages.add(p);
+    }
+    final sortedPages = pages.toList()..sort();
+
+    int last = 0;
+    for (final p in sortedPages) {
+      if (last > 0 && p - last > 1) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              '...',
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+        );
+      }
+      final isSelected = p == current;
+      widgets.add(
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => setState(() => _currentPage = p),
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            alignment: Alignment.center,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.12),
+              ),
+            ),
+            child: Text(
+              '$p',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected
+                    ? theme.colorScheme.onPrimary
+                    : theme.colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ),
+      );
+      last = p;
+    }
+    return widgets;
   }
 
   Widget _buildLessonPlanCard(ThemeData theme, IlawLessonPlan plan) {
