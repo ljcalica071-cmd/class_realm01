@@ -720,7 +720,7 @@ class GradebookAnalyticsCalculator {
           slotKey = examLabels[idx].replaceAll(' ', '');
           label = examLabels[idx];
           sub = examSubs[idx];
-          color = col == 2 ? crSlate : crSteelBlue;
+          color = crAmber; // Consistently Amber for Examinations across Bar & Donut charts
         }
 
         points.add(AssessmentProgressionPoint(

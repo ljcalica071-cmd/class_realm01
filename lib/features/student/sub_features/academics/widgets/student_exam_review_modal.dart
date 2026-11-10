@@ -265,15 +265,15 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 820, maxHeight: 720),
+        constraints: const BoxConstraints(maxWidth: 540, maxHeight: 680),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Header
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
                 borderRadius: const BorderRadius.vertical(
@@ -286,9 +286,10 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
                 ),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: const Color(0xFF0F8A48).withValues(alpha: 0.12),
                       shape: BoxShape.circle,
@@ -296,10 +297,10 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
                     child: const Icon(
                       Icons.fact_check_outlined,
                       color: Color(0xFF0F8A48),
-                      size: 24,
+                      size: 20,
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,8 +308,8 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
                         Text(
                           widget.title,
                           style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w700,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -317,39 +318,42 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
                         Text(
                           '${widget.subjectName} • Official Answer Key & Student Review',
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 12,
                             color: theme.colorScheme.onSurface.withValues(
                               alpha: 0.65,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F8A48).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(0xFF0F8A48).withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Text(
+                            'Score: ${_totalScoreEarned.round()} / ${widget.maxScore.round()} pts',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              color: Color(0xFF0F8A48),
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F8A48).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: const Color(0xFF0F8A48).withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Text(
-                      'Score: ${_totalScoreEarned.round()} / ${widget.maxScore.round()} pts',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Color(0xFF0F8A48),
-                      ),
-                    ),
-                  ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],

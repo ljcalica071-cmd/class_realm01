@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 
 class GradebookGridCell extends StatefulWidget {
   final String value;
@@ -42,6 +43,14 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
 
   void _onTextChanged(String text) {
     _debounceTimer?.cancel();
+    if (text.length > 3) {
+      final truncated = text.substring(0, 3);
+      _controller.value = TextEditingValue(
+        text: truncated,
+        selection: TextSelection.collapsed(offset: truncated.length),
+      );
+      text = truncated;
+    }
     if (widget.isHpsCell) {
       if (text.trim().isEmpty) {
         // While user is actively typing/deleting an HPS value, do NOT emit
@@ -133,17 +142,10 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
     final message = widget.isHpsCell
         ? 'Highest Possible Score must be between 1 and 100.'
         : 'Score cannot exceed Highest Possible Score (${hps?.toInt() ?? 100}).';
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      AppTopToast.warning(context, message);
+    });
   }
 
   @override
@@ -207,13 +209,13 @@ class _GradebookGridCellState extends State<GradebookGridCell> {
               textAlignVertical: TextAlignVertical.center,
               keyboardType: TextInputType.number,
               inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(3),
                 _ScoreRangeTextInputFormatter(
                   isHpsCell: widget.isHpsCell,
                   columnHps: widget.columnHps,
                   onRejected: _showRangeWarning,
                 ),
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(3),
               ],
               style: TextStyle(
                 fontSize: 13,

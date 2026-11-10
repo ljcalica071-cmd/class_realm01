@@ -10,6 +10,7 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StudentAttendanceScreen extends StatefulWidget {
   final AttendanceRepository? repository;
@@ -22,7 +23,7 @@ class StudentAttendanceScreen extends StatefulWidget {
 }
 
 class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
-  static const Color _errorRed = Color(0xFFDC2626);
+  static const int _pageSize = 10;
 
   late final AttendanceRepository _repo;
 
@@ -31,10 +32,10 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
 
   AttendanceStudentSummary? _summary;
   final List<AttendanceRecord> _records = [];
-  int _offset = 0;
-  bool _hasMore = false;
-  bool _isLoadingMore = false;
-  String? _loadMoreError;
+  int _currentPage = 1;
+  AttendanceStatus? _selectedStatusFilter;
+  String? _selectedSubject;
+  List<String> _enrolledSubjectNames = [];
   Timer? _pollingTimer;
 
   @override
@@ -43,7 +44,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     _repo = widget.repository ?? SupabaseAttendanceRepository.instance;
     _loadInitialData();
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (mounted && !_isLoading && !_isLoadingMore) {
+      if (mounted && !_isLoading) {
         _loadInitialData(silent: true);
       }
     });
@@ -61,7 +62,6 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
         _isLoading = true;
       }
       _errorMessage = null;
-      _loadMoreError = null;
     });
 
     try {
@@ -70,11 +70,42 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       }
       final results = await Future.wait([
         _repo.getMyAttendanceSummary(),
-        _repo.getMyAttendancePage(offset: 0, pageSize: 20),
+        _repo.getMyAttendancePage(offset: 0, pageSize: 100),
       ]);
 
       final summary = results[0] as AttendanceStudentSummary;
       final page = results[1] as AttendancePage<AttendanceRecord>;
+
+      // Attempt to load enrolled subjects for this student
+      try {
+        final client = Supabase.instance.client;
+        final user = client.auth.currentUser;
+        if (user != null) {
+          final enrollments = await client
+              .from('student_enrollments')
+              .select('''
+                subject_offerings (
+                  subjects ( subject_name )
+                )
+              ''')
+              .eq('student_id', user.id)
+              .eq('status', 'enrolled');
+          final subs = <String>{};
+          for (final e in (enrollments as List)) {
+            final off = e['subject_offerings'] as Map<String, dynamic>?;
+            final sub = off?['subjects'] as Map<String, dynamic>?;
+            final name = sub?['subject_name']?.toString().trim();
+            if (name != null && name.isNotEmpty) {
+              subs.add(name);
+            }
+          }
+          if (subs.isNotEmpty) {
+            _enrolledSubjectNames = subs.toList()..sort();
+          }
+        }
+      } catch (_) {
+        // Safe fallback in test or offline environment
+      }
 
       if (!mounted) return;
       setState(() {
@@ -82,8 +113,9 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
         _records
           ..clear()
           ..addAll(page.rows);
-        _offset = page.nextOffset;
-        _hasMore = page.hasMore;
+        if (_currentPage > _totalPages && _totalPages > 0) {
+          _currentPage = _totalPages;
+        }
         _isLoading = false;
       });
     } catch (e) {
@@ -97,35 +129,131 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     }
   }
 
-  Future<void> _loadMoreRecords() async {
-    if (_isLoadingMore || !_hasMore) return;
+  static bool _isMethodKeyword(String value) {
+    final v = value.trim().toLowerCase();
+    return v.isEmpty ||
+        v == 'manual' ||
+        v == 'rfid' ||
+        v == 'rfid scan' ||
+        v == 'rfid (esp32)' ||
+        v == 'system' ||
+        v == 'auto' ||
+        v == 'auto (system)';
+  }
 
-    setState(() {
-      _isLoadingMore = true;
-      _loadMoreError = null;
-    });
-
-    try {
-      final page = await _repo.getMyAttendancePage(
-        offset: _offset,
-        pageSize: 20,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _records.addAll(page.rows);
-        _offset = page.nextOffset;
-        _hasMore = page.hasMore;
-        _isLoadingMore = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isLoadingMore = false;
-        _loadMoreError =
-            'Unable to load more attendance records. Please retry.';
-      });
+  static String _extractSubjectName(AttendanceRecord record) {
+    final meth = record.method.trim();
+    if (meth.contains(' • ')) {
+      final s = meth.split(' • ').first.trim();
+      if (s.isNotEmpty && !_isMethodKeyword(s)) return s;
     }
+    final sec = record.section.trim();
+    if (sec.contains(' (')) {
+      final s = sec.split(' (').first.trim();
+      if (s.isNotEmpty) return s;
+    }
+    if (!_isMethodKeyword(meth) && meth.isNotEmpty) {
+      return meth;
+    }
+    if (sec.isNotEmpty && !sec.toLowerCase().startsWith('section')) {
+      return sec;
+    }
+    return 'Class';
+  }
+
+  List<String> get _availableSubjectNames {
+    final set = <String>{..._enrolledSubjectNames};
+    for (final r in _records) {
+      final name = _extractSubjectName(r);
+      if (name.isNotEmpty && name != 'General' && name != 'Class') {
+        set.add(name);
+      }
+    }
+    final list = set.toList();
+    list.sort();
+    return list;
+  }
+
+  List<AttendanceRecord> get _filteredRecords {
+    var result = _records;
+    if (_selectedSubject != null) {
+      result = result
+          .where((r) => _extractSubjectName(r) == _selectedSubject)
+          .toList();
+    }
+    if (_selectedStatusFilter != null) {
+      result = result.where((r) => r.status == _selectedStatusFilter).toList();
+    }
+    return result;
+  }
+
+  int get _totalPages {
+    final count = _filteredRecords.length;
+    if (count == 0) return 1;
+    return (count / _pageSize).ceil();
+  }
+
+  List<AttendanceRecord> get _currentPageRecords {
+    final filtered = _filteredRecords;
+    final startIndex = (_currentPage - 1) * _pageSize;
+    if (startIndex >= filtered.length) return [];
+    final endIndex = min(startIndex + _pageSize, filtered.length);
+    return filtered.sublist(startIndex, endIndex);
+  }
+
+  int get _scopedPresentCount {
+    if (_selectedSubject == null) {
+      return _summary?.presentCount ??
+          _records.where((r) => r.status == AttendanceStatus.present).length;
+    }
+    return _records
+        .where((r) =>
+            _extractSubjectName(r) == _selectedSubject &&
+            r.status == AttendanceStatus.present)
+        .length;
+  }
+
+  int get _scopedLateCount {
+    if (_selectedSubject == null) {
+      final countedLate =
+          _records.where((r) => r.status == AttendanceStatus.late).length;
+      return max(_summary?.lateCount ?? 0, countedLate);
+    }
+    return _records
+        .where((r) =>
+            _extractSubjectName(r) == _selectedSubject &&
+            r.status == AttendanceStatus.late)
+        .length;
+  }
+
+  int get _scopedAbsentCount {
+    if (_selectedSubject == null) {
+      final countedAbsent =
+          _records.where((r) => r.status == AttendanceStatus.absent).length;
+      return max(_summary?.absentCount ?? 0, countedAbsent);
+    }
+    return _records
+        .where((r) =>
+            _extractSubjectName(r) == _selectedSubject &&
+            r.status == AttendanceStatus.absent)
+        .length;
+  }
+
+  int get _scopedRatePercent {
+    final p = _scopedPresentCount;
+    final l = _scopedLateCount;
+    final a = _scopedAbsentCount;
+    if (_selectedSubject == null) {
+      final rawRate = _summary?.presenceRate ?? 0.0;
+      final normalizedRate =
+          (rawRate > 0.0 && rawRate <= 1.0 && (p + l) > 1)
+              ? rawRate * 100.0
+              : rawRate;
+      return normalizedRate.clamp(0.0, 100.0).round();
+    }
+    final total = p + l + a;
+    if (total == 0) return 0;
+    return (((p + l) / total) * 100).clamp(0.0, 100.0).round();
   }
 
   @override
@@ -134,13 +262,26 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Attendance Logs'),
+        title: Text(
+          'My Attendance Logs',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onPrimary,
+          ),
+        ),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
       ),
-      body: Container(
-        color: theme.scaffoldBackgroundColor,
-        child: _buildBody(theme),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: Container(
+            color: theme.scaffoldBackgroundColor,
+            child: _buildBody(theme),
+          ),
+        ),
       ),
     );
   }
@@ -152,7 +293,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       return Center(
         child: LoadingAnimationWidget.staggeredDotsWave(
           color: theme.colorScheme.primary,
-          size: 40,
+          size: 36,
         ),
       );
     }
@@ -173,248 +314,905 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       );
     }
 
-    final countedLate = _records
-        .where((r) => r.status == AttendanceStatus.late)
-        .length;
-    final countedAbsent = _records
-        .where((r) => r.status == AttendanceStatus.absent)
-        .length;
-
-    final presentCount = _summary?.presentCount ?? 0;
-    final lateCount = max(_summary?.lateCount ?? 0, countedLate);
-    final absentCount = max(_summary?.absentCount ?? 0, countedAbsent);
-    final rawRate = _summary?.presenceRate ?? 0.0;
-    final normalizedRate =
-        (rawRate > 0.0 && rawRate <= 1.0 && (presentCount + lateCount) > 1)
-        ? rawRate * 100.0
-        : rawRate;
-    final ratePercent = normalizedRate.clamp(0.0, 100.0).round();
+    final presentCount = _scopedPresentCount;
+    final lateCount = _scopedLateCount;
+    final absentCount = _scopedAbsentCount;
+    final ratePercent = _scopedRatePercent;
     final showEarlyWarning = absentCount >= 3;
+
+    final filtered = _filteredRecords;
+    final currentRows = _currentPageRecords;
+    final totalCount = filtered.length;
 
     return Column(
       children: [
-        // 4 Summary Stat Cards (Present, Late, Absent, Rate %)
+        // ── 1. Top Section: 4 Stat Cards, Subject Filter Bar & Stretched Pills ──
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
           color: theme.colorScheme.surface,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 4 Stat Cards (Present, Late, Absent, Rate) — Strict 60-30-10
               Row(
                 children: [
                   _buildStatCard(
                     theme,
                     'Present',
                     '$presentCount',
-                    AppTheme.catGreen,
+                    isSelected:
+                        _selectedStatusFilter == AttendanceStatus.present,
+                    onTap: () {
+                      setState(() {
+                        _selectedStatusFilter =
+                            _selectedStatusFilter == AttendanceStatus.present
+                                ? null
+                                : AttendanceStatus.present;
+                        _currentPage = 1;
+                      });
+                    },
                   ),
                   const SizedBox(width: 8),
                   _buildStatCard(
                     theme,
                     'Late',
                     '$lateCount',
-                    AppTheme.catOrange,
+                    isSelected: _selectedStatusFilter == AttendanceStatus.late,
+                    onTap: () {
+                      setState(() {
+                        _selectedStatusFilter =
+                            _selectedStatusFilter == AttendanceStatus.late
+                                ? null
+                                : AttendanceStatus.late;
+                        _currentPage = 1;
+                      });
+                    },
                   ),
                   const SizedBox(width: 8),
                   _buildStatCard(
                     theme,
                     'Absent',
                     '$absentCount',
-                    AppTheme.catRed,
+                    isSelected:
+                        _selectedStatusFilter == AttendanceStatus.absent,
+                    onTap: () {
+                      setState(() {
+                        _selectedStatusFilter =
+                            _selectedStatusFilter == AttendanceStatus.absent
+                                ? null
+                                : AttendanceStatus.absent;
+                        _currentPage = 1;
+                      });
+                    },
                   ),
                   const SizedBox(width: 8),
                   _buildStatCard(
                     theme,
                     'Rate',
                     '$ratePercent%',
-                    AppTheme.catBlue,
+                    isSelected:
+                        _selectedStatusFilter == null &&
+                        _selectedSubject == null,
+                    onTap: () {
+                      setState(() {
+                        _selectedStatusFilter = null;
+                        _selectedSubject = null;
+                        _currentPage = 1;
+                      });
+                    },
                   ),
                 ],
               ),
+
               if (showEarlyWarning)
                 _buildAbsenceTierAlert(theme, isDark, absentCount),
+
+              const SizedBox(height: 10),
+
+              // Subject Filter Button / Modal Trigger
+              _buildSubjectSelectorBar(theme, isDark),
+
+              const SizedBox(height: 8),
+
+              // Filter Pills Row (All, Present, Late, Absent) — Stretched Edge-to-Edge
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildFilterChip(
+                      theme: theme,
+                      label: 'All',
+                      isSelected: _selectedStatusFilter == null,
+                      onTap: () => setState(() {
+                        _selectedStatusFilter = null;
+                        _currentPage = 1;
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildFilterChip(
+                      theme: theme,
+                      label: 'Present',
+                      isSelected:
+                          _selectedStatusFilter == AttendanceStatus.present,
+                      onTap: () => setState(() {
+                        _selectedStatusFilter = AttendanceStatus.present;
+                        _currentPage = 1;
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildFilterChip(
+                      theme: theme,
+                      label: 'Late',
+                      isSelected: _selectedStatusFilter == AttendanceStatus.late,
+                      onTap: () => setState(() {
+                        _selectedStatusFilter = AttendanceStatus.late;
+                        _currentPage = 1;
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildFilterChip(
+                      theme: theme,
+                      label: 'Absent',
+                      isSelected:
+                          _selectedStatusFilter == AttendanceStatus.absent,
+                      onTap: () => setState(() {
+                        _selectedStatusFilter = AttendanceStatus.absent;
+                        _currentPage = 1;
+                      }),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
-        const Divider(height: 1),
+        Divider(
+          height: 1,
+          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+        ),
 
-        // Read-Only Attendance Logs List with Pagination & Mobile Swipe-Down Refresh
+        // ── 2. Table of Attendance Logs ──
         Expanded(
           child: AppPullToRefresh(
             onRefresh: () => _loadInitialData(silent: true),
-            child: _records.isEmpty
+            child: currentRows.isEmpty
                 ? AppPullToRefresh.scrollableState(
                     padding: EdgeInsets.zero,
-                    child: const AppEmptyState(
+                    child: AppEmptyState(
                       icon: Icons.fact_check_outlined,
-                      title: 'No Attendance Records Yet',
-                      message: 'Your class attendance logs will appear here once recorded.',
+                      title: _selectedStatusFilter != null
+                          ? 'No ${_selectedStatusFilter!.name.toUpperCase()} Records'
+                          : (_selectedSubject != null
+                              ? 'No Records for $_selectedSubject'
+                              : 'No Attendance Records Yet'),
+                      message: _selectedStatusFilter != null
+                          ? 'No attendance records matching this status.'
+                          : (_selectedSubject != null
+                              ? 'No attendance logged for this subject yet.'
+                              : 'Your class attendance logs will appear here once recorded.'),
+                      actionLabel:
+                          (_selectedStatusFilter != null ||
+                              _selectedSubject != null)
+                          ? 'Clear Filters'
+                          : null,
+                      onAction:
+                          (_selectedStatusFilter != null ||
+                              _selectedSubject != null)
+                          ? () => setState(() {
+                                _selectedStatusFilter = null;
+                                _selectedSubject = null;
+                                _currentPage = 1;
+                              })
+                          : null,
                     ),
                   )
-                : ListView.separated(
+                : ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    itemCount:
-                        _records.length +
-                        ((_hasMore || _loadMoreError != null) ? 1 : 0),
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    itemCount: currentRows.length + 1,
                     itemBuilder: (ctx, i) {
-                      if (i == _records.length) {
-                        return _buildPaginationFooter(theme);
+                      if (i == 0) {
+                        return _buildTableHeader(theme, isDark);
                       }
-
-                      final record = _records[i];
-                      final source = _resolveProvenance(record);
-                      final classLabel = _resolveClassLabel(record);
-                      final timeInDisplay = record.timeIn.trim().isEmpty
-                          ? '—'
-                          : record.timeIn.trim();
-
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: isDark ? 0.16 : 0.11,
-                            ),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: isDark ? 0.2 : 0.03,
-                              ),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    classLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 15,
-                                      color: theme.colorScheme.onSurface,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Wrap(
-                                    spacing: 10,
-                                    runSpacing: 4,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      Text(
-                                        _formatDate(record.date),
-                                        style: TextStyle(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w600,
-                                          color: theme.colorScheme.onSurface
-                                              .withValues(alpha: 0.72),
-                                        ),
-                                      ),
-                                      Text(
-                                        'Time In: $timeInDisplay',
-                                        style: TextStyle(
-                                          fontSize: 12.5,
-                                          color: theme.colorScheme.onSurface
-                                              .withValues(alpha: 0.68),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  _buildProvenancePill(theme, source),
-                                  if (record.remarks != null &&
-                                      record.remarks!.trim().isNotEmpty &&
-                                      !_isSystemRemark(record.remarks)) ...[
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      record.remarks!.trim(),
-                                      style: TextStyle(
-                                        color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.65),
-                                        fontSize: 11.5,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            StatusBadge.fromAttendance(record.status),
-                          ],
-                        ),
+                      final record = currentRows[i - 1];
+                      return _buildTableRow(
+                        theme,
+                        isDark,
+                        record,
+                        i - 1,
+                        currentRows.length,
                       );
                     },
                   ),
           ),
         ),
+
+        // ── 3. Table Pagination Bar (10 per page, always visible) ──
+        _buildPaginationBar(theme, isDark, totalCount),
       ],
     );
   }
 
-  Widget _buildPaginationFooter(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        children: [
-          if (_loadMoreError != null) ...[
-            Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: _errorRed.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _errorRed.withValues(alpha: 0.35)),
+  Widget _buildSubjectSelectorBar(ThemeData theme, bool isDark) {
+    final hasFilter = _selectedSubject != null;
+    final accent = theme.colorScheme.primary;
+
+    return InkWell(
+      onTap: () => _showSubjectFilterModal(context, theme, isDark),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: hasFilter
+              ? accent.withValues(alpha: isDark ? 0.14 : 0.07)
+              : (isDark ? const Color(0xFF1F2937) : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: hasFilter
+                ? accent.withValues(alpha: isDark ? 0.45 : 0.35)
+                : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.book_outlined,
+              size: 15,
+              color: hasFilter ? accent : theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              'Subject:',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline, size: 16, color: _errorRed),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _loadMoreError!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _errorRed,
-                      ),
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                _selectedSubject ?? 'All Subjects',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: hasFilter ? FontWeight.w700 : FontWeight.w600,
+                  color: hasFilter ? accent : theme.colorScheme.onSurface,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (hasFilter) ...[
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedSubject = null;
+                    _currentPage = 1;
+                  });
+                },
+                borderRadius: BorderRadius.circular(999),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 15,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+            Icon(
+              Icons.unfold_more_rounded,
+              size: 16,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSubjectFilterModal(
+    BuildContext context,
+    ThemeData theme,
+    bool isDark,
+  ) {
+    final subjects = _availableSubjectNames;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  TextButton(
-                    onPressed: _loadMoreRecords,
-                    child: const Text('Retry'),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Filter by Subject',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => Navigator.pop(ctx),
+                      borderRadius: BorderRadius.circular(999),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  'Select a subject to view its specific attendance history.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
+                ),
+                const SizedBox(height: 12),
+                Divider(
+                  height: 1,
+                  color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                ),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.55,
+                  ),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      _buildSubjectOptionTile(
+                        theme: theme,
+                        isDark: isDark,
+                        title: 'All Subjects',
+                        subtitle: 'Show attendance across all subjects',
+                        isSelected: _selectedSubject == null,
+                        logCount: _records.length,
+                        onTap: () {
+                          setState(() {
+                            _selectedSubject = null;
+                            _currentPage = 1;
+                          });
+                          Navigator.pop(ctx);
+                        },
+                      ),
+                      for (final s in subjects) ...[
+                        Divider(
+                          height: 1,
+                          color: isDark
+                              ? Colors.white10
+                              : const Color(0xFFE2E8F0),
+                        ),
+                        _buildSubjectOptionTile(
+                          theme: theme,
+                          isDark: isDark,
+                          title: s,
+                          isSelected: _selectedSubject == s,
+                          logCount: _records
+                              .where((r) => _extractSubjectName(r) == s)
+                              .length,
+                          onTap: () {
+                            setState(() {
+                              _selectedSubject = s;
+                              _currentPage = 1;
+                            });
+                            Navigator.pop(ctx);
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSubjectOptionTile({
+    required ThemeData theme,
+    required bool isDark,
+    required String title,
+    String? subtitle,
+    required bool isSelected,
+    required int logCount,
+    required VoidCallback onTap,
+  }) {
+    final accent = theme.colorScheme.primary;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? accent.withValues(alpha: isDark ? 0.16 : 0.08)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected
+                      ? accent
+                      : (isDark ? Colors.white30 : const Color(0xFFCBD5E1)),
+                  width: isSelected ? 5 : 1.5,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w600,
+                      color: isSelected ? accent : theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-          ],
-          if (_hasMore)
-            Center(
-              child: _isLoadingMore
-                  ? LoadingAnimationWidget.staggeredDotsWave(
-                      color: theme.colorScheme.primary,
-                      size: 28,
-                    )
-                  : AppSecondaryButton(
-                      label: 'Load More Records',
-                      icon: Icons.arrow_downward_rounded,
-                      height: 40,
-                      onPressed: _loadMoreRecords,
-                    ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '$logCount ${logCount == 1 ? 'log' : 'logs'}',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableHeader(ThemeData theme, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+        border: Border.all(
+          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 85,
+            child: Text(
+              'DATE & TIME',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              'SUBJECT & INFO',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Container(
+            width: 65,
+            alignment: Alignment.centerRight,
+            child: Text(
+              'STATUS',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTableRow(
+    ThemeData theme,
+    bool isDark,
+    AttendanceRecord record,
+    int rowIndex,
+    int totalRows,
+  ) {
+    final isLast = rowIndex == totalRows - 1;
+    final source = _resolveProvenance(record);
+    final subjectName = _extractSubjectName(record);
+    final classLabel = _resolveClassLabel(record);
+    final timeInDisplay =
+        record.timeIn.trim().isEmpty ? '—' : record.timeIn.trim();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: rowIndex % 2 == 1
+            ? (isDark
+                ? Colors.white.withValues(alpha: 0.02)
+                : const Color(0xFFFAFAFB))
+            : (isDark ? const Color(0xFF263040) : Colors.white),
+        borderRadius: isLast
+            ? const BorderRadius.vertical(bottom: Radius.circular(10))
+            : BorderRadius.zero,
+        border: Border(
+          left: BorderSide(
+            color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+          ),
+          right: BorderSide(
+            color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+          ),
+          bottom: BorderSide(
+            color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+          ),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Date & Time
+          SizedBox(
+            width: 85,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _formatDate(record.date),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  timeInDisplay,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Subject & Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  subjectName != 'Class' ? subjectName : classLabel,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    _buildProvenancePill(theme, source),
+                    if (record.section.isNotEmpty &&
+                        record.section != subjectName) ...[
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          record.section,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (record.remarks != null &&
+                    record.remarks!.trim().isNotEmpty &&
+                    !_isSystemRemark(record.remarks)) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    record.remarks!.trim(),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 10.5,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Status Badge
+          Container(
+            width: 65,
+            alignment: Alignment.topRight,
+            child: StatusBadge.fromAttendance(record.status),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar(ThemeData theme, bool isDark, int totalCount) {
+    final totalPages = _totalPages;
+    final startIndex =
+        totalCount == 0 ? 0 : (_currentPage - 1) * _pageSize + 1;
+    final endIndex = min(_currentPage * _pageSize, totalCount);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              totalCount == 0
+                  ? 'Showing 0 of 0 logs'
+                  : 'Showing $startIndex–$endIndex of $totalCount logs',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Previous button
+              InkWell(
+                onTap: _currentPage > 1
+                    ? () => setState(() => _currentPage--)
+                    : null,
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.chevron_left_rounded,
+                        size: 15,
+                        color: _currentPage > 1
+                            ? theme.colorScheme.onSurface
+                            : theme.colorScheme.onSurface
+                                .withValues(alpha: 0.3),
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'Prev',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _currentPage > 1
+                              ? theme.colorScheme.onSurface
+                              : theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Page indicator pill
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(
+                    alpha: isDark ? 0.2 : 0.1,
+                  ),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: theme.colorScheme.primary.withValues(
+                      alpha: isDark ? 0.4 : 0.25,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  '$_currentPage / ${max(1, totalPages)}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Next button
+              InkWell(
+                onTap: _currentPage < totalPages
+                    ? () => setState(() => _currentPage++)
+                    : null,
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Next',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _currentPage < totalPages
+                              ? theme.colorScheme.onSurface
+                              : theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.3),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 15,
+                        color: _currentPage < totalPages
+                            ? theme.colorScheme.onSurface
+                            : theme.colorScheme.onSurface
+                                .withValues(alpha: 0.3),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required ThemeData theme,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final isDark = theme.brightness == Brightness.dark;
+    final accent = theme.colorScheme.primary;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected
+              ? accent.withValues(alpha: isDark ? 0.22 : 0.12)
+              : (isDark
+                  ? const Color(0xFF1F2937)
+                  : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected
+                ? accent
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : const Color(0xFFE2E8F0)),
+            width: isSelected ? 1.4 : 1.0,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? accent : theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
       ),
     );
   }
@@ -422,40 +1220,64 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   Widget _buildStatCard(
     ThemeData theme,
     String label,
-    String value,
-    Color color,
-  ) {
+    String value, {
+    VoidCallback? onTap,
+    bool isSelected = false,
+  }) {
     final isDark = theme.brightness == Brightness.dark;
+    final accent = theme.colorScheme.primary;
+
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: isDark ? 0.14 : 0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: color.withValues(alpha: isDark ? 0.32 : 0.2),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? accent.withValues(alpha: isDark ? 0.2 : 0.08)
+                : (isDark ? const Color(0xFF263040) : Colors.white),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected
+                  ? accent
+                  : (isDark
+                      ? Colors.white.withValues(alpha: 0.10)
+                      : const Color(0xFFE2E8F0)),
+              width: isSelected ? 1.5 : 1.0,
+            ),
+            boxShadow: !isDark
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
           ),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: color,
+          child: Column(
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? accent : theme.colorScheme.onSurface,
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -494,7 +1316,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(999),
@@ -503,12 +1325,12 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: fg),
-          const SizedBox(width: 4),
+          Icon(icon, size: 11, color: fg),
+          const SizedBox(width: 3),
           Text(
             source.label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: FontWeight.w700,
               color: fg,
             ),
@@ -516,18 +1338,6 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
         ],
       ),
     );
-  }
-
-  static bool _isMethodKeyword(String value) {
-    final v = value.trim().toLowerCase();
-    return v.isEmpty ||
-        v == 'manual' ||
-        v == 'rfid' ||
-        v == 'rfid scan' ||
-        v == 'rfid (esp32)' ||
-        v == 'system' ||
-        v == 'auto' ||
-        v == 'auto (system)';
   }
 
   static AttendanceSource _resolveProvenance(AttendanceRecord record) {
@@ -614,45 +1424,51 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     final IconData icon;
 
     if (absentCount >= 10) {
-      bannerColor = isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2);
+      bannerColor =
+          isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2);
       borderColor = const Color(0xFFDC2626);
       textColor = isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B);
       icon = Icons.error_rounded;
       title = 'Critical Notice: $absentCount Recorded Absences (SARDO Risk)';
-      subtitle = 'You have reached 10 absences, placing you at critical risk of drop-out status under DepEd policy. Please schedule an urgent conference with your adviser.';
+      subtitle =
+          'You have reached 10 absences, placing you at critical risk of drop-out status under DepEd policy. Please schedule an urgent conference with your adviser.';
     } else if (absentCount >= 5) {
-      bannerColor = isDark ? const Color(0xFF431407) : const Color(0xFFFFF7ED);
+      bannerColor =
+          isDark ? const Color(0xFF431407) : const Color(0xFFFFF7ED);
       borderColor = const Color(0xFFEA580C);
       textColor = isDark ? const Color(0xFFFDBA74) : const Color(0xFF9A3412);
       icon = Icons.warning_amber_rounded;
       title = 'Attendance Alert: $absentCount Recorded Absences';
-      subtitle = 'Attendance intervention required. Please coordinate with your subject teacher or class adviser to submit excuse letters or make-up work.';
+      subtitle =
+          'Attendance intervention required. Please coordinate with your subject teacher or class adviser to submit excuse letters or make-up work.';
     } else {
-      bannerColor = isDark ? const Color(0xFF422006) : const Color(0xFFFEFCE8);
+      bannerColor =
+          isDark ? const Color(0xFF422006) : const Color(0xFFFEFCE8);
       borderColor = const Color(0xFFCA8A04);
       textColor = isDark ? const Color(0xFFFDE047) : const Color(0xFF854D0E);
       icon = Icons.info_outline_rounded;
       title = 'Early Warning: $absentCount Recorded Absences';
-      subtitle = 'You have accumulated 3 absences. Please coordinate with your subject teacher regarding missed sessions.';
+      subtitle =
+          'You have accumulated 3 absences. Please coordinate with your subject teacher regarding missed sessions.';
     }
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: bannerColor,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: borderColor.withValues(alpha: isDark ? 0.6 : 0.4),
-          width: 1.2,
+          width: 1.0,
         ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: borderColor),
-          const SizedBox(width: 10),
+          Icon(icon, size: 16, color: borderColor),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -660,7 +1476,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: textColor,
                   ),
@@ -669,7 +1485,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 11,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.78),
                   ),
                 ),

@@ -17,6 +17,7 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 
 class ActivitySubmissionsScreen extends StatefulWidget {
   final ActivityModel activity;
@@ -355,10 +356,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     final path = submission?['storage_path']?.toString();
     if (path == null || path.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Submission file is not available.')),
-        );
+        AppTopToast.warning(context, 'Submission file is not available.');
       }
       return;
     }
@@ -408,26 +406,19 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
         }
       }
       if (!launched && mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to open document.')),
-        );
+        AppTopToast.error(context, 'Unable to open document.');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
         final errStr = e.toString().toLowerCase();
         final isNotFound = errStr.contains('404') ||
             errStr.contains('not_found') ||
             errStr.contains('object not found');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isNotFound
-                  ? 'The submission file was not found in cloud storage. The student may need to re-submit.'
-                  : 'Unable to open file: $e',
-            ),
-          ),
+        AppTopToast.error(
+          context,
+          isNotFound
+              ? 'The submission file was not found in cloud storage. The student may need to re-submit.'
+              : 'Unable to open file: $e',
         );
       }
     } finally {
@@ -440,10 +431,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     final path = _activity.storagePath;
     if (path == null || path.trim().isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No attached file available.')),
-        );
+        AppTopToast.warning(context, 'No attached file available.');
       }
       return;
     }
@@ -493,26 +481,19 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
         }
       }
       if (!launched && mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to open attached material.')),
-        );
+        AppTopToast.error(context, 'Unable to open attached material.');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
         final errStr = e.toString().toLowerCase();
         final isNotFound = errStr.contains('404') ||
             errStr.contains('not_found') ||
             errStr.contains('object not found');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isNotFound
-                  ? 'The attached file is no longer available in cloud storage. Please re-upload it.'
-                  : 'Unable to open material: $e',
-            ),
-          ),
+        AppTopToast.error(
+          context,
+          isNotFound
+              ? 'The attached file is no longer available in cloud storage. Please re-upload it.'
+              : 'Unable to open material: $e',
         );
       }
     } finally {
@@ -680,28 +661,18 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              newScore != null
-                  ? 'Score saved for ${student.fullName}: ${newScore == newScore.roundToDouble() ? newScore.toInt() : newScore} / ${_activity.maxScore.toInt()} pts'
-                  : 'Score cleared for ${student.fullName}.',
-            ),
-            backgroundColor: const Color(0xFF0F8A48),
-            duration: const Duration(seconds: 1),
-          ),
+        AppTopToast.success(
+          context,
+          newScore != null
+              ? 'Score saved for ${student.fullName}: ${newScore == newScore.roundToDouble() ? newScore.toInt() : newScore} / ${_activity.maxScore.toInt()} pts'
+              : 'Score cleared for ${student.fullName}.',
         );
       }
       return true;
     } catch (e) {
       if (mounted) {
         setState(() => _isSavingStudent[student.id] = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to save score: $e'),
-            backgroundColor: const Color(0xFFDC2626),
-          ),
-        );
+        AppTopToast.error(context, 'Failed to save score: $e');
       }
       return false;
     }
@@ -1059,7 +1030,6 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                           setModalState(() => deadlineTimeError = recheckErr);
                           return;
                         }
-                        final messenger = ScaffoldMessenger.of(this.context);
                         setModalState(() => isSavingDeadline = true);
 
                         try {
@@ -1128,28 +1098,24 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                           if (ctx.mounted) {
                             Navigator.pop(ctx);
                           }
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                _isInPerson
-                                    ? 'Scheduled date updated to ${_formatDateOnly(candidateCombined)}.'
-                                    : 'Deadline updated to ${_formatDateTime(candidateCombined)}. Submissions window synchronized.',
-                              ),
-                              backgroundColor: const Color(0xFF0F8A48),
-                            ),
-                          );
+                          if (mounted) {
+                            AppTopToast.success(
+                              this.context,
+                              _isInPerson
+                                  ? 'Scheduled date updated to ${_formatDateOnly(candidateCombined)}.'
+                                  : 'Deadline updated to ${_formatDateTime(candidateCombined)}. Submissions window synchronized.',
+                            );
+                          }
                         } catch (e) {
                           setModalState(() => isSavingDeadline = false);
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                _isInPerson
-                                    ? 'Failed to update date: $e'
-                                    : 'Failed to update deadline: $e',
-                              ),
-                              backgroundColor: const Color(0xFFDC2626),
-                            ),
-                          );
+                          if (mounted) {
+                            AppTopToast.error(
+                              this.context,
+                              _isInPerson
+                                  ? 'Failed to update date: $e'
+                                  : 'Failed to update deadline: $e',
+                            );
+                          }
                         }
                       },
                 child: isSavingDeadline

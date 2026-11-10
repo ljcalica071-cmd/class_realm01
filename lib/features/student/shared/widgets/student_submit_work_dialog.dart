@@ -8,6 +8,7 @@ import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 
 class StudentSubmitWorkDialog extends StatefulWidget {
   final StudentClassworkModel classwork;
@@ -277,12 +278,7 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
       widget.onSubmitted();
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Your work has been submitted successfully!'),
-            backgroundColor: Color(0xFF0F8A48),
-          ),
-        );
+        AppTopToast.success(context, 'Your work has been submitted successfully!');
       }
     } catch (e) {
       if (mounted) {
@@ -304,7 +300,7 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,15 +309,15 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       Icons.upload_file,
                       color: theme.colorScheme.primary,
-                      size: 26,
+                      size: 22,
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -332,8 +328,8 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
                         Text(
                           'Submit Work',
                           style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15.5,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -442,14 +438,14 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
                       children: [
                         Icon(
                           Icons.cloud_upload_outlined,
-                          size: 38,
+                          size: 26,
                           color: theme.colorScheme.primary,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Click to upload your output',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: theme.colorScheme.onSurface,
                           ),

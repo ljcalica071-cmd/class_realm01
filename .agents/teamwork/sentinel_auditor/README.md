@@ -1,1 +1,0 @@
-# Sentinel Independent Victory Auditor

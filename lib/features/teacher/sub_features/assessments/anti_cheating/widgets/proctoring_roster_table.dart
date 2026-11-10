@@ -12,6 +12,9 @@ class ProctoringRosterTable extends StatefulWidget {
   final void Function(StudentLiveProctorState student) onReset;
   final void Function(StudentLiveProctorState student) onForceSubmit;
   final void Function(StudentLiveProctorState student) onToggleAllow;
+  final bool isScheduleExpired;
+  final VoidCallback? onUpdateSchedule;
+  final String? scheduleDateFormatted;
 
   const ProctoringRosterTable({
     super.key,
@@ -21,6 +24,9 @@ class ProctoringRosterTable extends StatefulWidget {
     required this.onReset,
     required this.onForceSubmit,
     required this.onToggleAllow,
+    this.isScheduleExpired = false,
+    this.onUpdateSchedule,
+    this.scheduleDateFormatted,
   });
 
   @override
@@ -235,57 +241,118 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
               ],
             ),
           ),
-          SizedBox(
-            width: 260,
-            height: 36,
-            child: TextField(
-              controller: _searchController,
-              onChanged: widget.onSearchChanged,
-              style: TextStyle(
-                fontSize: 13,
-                color: theme.colorScheme.onSurface,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Search student or LRN...',
-                hintStyle: TextStyle(
-                  fontSize: 12.5,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                ),
-                prefixIcon: const Icon(LucideIcons.search, size: 16),
-                prefixIconConstraints: const BoxConstraints(
-                  minWidth: 34,
-                  minHeight: 34,
-                ),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(LucideIcons.x, size: 14),
-                        onPressed: () {
-                          _searchController.clear();
-                          widget.onSearchChanged('');
-                        },
-                      )
-                    : null,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 0,
-                ),
-                filled: true,
-                fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: dividerColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: dividerColor),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(
-                    color: theme.colorScheme.primary,
-                    width: 1.4,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 240,
+                height: 36,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: widget.onSearchChanged,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Search student or LRN...',
+                    hintStyle: TextStyle(
+                      fontSize: 12.5,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                    ),
+                    prefixIcon: const Icon(LucideIcons.search, size: 16),
+                    prefixIconConstraints: const BoxConstraints(
+                      minWidth: 34,
+                      minHeight: 34,
+                    ),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(LucideIcons.x, size: 14),
+                            onPressed: () {
+                              _searchController.clear();
+                              widget.onSearchChanged('');
+                            },
+                          )
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 0,
+                    ),
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: dividerColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: dividerColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary,
+                        width: 1.4,
+                      ),
+                    ),
                   ),
                 ),
+              ),
+              if (widget.onUpdateSchedule != null) ...[
+                const SizedBox(width: 10),
+                _buildScheduleDatePill(theme, isDark),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScheduleDatePill(ThemeData theme, bool isDark) {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.event_outlined,
+            size: 16,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            widget.scheduleDateFormatted != null
+                ? 'Set Date: ${widget.scheduleDateFormatted}'
+                : 'Set Date: --',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton.icon(
+            onPressed: widget.onUpdateSchedule,
+            icon: const Icon(Icons.edit_calendar, size: 15),
+            label: const Text('Update Schedule'),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
+              visualDensity: VisualDensity.compact,
+              textStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
@@ -842,82 +909,127 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable> {
     StudentLiveProctorState student,
   ) {
     final isAllowed = student.isEntryAllowed;
+    final isExpired = widget.isScheduleExpired;
+    final isCompleted = student.status == ProctorSessionStatus.submitted;
+    final isInProgress = student.status == ProctorSessionStatus.inProgress;
+
+    // Disabling rules per instructions:
+    // 1. Reset progress is disabled if schedule has expired
+    final canReset = !isExpired;
+
+    // 2. Force submit is disabled if completed or if not in progress or if schedule expired
+    final canForceSubmit = !isExpired && isInProgress;
+
+    // 3. Allow entry / disallow toggle:
+    // Disabled if schedule expired, completed, or actively in progress (teacher cannot disallow active student)
+    final canToggleAllow = !isExpired && !isCompleted && !isInProgress;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         // Reset Button
         Tooltip(
-          message: 'Reset Student Progress',
+          message: isExpired
+              ? 'Examination schedule has ended'
+              : 'Reset Student Progress',
           child: InkWell(
             borderRadius: BorderRadius.circular(6),
-            onTap: () => widget.onReset(student),
+            onTap: canReset ? () => widget.onReset(student) : null,
             child: Container(
               padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                  color: canReset
+                      ? theme.colorScheme.onSurface.withValues(alpha: 0.15)
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.08),
                 ),
               ),
-              child: const Icon(LucideIcons.rotateCcw, size: 14),
+              child: Icon(
+                LucideIcons.rotateCcw,
+                size: 14,
+                color: canReset
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.8)
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.25),
+              ),
             ),
           ),
         ),
         const SizedBox(width: 6),
         // Force Submit Button
         Tooltip(
-          message: 'Force Submit',
+          message: isCompleted
+              ? 'Assessment already completed'
+              : isExpired
+                  ? 'Examination schedule has ended'
+                  : !isInProgress
+                      ? 'Student has not started the assessment'
+                      : 'Force Submit Assessment',
           child: InkWell(
             borderRadius: BorderRadius.circular(6),
-            onTap: student.status == ProctorSessionStatus.inProgress
-                ? () => widget.onForceSubmit(student)
-                : null,
+            onTap: canForceSubmit ? () => widget.onForceSubmit(student) : null,
             child: Container(
               padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: student.status == ProctorSessionStatus.inProgress
+                  color: canForceSubmit
                       ? AppTheme.catBlue.withValues(alpha: 0.5)
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.08),
                 ),
               ),
               child: Icon(
                 LucideIcons.send,
                 size: 14,
-                color: student.status == ProctorSessionStatus.inProgress
+                color: canForceSubmit
                     ? AppTheme.catBlue
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.25),
               ),
             ),
           ),
         ),
         const SizedBox(width: 8),
         // Allow / Disallow Toggle Pill Button
-        InkWell(
-          borderRadius: BorderRadius.circular(6),
-          onTap: () => widget.onToggleAllow(student),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isAllowed
-                  ? AppTheme.catRed.withValues(alpha: 0.08)
-                  : AppTheme.catGreen.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: isAllowed
-                    ? AppTheme.catRed.withValues(alpha: 0.3)
-                    : AppTheme.catGreen.withValues(alpha: 0.4),
+        Tooltip(
+          message: isExpired
+              ? 'Examination schedule has ended'
+              : isCompleted
+                  ? 'Student has already completed the assessment'
+                  : isInProgress
+                      ? 'Cannot lock out student while test is in progress'
+                      : (isAllowed ? 'Disallow Learner Entry' : 'Allow Learner Entry'),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: canToggleAllow ? () => widget.onToggleAllow(student) : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: !canToggleAllow
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.04)
+                    : isAllowed
+                        ? AppTheme.catRed.withValues(alpha: 0.08)
+                        : AppTheme.catGreen.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: !canToggleAllow
+                      ? theme.colorScheme.onSurface.withValues(alpha: 0.1)
+                      : isAllowed
+                          ? AppTheme.catRed.withValues(alpha: 0.3)
+                          : AppTheme.catGreen.withValues(alpha: 0.4),
+                ),
               ),
-            ),
-            child: Text(
-              isAllowed ? 'Disallow' : 'Allow Entry',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: isAllowed ? AppTheme.catRed : AppTheme.catGreen,
+              child: Text(
+                isAllowed ? 'Disallow' : 'Allow Entry',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: !canToggleAllow
+                      ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
+                      : isAllowed
+                          ? AppTheme.catRed
+                          : AppTheme.catGreen,
+                ),
               ),
             ),
           ),

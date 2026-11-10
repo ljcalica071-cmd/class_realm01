@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
@@ -48,6 +49,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
   String _selectedSectionFilter = 'All Sections';
   int _selectedTermView = 0; // 0 = All Terms / Final Comparison, or 1, 2, 3
   String _donutMode = 'components'; // 'components' or 'distribution'
+  int? _hoveredDonutIndex;
   String _searchQuery = '';
   String _sortOrder = 'desc'; // 'desc', 'asc', 'alpha'
   int _pageSize = 10;
@@ -213,7 +215,23 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
   Future<void> _loadSubjectData() async {
     final user = AuthRepository.instance.currentUser;
     if (_selectedSubjectName == null) return;
-    setState(() => _isLoadingSheets = true);
+
+    final cacheKey =
+        'gradebook_analytics_sheets_${_selectedSubjectName}_$_selectedSectionFilter';
+    final cachedSheets =
+        AppDataCache.instance.get<Map<int, Map<String, dynamic>>>(cacheKey);
+
+    if (cachedSheets != null) {
+      _termSheets.clear();
+      _termSheets.addAll(cachedSheets);
+      _isLoadingSheets = false;
+      if (AppDataCache.instance.isFresh(cacheKey)) {
+        if (mounted) setState(() {});
+        return;
+      }
+    } else if (_termSheets.isEmpty) {
+      setState(() => _isLoadingSheets = true);
+    }
 
     try {
       final offeringsForSubject = _teacherSubjects
@@ -326,6 +344,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             }
           }),
       ]);
+      AppDataCache.instance.set(
+        cacheKey,
+        Map<int, Map<String, dynamic>>.from(_termSheets),
+      );
     } catch (_) {
       // Retain cached sheets
     } finally {
@@ -1191,10 +1213,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           theme: theme,
         );
         final card3 = _buildKpiCard(
-          title: 'Positive Trajectory',
+          title: 'Improving Learners',
           value: '${summary.improvingCount}',
-          badgeText: 'Rising',
-          subText: 'Improving score trend',
+          badgeText: '${summary.improvingCount} Rising',
+          subText: 'Upward score trajectory',
           icon: LucideIcons.trendingUp,
           iconColor: crEmerald,
           badgeBg: const Color(0xFFECFDF5),
@@ -1204,9 +1226,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           theme: theme,
         );
         final card4 = _buildKpiCard(
-          title: 'Needs Attention',
+          title: 'Needs Support',
           value: '${summary.needsAttentionCount}',
-          badgeText: 'Action Required',
+          badgeText: summary.needsAttentionCount > 0 ? 'Remedial Alert' : 'All Clear',
           subText: '<75 or declining scores',
           icon: LucideIcons.alertTriangle,
           iconColor: crRed,
@@ -1309,9 +1331,22 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? theme.colorScheme.surface : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? Colors.white12 : crBorder),
+        color: isDark
+            ? theme.colorScheme.surface.withValues(alpha: 0.8)
+            : Colors.white.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : crBorder.withValues(alpha: 0.9),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1418,9 +1453,22 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: isDark ? theme.colorScheme.surface : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? Colors.white12 : crBorder),
+        color: isDark
+            ? theme.colorScheme.surface.withValues(alpha: 0.82)
+            : Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : crBorder.withValues(alpha: 0.9),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1483,7 +1531,19 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             subtitle,
             style: const TextStyle(fontSize: 11, color: crSlateMuted),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 10),
+          // Category Legend with Glassmorphism Badges
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _buildCategoryPill('Written Works (WW)', crSteelBlue, isDark),
+              _buildCategoryPill('Performance Tasks (PT)', crEmerald, isDark),
+              _buildCategoryPill('Quarterly Exams (EX)', crAmber, isDark),
+              _buildCategoryPill('Passing Benchmark (75%)', const Color(0xFFB45309), isDark, isDashed: true),
+            ],
+          ),
+          const SizedBox(height: 14),
 
           // Chart Canvas with Mathematically Aligned Standing Vertical Bars
           if (barData.isEmpty)
@@ -1613,15 +1673,27 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                                   child: Column(
                                                     mainAxisAlignment: MainAxisAlignment.end,
                                                     children: [
-                                                      // Value Label Badge
+                                                      // Value Label Badge (Glassmorphic)
                                                       Opacity(
                                                         opacity: _chartAnim.value,
                                                         child: Container(
                                                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                                           decoration: BoxDecoration(
-                                                            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                                                            borderRadius: BorderRadius.circular(4),
-                                                            border: Border.all(color: isDark ? Colors.white12 : crBorder),
+                                                            color: isDark
+                                                                ? const Color(0xFF1E293B).withValues(alpha: 0.9)
+                                                                : Colors.white.withValues(alpha: 0.95),
+                                                            borderRadius: BorderRadius.circular(5),
+                                                            border: Border.all(
+                                                              color: item.color.withValues(alpha: 0.4),
+                                                              width: 1,
+                                                            ),
+                                                            boxShadow: [
+                                                              BoxShadow(
+                                                                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                                                                blurRadius: 4,
+                                                                offset: const Offset(0, 1),
+                                                              ),
+                                                            ],
                                                           ),
                                                           child: Text(
                                                             item.value.toStringAsFixed(1),
@@ -1635,18 +1707,29 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                                       ),
                                                       const SizedBox(height: 4),
 
-                                                      // Standing Bar
+                                                      // Standing Bar (Glassmorphic Gradient & Rounded Top)
                                                       Container(
                                                         width: 38,
                                                         height: barHeight,
                                                         decoration: BoxDecoration(
-                                                          color: item.color,
-                                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                                                          gradient: LinearGradient(
+                                                            begin: Alignment.topCenter,
+                                                            end: Alignment.bottomCenter,
+                                                            colors: [
+                                                              item.color,
+                                                              item.color.withValues(alpha: 0.72),
+                                                            ],
+                                                          ),
+                                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                                                          border: Border.all(
+                                                            color: Colors.white.withValues(alpha: isDark ? 0.25 : 0.45),
+                                                            width: 1,
+                                                          ),
                                                           boxShadow: [
                                                             BoxShadow(
-                                                              color: item.color.withValues(alpha: 0.3),
-                                                              blurRadius: 4,
-                                                              offset: const Offset(0, 2),
+                                                              color: item.color.withValues(alpha: 0.35),
+                                                              blurRadius: 6,
+                                                              offset: const Offset(0, 3),
                                                             ),
                                                           ],
                                                         ),
@@ -1745,6 +1828,44 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     );
   }
 
+  Widget _buildCategoryPill(String label, Color color, bool isDark, {bool isDashed = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+      decoration: BoxDecoration(
+        color: isDark
+            ? color.withValues(alpha: 0.14)
+            : color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: color.withValues(alpha: isDark ? 0.35 : 0.25),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: isDashed ? 2 : 8,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(isDashed ? 1 : 4),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white.withValues(alpha: 0.9) : crSlateDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- 4B. ANIMATED DONUT / PIE CHART WITH FLOATING BADGES (Matches 2nd Reference Pic) ---
   Widget _buildDonutPieChartCard(
     GradebookAnalyticsSummary summary,
@@ -1755,12 +1876,189 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
         ? summary.componentDonutSlices
         : summary.distributionDonutSlices;
 
+    final donutWidget = SizedBox(
+      width: 180,
+      height: 180,
+      child: MouseRegion(
+        onHover: (event) {
+          const center = Offset(90, 90);
+          final dx = event.localPosition.dx - center.dx;
+          final dy = event.localPosition.dy - center.dy;
+          final dist = math.sqrt(dx * dx + dy * dy);
+          if (dist >= 35 && dist <= 95) {
+            var angle = math.atan2(dy, dx) - (-math.pi / 2);
+            if (angle < 0) angle += 2 * math.pi;
+            var cur = 0.0;
+            int? match;
+            for (int i = 0; i < slices.length; i++) {
+              if (slices[i].pct <= 0) continue;
+              final sweep = (slices[i].pct / 100) * 2 * math.pi;
+              if (angle >= cur && angle < cur + sweep) {
+                match = i;
+                break;
+              }
+              cur += sweep;
+            }
+            if (_hoveredDonutIndex != match) {
+              setState(() => _hoveredDonutIndex = match);
+            }
+          } else {
+            if (_hoveredDonutIndex != null) {
+              setState(() => _hoveredDonutIndex = null);
+            }
+          }
+        },
+        onExit: (_) {
+          if (_hoveredDonutIndex != null) {
+            setState(() => _hoveredDonutIndex = null);
+          }
+        },
+        child: AnimatedBuilder(
+          animation: _chartAnim,
+          builder: (context, _) {
+            final hovered = _hoveredDonutIndex != null &&
+                    _hoveredDonutIndex! < slices.length
+                ? slices[_hoveredDonutIndex!]
+                : null;
+
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size(170, 170),
+                  painter: _DonutChartPainter(
+                    slices: slices,
+                    progress: _chartAnim.value,
+                    strokeWidth: 22,
+                    isDark: isDark,
+                    hoveredIndex: _hoveredDonutIndex,
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hovered != null) ...[
+                      Text(
+                        hovered.sub,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: hovered.color,
+                        ),
+                        maxLines: 1,
+                      ),
+                      Text(
+                        _donutMode == 'components'
+                            ? '${hovered.badgeVal.toStringAsFixed(1)}%'
+                            : '${hovered.pct.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: isDark ? Colors.white : crSlateDark,
+                        ),
+                      ),
+                      Text(
+                        _donutMode == 'components'
+                            ? 'Weight: ${hovered.pct.toInt()}%'
+                            : '${hovered.badgeVal.toInt()} learners',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: hovered.color,
+                        ),
+                      ),
+                    ] else ...[
+                      Text(
+                        _donutMode == 'components'
+                            ? 'Initial Avg'
+                            : 'Total Class',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: crSlateMuted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        _donutMode == 'components'
+                            ? (summary.classAverage != null
+                                ? '${summary.classAverage}%'
+                                : '—')
+                            : '${summary.totalCount}',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : crSlateDark,
+                        ),
+                      ),
+                      Text(
+                        _donutMode == 'components'
+                            ? 'Weighted PS%'
+                            : 'Students',
+                        style:
+                            const TextStyle(fontSize: 9.5, color: crSlateMuted),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+
+    final rightColumnWidget = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(slices.length, (i) {
+        final s = slices[i];
+        final isHovered = _hoveredDonutIndex == i;
+        return Padding(
+          padding: EdgeInsets.only(bottom: i < slices.length - 1 ? 5 : 0),
+          child: _donutMode == 'components'
+              ? _buildComponentStatusRow(
+                  title: s.label,
+                  subtitle: s.sub,
+                  score: s.badgeVal,
+                  weight: s.pct,
+                  color: s.color,
+                  initials: s.sub,
+                  isDark: isDark,
+                  isHovered: isHovered,
+                  onEnter: () => setState(() => _hoveredDonutIndex = i),
+                  onExit: () => setState(() => _hoveredDonutIndex = null),
+                )
+              : _buildDistributionStatusRow(
+                  title: s.label,
+                  range: s.sub,
+                  count: s.badgeVal.toInt(),
+                  pct: s.pct,
+                  color: s.color,
+                  isDark: isDark,
+                  isHovered: isHovered,
+                  onEnter: () => setState(() => _hoveredDonutIndex = i),
+                  onExit: () => setState(() => _hoveredDonutIndex = null),
+                ),
+        );
+      }),
+    );
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: isDark ? theme.colorScheme.surface : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? Colors.white12 : crBorder),
+        color: isDark
+            ? theme.colorScheme.surface.withValues(alpha: 0.82)
+            : Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.12) : crBorder,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1770,32 +2068,51 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             children: [
               Row(
                 children: [
-                  const Icon(LucideIcons.pieChart, size: 16, color: crSteelBlue),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color:
+                          crSteelBlue.withValues(alpha: isDark ? 0.22 : 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      LucideIcons.pieChart,
+                      size: 16,
+                      color: crSteelBlue,
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Text(
-                    _donutMode == 'components' ? 'Component Mastery' : 'Performance Distribution',
+                    'Component Mastery',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: isDark ? Colors.white : crSlateDark,
                     ),
                   ),
                 ],
               ),
-              // Dropdown mode selector (Matches "Group 1 v" in 2nd Pic)
               Container(
                 height: 30,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
+                  color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: crBorder),
+                  border: Border.all(color: isDark ? Colors.white12 : crBorder),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: _donutMode,
-                    icon: const Icon(LucideIcons.chevronDown, size: 13, color: crSlateDark),
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: crSlateDark),
+                    icon: Icon(
+                      LucideIcons.chevronDown,
+                      size: 13,
+                      color: isDark ? Colors.white70 : crSlateDark,
+                    ),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : crSlateDark,
+                    ),
                     items: const [
                       DropdownMenuItem(
                         value: 'components',
@@ -1825,237 +2142,441 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             style: const TextStyle(fontSize: 11, color: crSlateMuted),
           ),
           const SizedBox(height: 16),
-
-          // Donut Chart Canvas with Floating Circular White Badges (Exact 2nd Pic Look)
-          Center(
-            child: SizedBox(
-              width: 210,
-              height: 210,
-              child: AnimatedBuilder(
-                animation: _chartAnim,
-                builder: (context, _) {
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Arc Painter
-                      CustomPaint(
-                        size: const Size(200, 200),
-                        painter: _DonutChartPainter(
-                          slices: slices,
-                          progress: _chartAnim.value,
-                          strokeWidth: 26,
-                        ),
-                      ),
-
-                      // Center Hole Text
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _donutMode == 'components' ? 'Initial Avg' : 'Total Class',
-                            style: const TextStyle(fontSize: 9, color: crSlateMuted, fontWeight: FontWeight.w600),
-                          ),
-                          Text(
-                            _donutMode == 'components'
-                                ? (summary.classAverage != null ? '${summary.classAverage}%' : '—')
-                                : '${summary.totalCount}',
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: crSlateDark),
-                          ),
-                          Text(
-                            _donutMode == 'components' ? 'Weighted PS%' : 'Students',
-                            style: const TextStyle(fontSize: 9, color: crSlateMuted),
-                          ),
-                        ],
-                      ),
-
-                      // Floating Circular Badges over slices (Reference Pic 2 style)
-                      ..._buildFloatingBadges(slices, _chartAnim.value),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Dot Legend (Matches "● Excellent   ● Good   ● Weak" in 2nd Pic)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: slices.map((s) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 440) {
+                return Column(
                   children: [
-                    Container(
-                      width: 9,
-                      height: 9,
-                      decoration: BoxDecoration(
-                        color: s.color,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      s.dotLabel,
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: crSlateDark),
-                    ),
+                    Center(child: donutWidget),
+                    const SizedBox(height: 14),
+                    rightColumnWidget,
                   ],
-                ),
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  donutWidget,
+                  const SizedBox(width: 16),
+                  Expanded(child: rightColumnWidget),
+                ],
               );
-            }).toList(),
+            },
           ),
-          const SizedBox(height: 16),
-          const Divider(height: 1, color: crBorder),
-          const SizedBox(height: 12),
-
-          // DO 15 Descriptor Breakdown Cards
-          const Text(
-            'DO 15, S. 2026 DESCRIPTOR BREAKDOWN',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: crSlateMuted,
-              letterSpacing: 0.5,
+          if (_donutMode == 'components') ...[
+            const SizedBox(height: 16),
+            Divider(height: 1, color: isDark ? Colors.white12 : crBorder),
+            const SizedBox(height: 12),
+            const Text(
+              'DO 15, S. 2026 DESCRIPTOR BREAKDOWN',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: crSlateMuted,
+                letterSpacing: 0.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _buildDescriptorCard('Advancing', '90–100', summary.advancingCount, crEmerald),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildDescriptorCard('Benchmarking', '80–89', summary.benchmarkingCount, crSteelBlue),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _buildDescriptorCard('Connecting', '75–79', summary.connectingCount, crAmber),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildDescriptorCard('Developing', '< 75', summary.developingCount, crRed),
-              ),
-            ],
-          ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildDescriptorCard(
+                    'Advancing',
+                    '90–100',
+                    summary.advancingCount,
+                    crEmerald,
+                    isDark,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildDescriptorCard(
+                    'Benchmarking',
+                    '80–89',
+                    summary.benchmarkingCount,
+                    crSteelBlue,
+                    isDark,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildDescriptorCard(
+                    'Connecting',
+                    '75–79',
+                    summary.connectingCount,
+                    crAmber,
+                    isDark,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildDescriptorCard(
+                    'Developing',
+                    '< 75',
+                    summary.developingCount,
+                    crRed,
+                    isDark,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
 
-  List<Widget> _buildFloatingBadges(List<DonutSliceData> slices, double progress) {
-    final widgets = <Widget>[];
-    const center = Offset(105, 105);
-    const radius = 72.0;
+  Widget _buildComponentStatusRow({
+    required String title,
+    required String subtitle,
+    required double score,
+    required double weight,
+    required Color color,
+    required String initials,
+    required bool isDark,
+    required bool isHovered,
+    required VoidCallback onEnter,
+    required VoidCallback onExit,
+  }) {
+    final cleanTitle = title.replaceAll(RegExp(r'\s*\(\d+%\)'), '');
 
-    var startAngle = -math.pi / 2;
-
-    for (final s in slices) {
-      if (s.pct <= 0) continue;
-      final sweep = (s.pct / 100) * 2 * math.pi;
-      final midAngle = startAngle + sweep / 2;
-      startAngle += sweep;
-
-      final x = center.dx + radius * math.cos(midAngle);
-      final y = center.dy + radius * math.sin(midAngle);
-
-      final bounceScale = Curves.easeOutBack.transform(progress.clamp(0.0, 1.0));
-
-      widgets.add(
-        Positioned(
-          left: x - 22,
-          top: y - 22,
-          child: Transform.scale(
-            scale: bounceScale,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-                boxShadow: const [
+    return MouseRegion(
+      onEnter: (_) => onEnter(),
+      onExit: (_) => onExit(),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5.5),
+        decoration: BoxDecoration(
+          color: isHovered
+              ? color.withValues(alpha: isDark ? 0.16 : 0.08)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isHovered
+                ? color.withValues(alpha: isDark ? 0.6 : 0.45)
+                : (isDark ? Colors.white.withValues(alpha: 0.08) : crBorder),
+            width: isHovered ? 1.5 : 1.0,
+          ),
+          boxShadow: isHovered
+              ? [
                   BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 6,
-                    offset: Offset(0, 2),
+                    color: color.withValues(alpha: isDark ? 0.25 : 0.12),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
-                ],
+                ]
+              : null,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: isDark ? 0.25 : 0.12),
+                shape: BoxShape.circle,
               ),
+              child: Text(
+                initials,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    '${s.badgeVal.toStringAsFixed(s.badgeVal % 1 != 0 ? 1 : 0)}%',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: crSlateDark,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          cleanTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : crSlateDark,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${score.toStringAsFixed(1)}% PS',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white70 : crSlateDark,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(
+                                alpha: isDark ? 0.22 : 0.12,
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: color.withValues(
+                                  alpha: isDark ? 0.4 : 0.25,
+                                ),
+                              ),
+                            ),
+                            child: Text(
+                              '${weight.toInt()}% Wt',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  Text(
-                    s.sub,
-                    style: const TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.w600,
-                      color: crSlateMuted,
+                  const SizedBox(height: 3),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: (score / 100).clamp(0.0, 1.0),
+                      minHeight: 3.5,
+                      backgroundColor:
+                          isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
+          ],
         ),
-      );
-    }
-    return widgets;
+      ),
+    );
   }
 
-  Widget _buildDescriptorCard(String title, String range, int count, Color accent) {
+  Widget _buildDistributionStatusRow({
+    required String title,
+    required String range,
+    required int count,
+    required double pct,
+    required Color color,
+    required bool isDark,
+    required bool isHovered,
+    required VoidCallback onEnter,
+    required VoidCallback onExit,
+  }) {
+    return MouseRegion(
+      onEnter: (_) => onEnter(),
+      onExit: (_) => onExit(),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5.5),
+        decoration: BoxDecoration(
+          color: isHovered
+              ? color.withValues(alpha: isDark ? 0.16 : 0.08)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isHovered
+                ? color.withValues(alpha: isDark ? 0.6 : 0.45)
+                : (isDark ? Colors.white.withValues(alpha: 0.08) : crBorder),
+            width: isHovered ? 1.5 : 1.0,
+          ),
+          boxShadow: isHovered
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: isDark ? 0.25 : 0.12),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.4),
+                    blurRadius: 3,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : crSlateDark,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '($range)',
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                color: crSlateMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '$count ${count == 1 ? 'learner' : 'learners'}',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white70 : crSlateDark,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(
+                                alpha: isDark ? 0.22 : 0.12,
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: color.withValues(
+                                  alpha: isDark ? 0.4 : 0.25,
+                                ),
+                              ),
+                            ),
+                            child: Text(
+                              '${pct.toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: (pct / 100).clamp(0.0, 1.0),
+                      minHeight: 3.5,
+                      backgroundColor:
+                          isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDescriptorCard(String title, String range, int count, Color accent, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: isDark
+            ? accent.withValues(alpha: 0.10)
+            : accent.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: crBorder),
+        border: Border.all(
+          color: accent.withValues(alpha: isDark ? 0.3 : 0.22),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 3,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: BorderRadius.circular(2),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : crSlateDark,
                 ),
               ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: crSlateDark)),
-                  Text(range, style: const TextStyle(fontSize: 9, color: crSlateMuted)),
-                ],
+              Text(
+                range,
+                style: TextStyle(
+                  fontSize: 9,
+                  color: isDark ? Colors.white38 : crSlateMuted,
+                ),
               ),
             ],
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.1),
+              color: accent.withValues(alpha: isDark ? 0.3 : 0.16),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: accent.withValues(alpha: 0.3)),
             ),
             child: Text(
               '$count',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: accent),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: accent,
+              ),
             ),
           ),
         ],
@@ -2830,11 +3351,15 @@ class _DonutChartPainter extends CustomPainter {
   final List<DonutSliceData> slices;
   final double progress;
   final double strokeWidth;
+  final bool isDark;
+  final int? hoveredIndex;
 
   _DonutChartPainter({
     required this.slices,
     required this.progress,
     required this.strokeWidth,
+    this.isDark = false,
+    this.hoveredIndex,
   });
 
   @override
@@ -2844,7 +3369,7 @@ class _DonutChartPainter extends CustomPainter {
 
     // Track Ring
     final trackPaint = Paint()
-      ..color = const Color(0xFFF1F5F9)
+      ..color = isDark ? Colors.white10 : const Color(0xFFF1F5F9)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth;
     canvas.drawCircle(center, radius, trackPaint);
@@ -2853,13 +3378,33 @@ class _DonutChartPainter extends CustomPainter {
 
     var startAngle = -math.pi / 2;
 
-    for (final slice in slices) {
+    for (int i = 0; i < slices.length; i++) {
+      final slice = slices[i];
+      if (slice.pct <= 0) continue;
       final sweepAngle = (slice.pct / 100) * 2 * math.pi * progress;
+
+      final isHovered = hoveredIndex == i;
+      final effectiveStroke = isHovered ? strokeWidth + 4 : strokeWidth;
+
+      if (isHovered) {
+        final glowPaint = Paint()
+          ..color = slice.color.withValues(alpha: 0.45)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = effectiveStroke + 4
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius),
+          startAngle,
+          sweepAngle,
+          false,
+          glowPaint,
+        );
+      }
 
       final slicePaint = Paint()
         ..color = slice.color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
+        ..strokeWidth = effectiveStroke
         ..strokeCap = StrokeCap.butt;
 
       canvas.drawArc(
@@ -2876,6 +3421,9 @@ class _DonutChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DonutChartPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.slices != slices;
+    return oldDelegate.progress != progress ||
+        oldDelegate.slices != slices ||
+        oldDelegate.isDark != isDark ||
+        oldDelegate.hoveredIndex != hoveredIndex;
   }
 }

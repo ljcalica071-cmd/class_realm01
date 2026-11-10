@@ -16,6 +16,7 @@ import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 
 /// DepEd-style Strengthened SHS Class Record (Gradebook).
 /// Mirrors the official DepEd grading spreadsheet layout with
@@ -1015,9 +1016,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
     } catch (error) {
       debugPrint('Could not persist gradebook before changing terms: $error');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save this term sheet.')),
-        );
+        AppTopToast.error(context, 'Could not save this term sheet.');
       }
       return;
     }
@@ -1040,9 +1039,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab> {
         'Could not persist gradebook before changing subjects: $error',
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save this term sheet.')),
-        );
+        AppTopToast.error(context, 'Could not save this term sheet.');
       }
       return;
     }

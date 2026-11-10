@@ -21,13 +21,16 @@ All screens, widgets, and flows in the **Student** and **Parent** portals must s
   - **NEVER** paint `AppBar` backgrounds, full-screen overlays, or primary start/navigation buttons in `AppTheme.catRed` or `AppTheme.catOrange` (e.g. for Examinations or timers).
   - Semantic colors (`catGreen`, `catOrange`, `catRed`) must only be used at small scale (status dots, subtle text/icon accents, or inline validation errors).
 
-## 2. Proportional Typography Scale (No Oversized Text)
-Student and Parent portals are frequently used on mobile viewports (`360px–430px` width). Text sizes must remain balanced and compact:
+## 2. Proportional Typography Scale (Benchmark: `StudentSettingsScreen`)
+Student and Parent portals are frequently used on mobile viewports (`360px–430px` width). `StudentSettingsScreen` serves as the gold standard implementation for typography, card padding, and icon sizing:
+- **Max Viewport Width**: Wrap scrollable mobile content in `ConstrainedBox(constraints: BoxConstraints(maxWidth: 540))` centered horizontally.
 - **AppBar / Screen Title**: `15px–16px`, `FontWeight.w700` (never `20px+`).
-- **Card / Section Header**: `14px–15px`, `FontWeight.w700`.
+- **Section Micro-Headers**: `11.5px–12px`, `FontWeight.w700`, `letterSpacing: 0.8` (all caps neutral text).
+- **Card Title / Primary Header**: `14.5px–15.5px`, `FontWeight.w700`.
 - **Assessment Question / Primary Prompt**: `14.5px–15.5px`, `FontWeight.w600`, `height: 1.45` (never `18px–22px`).
-- **Body / Choice Option / Input Text**: `13px–13.5px`, `FontWeight.w500`.
-- **Pills / Badges / Timer / Metadata**: `11px–12px`, `FontWeight.w600`.
+- **Body / Choice Option / Input Text**: `12.5px–13px`, `FontWeight.w500`, `height: 1.4`.
+- **Pills / Badges / Timer / Metadata**: `10.5px–11.5px`, `FontWeight.w600`, horizontal padding `8px`, vertical `3px–4px`.
+- **Card Icons & Badges**: Size `20px–22px` max (never `32px+`), enclosed in circular or rounded-12 containers with `alpha: 0.12` background. Never render dangling icons when metadata fields (such as room or teacher) are empty or null.
 
 ## 3. Compact Buttons, Choices & Unboxed Navigation
 - **Button Dimensions**:

@@ -593,7 +593,7 @@ class _StudentLearningMaterialsScreenState
             _selectedSubject != null
                 ? (_selectedSubject!['subject_name'] ?? 'Learning Materials')
                 : 'Learning Materials',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
           ),
           leading: _selectedSubject != null
               ? IconButton(
@@ -604,20 +604,23 @@ class _StudentLearningMaterialsScreenState
                   onPressed: _handleBackNavigation,
                 )
               : null,
-          backgroundColor: theme.colorScheme.primary,
-          foregroundColor: theme.colorScheme.onPrimary,
           elevation: 0,
         ),
-        body: _isLoading
-            ? Center(
-                child: LoadingAnimationWidget.staggeredDotsWave(
-                  color: theme.colorScheme.primary,
-                  size: 42,
-                ),
-              )
-            : _selectedSubject == null
-                ? _buildEnrolledSubjectsView(theme)
-                : _buildSubjectMaterialsView(theme),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 540),
+            child: _isLoading
+                ? Center(
+                    child: LoadingAnimationWidget.staggeredDotsWave(
+                      color: theme.colorScheme.primary,
+                      size: 42,
+                    ),
+                  )
+                : _selectedSubject == null
+                    ? _buildEnrolledSubjectsView(theme)
+                    : _buildSubjectMaterialsView(theme),
+          ),
+        ),
       ),
     );
   }
@@ -658,17 +661,19 @@ class _StudentLearningMaterialsScreenState
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(10),
+                            width: 44,
+                            height: 44,
+                            alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: theme.colorScheme.primary.withValues(
-                                alpha: 0.15,
+                                alpha: 0.12,
                               ),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              Icons.folder_shared_outlined,
+                              Icons.menu_book_rounded,
                               color: theme.colorScheme.primary,
-                              size: 24,
+                              size: 22,
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -679,8 +684,8 @@ class _StudentLearningMaterialsScreenState
                                 const Text(
                                   'My Enrolled Subjects',
                                   style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
@@ -849,8 +854,8 @@ class _StudentLearningMaterialsScreenState
               Text(
                 subName,
                 style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
                 ),
               ),
               const SizedBox(height: 6),
@@ -1443,7 +1448,7 @@ class _StudentLearningMaterialsScreenState
             ),
             child: Icon(
               Icons.school_outlined,
-              size: 36,
+              size: 26,
               color: theme.colorScheme.primary,
             ),
           ),
@@ -1451,7 +1456,7 @@ class _StudentLearningMaterialsScreenState
           const Text(
             'No Enrolled Subjects Found',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           Text(
@@ -1493,7 +1498,7 @@ class _StudentLearningMaterialsScreenState
             ),
             child: Icon(
               Icons.folder_open_rounded,
-              size: 32,
+              size: 24,
               color: theme.colorScheme.primary,
             ),
           ),
@@ -1501,7 +1506,7 @@ class _StudentLearningMaterialsScreenState
           const Text(
             'No Learning Materials Yet',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(

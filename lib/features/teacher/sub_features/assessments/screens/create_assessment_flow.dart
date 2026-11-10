@@ -3724,11 +3724,15 @@ class _CreateAssessmentFlowDialogState
         // Left Column: Active Question Editor Card
         Expanded(
           flex: 6,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          child: Column(
+            children: [
+              // Scrollable question statement & choices area
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                 if (_aiWarningBanner != null) ...[
                   Container(
                     margin: const EdgeInsets.only(bottom: 14),
@@ -3907,8 +3911,10 @@ class _CreateAssessmentFlowDialogState
                 const SizedBox(height: 6),
                 TextField(
                   controller: _qStatementCtrl,
-                  maxLines: 3,
+                  minLines: 2,
+                  maxLines: 6,
                   maxLength: 500,
+                  keyboardType: TextInputType.multiline,
                   buildCounter: (
                     _, {
                     required currentLength,
@@ -4333,10 +4339,23 @@ class _CreateAssessmentFlowDialogState
                   ),
                 ],
 
-                const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
 
-                // Stepper Buttons: Previous / Next
-                Row(
+              // Fixed Stepper Buttons: Previous / Next
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  border: Border(
+                    top: BorderSide(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                    ),
+                  ),
+                ),
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     if (_activeQuestionIndex > 0)
@@ -4403,8 +4422,8 @@ class _CreateAssessmentFlowDialogState
                       ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
 
@@ -4576,24 +4595,31 @@ class _CreateAssessmentFlowDialogState
     final hasError = _choicesError != null;
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Radio<String>(
-          value: label,
-          groupValue: _selectedMcAnswer,
-          activeColor: theme.colorScheme.primary,
-          onChanged: (val) {
-            setState(() {
-              _selectedMcAnswer = val;
-              _choicesError = null;
-              _editorError = null;
-              _syncCurrentDraftFromInputs();
-            });
-          },
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Radio<String>(
+            value: label,
+            groupValue: _selectedMcAnswer,
+            activeColor: theme.colorScheme.primary,
+            onChanged: (val) {
+              setState(() {
+                _selectedMcAnswer = val;
+                _choicesError = null;
+                _editorError = null;
+                _syncCurrentDraftFromInputs();
+              });
+            },
+          ),
         ),
         Expanded(
           child: TextField(
             controller: controller,
             maxLength: 180,
+            minLines: 1,
+            maxLines: 4,
+            keyboardType: TextInputType.multiline,
             buildCounter: (
               _, {
               required currentLength,
@@ -4621,7 +4647,7 @@ class _CreateAssessmentFlowDialogState
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
-                vertical: 10,
+                vertical: 11,
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),

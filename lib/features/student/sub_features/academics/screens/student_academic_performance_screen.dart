@@ -50,15 +50,22 @@ class _StudentAcademicPerformanceScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Academic Performance'),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
+        title: const Text(
+          'Academic Performance',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
-      body: AppPullToRefresh(
-        onRefresh: _refreshPerformance,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: AppPullToRefresh(
+            onRefresh: _refreshPerformance,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
           children: [
             // Student Header Card
             Container(
@@ -84,7 +91,7 @@ class _StudentAcademicPerformanceScreenState
               child: Row(
                 children: [
                   CircleAvatar(
-                    radius: 24,
+                    radius: 22,
                     backgroundColor: Colors.white.withValues(alpha: 0.2),
                     child: Text(
                       student.fullName.isNotEmpty
@@ -92,7 +99,7 @@ class _StudentAcademicPerformanceScreenState
                           : 'S',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 20,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -106,8 +113,8 @@ class _StudentAcademicPerformanceScreenState
                           student.fullName,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         if (schoolInfo.isNotEmpty) ...[
@@ -140,10 +147,10 @@ class _StudentAcademicPerformanceScreenState
 
             // Polished Empty State Card
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 34),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: theme.colorScheme.onSurface.withValues(
                     alpha: isDark ? 0.14 : 0.09,
@@ -161,8 +168,8 @@ class _StudentAcademicPerformanceScreenState
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width: 74,
-                    height: 74,
+                    width: 56,
+                    height: 56,
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primary.withValues(
                         alpha: isDark ? 0.18 : 0.1,
@@ -171,26 +178,27 @@ class _StudentAcademicPerformanceScreenState
                     ),
                     child: Icon(
                       Icons.school_outlined,
-                      size: 36,
+                      size: 26,
                       color: theme.colorScheme.primary,
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   Text(
                     'No Academic Records Yet',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
                     'Your official senior high school academic records and curriculum evaluations will appear here.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
-                      height: 1.5,
+                      fontSize: 12.5,
+                      height: 1.4,
                     ),
                   ),
                 ],
@@ -199,6 +207,8 @@ class _StudentAcademicPerformanceScreenState
           ],
         ),
       ),
+    ),
+    ),
     );
   }
 }

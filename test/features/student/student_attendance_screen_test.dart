@@ -101,7 +101,7 @@ class FakeStudentAttendanceRepository extends AttendanceRepository {
 }
 
 void main() {
-  testWidgets('renders server-computed summary header and logs', (
+  testWidgets('renders 60-30-10 summary header, clean filter pills, and table pagination', (
     tester,
   ) async {
     final fakeRepo = FakeStudentAttendanceRepository(
@@ -118,20 +118,12 @@ void main() {
           studentId: 'student-1',
           date: DateTime(2026, 10, i + 1),
           status: AttendanceStatus.present,
-          timeIn: 'N/A',
-          method: 'General Mathematics',
+          timeIn: '07:30 AM',
+          method: 'General Mathematics • RFID',
+          section: 'Section 1',
         ),
       ),
-      secondPageRows: [
-        AttendanceRecord(
-          id: 'rec-21',
-          studentId: 'student-1',
-          date: DateTime(2026, 9, 30),
-          status: AttendanceStatus.late,
-          timeIn: 'N/A',
-          method: 'General Mathematics',
-        ),
-      ],
+      secondPageRows: [],
     );
 
     await tester.pumpWidget(
@@ -142,26 +134,58 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pumpAndSettle();
 
+    // Verify AppBar Title & styling
+    expect(find.text('My Attendance Logs'), findsOneWidget);
+
     // Verify summary values (Present, Late, Absent, Rate)
-    expect(find.text('15'), findsOneWidget); // Present
-    expect(find.text('75%'), findsOneWidget); // Rate
+    expect(find.text('15'), findsOneWidget); // Present count
+    expect(find.text('75%'), findsOneWidget); // Rate %
+
+    // Verify filter chips have NO (0) counts
+    expect(find.text('All'), findsOneWidget);
+    expect(find.text('Present'), findsWidgets);
+    expect(find.text('Late'), findsWidgets);
+    expect(find.text('Absent'), findsWidgets);
+    expect(find.text('All (20)'), findsNothing);
+    expect(find.text('Present (15)'), findsNothing);
+
+    // Verify Subject selector bar is rendered
+    expect(find.text('Subject:'), findsOneWidget);
+    expect(find.text('All Subjects'), findsOneWidget);
+
+    // Verify Table Headers
+    expect(find.text('DATE & TIME'), findsOneWidget);
+    expect(find.text('SUBJECT & INFO'), findsOneWidget);
+    expect(find.text('STATUS'), findsOneWidget);
+
+    // Verify Table Row item
     expect(find.text('General Mathematics'), findsWidgets);
-    expect(find.text('Manual'), findsWidgets);
 
-    // Verify initial records and Load More button
-    await tester.scrollUntilVisible(
-      find.text('Load More Records'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('Load More Records'), findsOneWidget);
+    // Verify Table Pagination (Page 1 of 2: 10 per page)
+    expect(find.text('Showing 1–10 of 20 logs'), findsOneWidget);
+    expect(find.text('1 / 2'), findsOneWidget);
 
-    // Tap Load More Records
-    await tester.tap(find.text('Load More Records'));
+    // Tap Next page button
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
-    // Second page row loaded, Load More button gone because hasMore is false
-    expect(find.text('Load More Records'), findsNothing);
+    // Verify Page 2 loaded
+    expect(find.text('Showing 11–20 of 20 logs'), findsOneWidget);
+    expect(find.text('2 / 2'), findsOneWidget);
+
+    // Tap Prev page button
+    await tester.tap(find.text('Prev'));
+    await tester.pumpAndSettle();
+    expect(find.text('Showing 1–10 of 20 logs'), findsOneWidget);
+    expect(find.text('1 / 2'), findsOneWidget);
+
+    // Tap Subject Filter bar to open modal bottom sheet
+    await tester.tap(find.text('Subject:'));
+    await tester.pumpAndSettle();
+
+    // Verify Bottom Sheet Modal opened
+    expect(find.text('Filter by Subject'), findsOneWidget);
+    expect(find.text('Select a subject to view its specific attendance history.'), findsOneWidget);
   });
 
   testWidgets('renders error state on repository failure', (tester) async {

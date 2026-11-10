@@ -1063,45 +1063,137 @@ class ShimmerAttendanceAnalyticsSkeleton extends StatelessWidget {
               );
 
               final breakdownCard = Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: cardBg,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: borderColor),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: const [
-                        ShimmerBox(width: 18, height: 18, borderRadius: 4),
-                        SizedBox(width: 8),
-                        ShimmerBox(width: 130, height: 15, borderRadius: 4),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    ...List.generate(
-                      4,
-                      (index) => Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: Column(
+                        Row(
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: const [
-                                ShimmerBox(width: 50, height: 12, borderRadius: 4),
-                                ShimmerBox(width: 45, height: 12, borderRadius: 4),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            const ShimmerBox(
-                              width: double.infinity,
-                              height: 8,
-                              borderRadius: 4,
-                            ),
+                            ShimmerBox(width: 28, height: 28, borderRadius: 8),
+                            SizedBox(width: 8),
+                            ShimmerBox(width: 130, height: 16, borderRadius: 4),
                           ],
                         ),
-                      ),
+                        ShimmerBox(width: 85, height: 22, borderRadius: 6),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const ShimmerBox(width: 230, height: 11, borderRadius: 4),
+                    const SizedBox(height: 16),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final donutSkeleton = Container(
+                          width: 140,
+                          height: 140,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                              width: 18,
+                            ),
+                          ),
+                          child: const Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ShimmerBox(width: 45, height: 9, borderRadius: 3),
+                                SizedBox(height: 4),
+                                ShimmerBox(
+                                  width: 32,
+                                  height: 16,
+                                  borderRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+
+                        final statusListSkeleton = Column(
+                          children: List.generate(
+                            4,
+                            (i) => Padding(
+                              padding: EdgeInsets.only(bottom: i < 3 ? 6.0 : 0.0),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.04)
+                                      : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? Colors.white10
+                                        : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: const [
+                                        ShimmerBox(
+                                          width: 16,
+                                          height: 16,
+                                          borderRadius: 999,
+                                        ),
+                                        SizedBox(width: 8),
+                                        ShimmerBox(
+                                          width: 55,
+                                          height: 11,
+                                          borderRadius: 3,
+                                        ),
+                                        Spacer(),
+                                        ShimmerBox(
+                                          width: 45,
+                                          height: 15,
+                                          borderRadius: 6,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    const ShimmerBox(
+                                      width: double.infinity,
+                                      height: 4,
+                                      borderRadius: 999,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+
+                        if (constraints.maxWidth < 440) {
+                          return Column(
+                            children: [
+                              Center(child: donutSkeleton),
+                              const SizedBox(height: 14),
+                              statusListSkeleton,
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            donutSkeleton,
+                            const SizedBox(width: 16),
+                            Expanded(child: statusListSkeleton),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),

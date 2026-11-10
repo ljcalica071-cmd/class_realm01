@@ -17,14 +17,87 @@ class AppDataCache {
   static final AppDataCache instance = AppDataCache._internal();
   AppDataCache._internal();
 
+  /// Default capacity for in-memory entries before LRU eviction triggers.
+  static const int defaultMaxEntries = 100;
+  int maxEntries = defaultMaxEntries;
+
   final Map<String, dynamic> _memoryCache = <String, dynamic>{};
   final Map<String, DateTime> _timestamps = <String, DateTime>{};
   final Map<String, Future<dynamic>> _inFlight = <String, Future<dynamic>>{};
   final Map<String, String> _payloadSignatures = <String, String>{};
+  final Set<String> _accessOrder = <String>{};
+  final Set<String> _pinnedKeys = <String>{};
+
+  /// Checks whether a cache key is exempt from automated LRU eviction.
+  /// 
+  /// Critical workflows such as offline attendance queues, active attendance
+  /// rosters/records being edited by teachers, session credentials, and
+  /// pinned entries are strictly immune to LRU pruning to prevent data loss.
+  bool isProtectedKey(String key) {
+    if (key.isEmpty) return true;
+    if (_pinnedKeys.contains(key)) return true;
+
+    // Protected attendance & offline workflow prefixes:
+    if (key.startsWith('offline_') ||
+        key.startsWith('attendance_roster_') ||
+        key.startsWith('attendance_records_') ||
+        key.startsWith('attendance_workspace_draft_') ||
+        key.startsWith('sync_') ||
+        key.startsWith('auth.') ||
+        key.startsWith('settings.') ||
+        key.startsWith('session.') ||
+        key.contains('device_id') ||
+        key.contains('maintenance')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Explicitly protects a critical key from LRU eviction until unpinned.
+  void pin(String key) {
+    if (key.isNotEmpty) _pinnedKeys.add(key);
+  }
+
+  /// Removes explicit protection from a key.
+  void unpin(String key) {
+    _pinnedKeys.remove(key);
+  }
+
+  /// Marks [key] as Most Recently Used (MRU).
+  void _touch(String key) {
+    if (key.isEmpty) return;
+    _accessOrder.remove(key);
+    _accessOrder.add(key);
+  }
+
+  /// Enforces the [maxEntries] cap by evicting the Least Recently Used (LRU)
+  /// non-protected keys from memory and disk.
+  void _enforceLruCap() {
+    if (_memoryCache.length <= maxEntries) return;
+
+    final keysToCheck = _accessOrder.toList();
+    for (final oldKey in keysToCheck) {
+      if (_memoryCache.length <= maxEntries) break;
+
+      // Never evict protected keys (attendance rosters/drafts, offline queues, session data)
+      if (isProtectedKey(oldKey)) {
+        continue;
+      }
+
+      // Evict least-recently used key
+      _memoryCache.remove(oldKey);
+      _timestamps.remove(oldKey);
+      _payloadSignatures.remove(oldKey);
+      _accessOrder.remove(oldKey);
+      unawaited(LocalStorageService.remove(oldKey));
+    }
+  }
 
   /// Checks whether a cache key exists and is still within its freshness window (TTL).
   bool isFresh(String key, {Duration ttl = const Duration(minutes: 5)}) {
     if (!_memoryCache.containsKey(key)) return false;
+    _touch(key);
     final ts = _timestamps[key];
     if (ts == null) return false;
     return DateTime.now().difference(ts) < ttl;
@@ -33,6 +106,7 @@ class AppDataCache {
   /// Direct synchronous retrieval of in-memory cached object typed [T]
   T? get<T>(String key) {
     if (_memoryCache.containsKey(key)) {
+      _touch(key);
       final item = _memoryCache[key];
       if (item is T) return item;
     }
@@ -43,11 +117,14 @@ class AppDataCache {
   void set<T>(String key, T value) {
     _memoryCache[key] = value;
     _timestamps[key] = DateTime.now();
+    _touch(key);
+    _enforceLruCap();
   }
 
   /// Retrieves cached item typed [T] synchronously from in-memory cache or LocalStorage.
   T? getCached<T>(String key, T Function(dynamic json) fromJson) {
     if (_memoryCache.containsKey(key)) {
+      _touch(key);
       try {
         final cached = _memoryCache[key];
         if (cached is T) return cached;
@@ -62,6 +139,8 @@ class AppDataCache {
       final persistedJson = LocalStorageService.getJson(key);
       if (persistedJson != null) {
         _memoryCache[key] = persistedJson;
+        _touch(key);
+        _enforceLruCap();
         // Do NOT set _timestamps[key] = DateTime.now() because persisted data from disk is not fresh network data
         return fromJson(persistedJson);
       }
@@ -76,6 +155,8 @@ class AppDataCache {
   Future<void> setCache(String key, dynamic jsonEncodableData) async {
     _memoryCache[key] = jsonEncodableData;
     _timestamps[key] = DateTime.now();
+    _touch(key);
+    _enforceLruCap();
     try {
       _payloadSignatures[key] = jsonEncode(jsonEncodableData);
     } catch (_) {}
@@ -152,6 +233,8 @@ class AppDataCache {
       final freshData = await future;
       _timestamps[effectiveKey] = DateTime.now();
       _memoryCache[effectiveKey] = freshData;
+      _touch(effectiveKey);
+      _enforceLruCap();
 
       // Encode for persistence & diffing
       dynamic encodable;
@@ -201,6 +284,8 @@ class AppDataCache {
     _memoryCache.remove(key);
     _timestamps.remove(key);
     _payloadSignatures.remove(key);
+    _accessOrder.remove(key);
+    _pinnedKeys.remove(key);
     unawaited(LocalStorageService.remove(key));
   }
 
@@ -213,6 +298,8 @@ class AppDataCache {
       _memoryCache.remove(k);
       _timestamps.remove(k);
       _payloadSignatures.remove(k);
+      _accessOrder.remove(k);
+      _pinnedKeys.remove(k);
     }
     unawaited(LocalStorageService.removePrefix(prefix));
   }
@@ -226,6 +313,8 @@ class AppDataCache {
       _memoryCache.remove(k);
       _timestamps.remove(k);
       _payloadSignatures.remove(k);
+      _accessOrder.remove(k);
+      _pinnedKeys.remove(k);
       unawaited(LocalStorageService.remove(k));
     }
   }
@@ -236,5 +325,7 @@ class AppDataCache {
     _timestamps.clear();
     _inFlight.clear();
     _payloadSignatures.clear();
+    _accessOrder.clear();
+    _pinnedKeys.clear();
   }
 }

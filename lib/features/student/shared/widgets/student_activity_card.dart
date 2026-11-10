@@ -66,8 +66,8 @@ class StudentActivityCard extends StatelessWidget {
                     Text(
                       activity.title,
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
                         color: theme.colorScheme.onSurface,
                       ),
                     ),
@@ -83,8 +83,8 @@ class StudentActivityCard extends StatelessWidget {
                     child: Text(
                       activity.title,
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
                         color: theme.colorScheme.onSurface,
                       ),
                     ),
@@ -142,8 +142,8 @@ class StudentActivityCard extends StatelessWidget {
                 Text(
                   'Score: ${currentSubmission!.score?.toInt() ?? 0} / ${activity.maxScore.toInt()}',
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
                     color: AppTheme.catGreen,
                   ),
                 ),

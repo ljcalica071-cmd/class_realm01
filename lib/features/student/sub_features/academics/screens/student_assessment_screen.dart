@@ -694,7 +694,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             SizedBox(width: 8),
             Text(
               'Session Disqualified',
-              style: TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5),
             ),
           ],
         ),
@@ -747,12 +747,12 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.restart_alt_rounded, color: AppTheme.catOrange, size: 28),
+            Icon(Icons.restart_alt_rounded, color: AppTheme.catOrange, size: 22),
             SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Session Reset by Instructor',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5),
               ),
             ),
           ],
@@ -822,12 +822,9 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     _heartbeatTimer?.cancel();
     _offlineRetryTimer?.cancel();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Session auto-submitted by instructor: $reason'),
-        backgroundColor: AppTheme.catBlue,
-        duration: const Duration(seconds: 4),
-      ),
+    AppTopToast.info(
+      context,
+      'Session auto-submitted by instructor: $reason',
     );
 
     _submitAssessment(autoSubmit: true);
@@ -1306,7 +1303,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           color: Theme.of(context).scaffoldBackgroundColor,
           child: Center(
             child: Container(
-              constraints: const BoxConstraints(maxWidth: 760),
+              constraints: const BoxConstraints(maxWidth: 540),
               margin: EdgeInsets.symmetric(
                 horizontal: isMobile ? 12 : 24,
                 vertical: isMobile ? 12 : 20,
@@ -2402,7 +2399,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             Text(
               '$_assessmentTitleLabel Completed & Submitted!',
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w700,
                 color: onSurface,
               ),
@@ -2435,7 +2432,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                   Text(
                     'Score Obtained: ${result.scoreEarned.round()} / ${result.totalPoints.round()} pts',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 16.5,
                       fontWeight: FontWeight.w700,
                       color: primaryColor,
                     ),

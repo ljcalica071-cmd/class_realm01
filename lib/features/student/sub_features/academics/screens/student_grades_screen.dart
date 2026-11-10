@@ -163,9 +163,13 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Grades'),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
+        title: const Text(
+          'My Grades',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: 'Academic Performance',
@@ -220,7 +224,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
       child: Row(
         children: [
           CircleAvatar(
-            radius: 24,
+            radius: 22,
             backgroundColor: theme.colorScheme.onPrimary.withValues(alpha: 0.2),
             child: Text(
               student.fullName.trim().isEmpty
@@ -228,7 +232,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                   : student.fullName.trim()[0].toUpperCase(),
               style: TextStyle(
                 color: theme.colorScheme.onPrimary,
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
             ),

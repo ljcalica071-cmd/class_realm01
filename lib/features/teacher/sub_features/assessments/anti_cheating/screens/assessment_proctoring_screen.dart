@@ -10,6 +10,7 @@ import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheat
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/services/teacher_proctor_channel_service.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/widgets/proctoring_roster_table.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/item_analysis/item_difficulty_stat.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 
 enum ProctorViewTab { liveMonitor, itemAnalysis }
 
@@ -44,8 +45,9 @@ class _AssessmentProctoringScreenState
   List<ItemDifficultyStat> _itemStats = [];
 
   Timer? _lateCheckTimer;
+  DateTime? _overrideScheduleDate;
 
-  DateTime get _scheduleDate => widget.assessment.scheduleDate;
+  DateTime get _scheduleDate => _overrideScheduleDate ?? widget.assessment.scheduleDate;
   DateTime get _lateCutoff =>
       _scheduleDate.add(const Duration(minutes: 15));
   DateTime get _examEndTime =>
@@ -67,13 +69,9 @@ class _AssessmentProctoringScreenState
       if (!mounted) return;
       if (_tabController.index == 1 && !_isTestingFinished) {
         _tabController.index = 0;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Item Analysis unlocks after the examination time window ends.',
-            ),
-            duration: Duration(seconds: 2),
-          ),
+        AppTopToast.warning(
+          context,
+          'Item Analysis unlocks after the examination time window ends.',
         );
       } else {
         setState(() {
@@ -644,12 +642,10 @@ class _AssessmentProctoringScreenState
         }
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Progress reset for ${student.studentName}'),
-            backgroundColor: AppTheme.catBlue,
-            duration: const Duration(seconds: 2),
-          ),
+        AppTopToast.info(
+          context,
+          'Progress reset for ${student.studentName}',
+          icon: LucideIcons.rotateCcw,
         );
       }
     }
@@ -700,12 +696,10 @@ class _AssessmentProctoringScreenState
         }
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Submitted assessment for ${student.studentName}'),
-            backgroundColor: AppTheme.catPurple,
-            duration: const Duration(seconds: 2),
-          ),
+        AppTopToast.info(
+          context,
+          'Submitted assessment for ${student.studentName}',
+          icon: LucideIcons.send,
         );
       }
     }
@@ -727,17 +721,19 @@ class _AssessmentProctoringScreenState
     });
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            newAllowed
-                ? 'Access unlocked for ${student.studentName}'
-                : 'Access locked for ${student.studentName}',
-          ),
-          backgroundColor: newAllowed ? AppTheme.catGreen : AppTheme.catRed,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      if (newAllowed) {
+        AppTopToast.success(
+          context,
+          'Access unlocked for ${student.studentName}',
+          icon: LucideIcons.unlock,
+        );
+      } else {
+        AppTopToast.error(
+          context,
+          'Access locked for ${student.studentName}',
+          icon: LucideIcons.lock,
+        );
+      }
     }
   }
 
@@ -752,19 +748,29 @@ class _AssessmentProctoringScreenState
 
       setState(() => _resultsReleased = newStatus);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              newStatus
-                  ? 'Answer key released to learners'
-                  : 'Answer key hidden from learners',
-            ),
-            backgroundColor: AppTheme.catGreen,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        if (newStatus) {
+          AppTopToast.success(
+            context,
+            'Answer key released to learners',
+            icon: LucideIcons.checkCheck,
+          );
+        } else {
+          AppTopToast.info(
+            context,
+            'Answer key hidden from learners',
+            icon: LucideIcons.eyeOff,
+          );
+        }
       }
     } catch (_) {}
+  }
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   String _formatTime(DateTime date) {
@@ -772,6 +778,338 @@ class _AssessmentProctoringScreenState
         date.hour == 0 ? 12 : (date.hour > 12 ? date.hour - 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');
     return '$hour:$minute ${date.hour >= 12 ? 'PM' : 'AM'}';
+  }
+
+  String _formatDateOnly(DateTime date) {
+    return '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  String _formatDateTime(DateTime date) {
+    return '${_formatDate(date)} ${_formatTime(date)}';
+  }
+
+  Future<void> _showUpdateScheduleDialog() async {
+    DateTime selectedDate = _scheduleDate;
+    TimeOfDay selectedTime = TimeOfDay.fromDateTime(_scheduleDate);
+    String? validationError;
+    bool isSaving = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: !isSaving,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final now = DateTime.now();
+            final candidate = DateTime(
+              selectedDate.year,
+              selectedDate.month,
+              selectedDate.day,
+              selectedTime.hour,
+              selectedTime.minute,
+            );
+            final isPast = candidate.isBefore(now.subtract(const Duration(minutes: 1)));
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              actionsPadding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: const Icon(
+                      LucideIcons.calendarClock,
+                      size: 20,
+                      color: Color(0xFF2563EB),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Update Exam Schedule',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Adjust the scheduled start time for this examination. Entrance window and late cut-offs will automatically synchronize.',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Date Picker Tile
+                    const Text(
+                      'Examination Date',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: isSaving
+                          ? null
+                          : () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: selectedDate.isBefore(now) ? now : selectedDate,
+                                firstDate: DateTime(now.year - 1),
+                                lastDate: DateTime(now.year + 5),
+                              );
+                              if (picked != null) {
+                                setModalState(() {
+                                  selectedDate = picked;
+                                  validationError = null;
+                                });
+                              }
+                            },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              LucideIcons.calendar,
+                              size: 16,
+                              color: Color(0xFF2563EB),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _formatDate(selectedDate),
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_drop_down,
+                              color: Color(0xFF64748B),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Time Picker Tile
+                    const Text(
+                      'Start Time',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: isSaving
+                          ? null
+                          : () async {
+                              final picked = await showTimePicker(
+                                context: context,
+                                initialTime: selectedTime,
+                              );
+                              if (picked != null) {
+                                setModalState(() {
+                                  selectedTime = picked;
+                                  validationError = null;
+                                });
+                              }
+                            },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              LucideIcons.clock,
+                              size: 16,
+                              color: Color(0xFF2563EB),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                selectedTime.format(context),
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_drop_down,
+                              color: Color(0xFF64748B),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    if (isPast) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(
+                              LucideIcons.circleAlert,
+                              size: 15,
+                              color: Color(0xFFDC2626),
+                            ),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Scheduled time cannot be in the past.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF991B1B),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    if (validationError != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        validationError!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFDC2626),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: (isSaving || isPast)
+                      ? null
+                      : () async {
+                          setModalState(() {
+                            isSaving = true;
+                            validationError = null;
+                          });
+
+                          try {
+                            final client = SupabaseService().client;
+                            await client
+                                .from('digital_assessments')
+                                .update({
+                                  'schedule_date': candidate.toIso8601String(),
+                                })
+                                .eq('id', widget.assessment.id);
+
+                            if (mounted) {
+                              setState(() {
+                                _overrideScheduleDate = candidate;
+                              });
+                              _evaluateLateWindowStatus();
+                            }
+
+                            if (dialogCtx.mounted) {
+                              Navigator.pop(dialogCtx);
+                            }
+
+                            if (mounted) {
+                              AppTopToast.success(
+                                this.context,
+                                'Schedule updated to ${_formatDateTime(candidate)}.',
+                              );
+                            }
+                          } catch (e) {
+                            setModalState(() {
+                              isSaving = false;
+                              validationError = 'Failed to update schedule: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 10,
+                    ),
+                  ),
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Update Schedule',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -1017,7 +1355,6 @@ class _AssessmentProctoringScreenState
           LayoutBuilder(
             builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 700;
-              final totalEnrolledCount = _rosterStudents.length;
 
               final cardActive = _buildMetricCard(
                 context: context,
@@ -1025,10 +1362,6 @@ class _AssessmentProctoringScreenState
                 value: '$activeCount',
                 icon: LucideIcons.users,
                 accentColor: const Color(0xFF2563EB),
-                pillText: activeCount > 0 ? '$activeCount Active' : '0 Active',
-                pillBg: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                pillBorder: const Color(0xFF2563EB).withValues(alpha: 0.22),
-                pillTextColor: const Color(0xFF2563EB),
                 subtitle: 'Real-time test takers',
                 onTap: () => setState(() => _searchQuery = ''),
               );
@@ -1039,12 +1372,6 @@ class _AssessmentProctoringScreenState
                 value: '$completedCount',
                 icon: LucideIcons.checkCircle,
                 accentColor: const Color(0xFF059669),
-                pillText: totalEnrolledCount > 0
-                    ? '${((completedCount / totalEnrolledCount) * 100).toInt()}% Done'
-                    : '0 Done',
-                pillBg: const Color(0xFF059669).withValues(alpha: 0.1),
-                pillBorder: const Color(0xFF059669).withValues(alpha: 0.22),
-                pillTextColor: const Color(0xFF059669),
                 subtitle: 'Submitted & graded',
               );
 
@@ -1054,20 +1381,6 @@ class _AssessmentProctoringScreenState
                 value: '$violationsCount',
                 icon: LucideIcons.alertTriangle,
                 accentColor: const Color(0xFFD97706),
-                pillText: violationsCount > 0
-                    ? '$violationsCount Alerts'
-                    : 'No Flags',
-                pillBg: (violationsCount > 0
-                        ? const Color(0xFFD97706)
-                        : const Color(0xFF059669))
-                    .withValues(alpha: 0.1),
-                pillBorder: (violationsCount > 0
-                        ? const Color(0xFFD97706)
-                        : const Color(0xFF059669))
-                    .withValues(alpha: 0.22),
-                pillTextColor: violationsCount > 0
-                    ? const Color(0xFFD97706)
-                    : const Color(0xFF059669),
                 subtitle: 'Integrity & switch alerts',
               );
 
@@ -1077,20 +1390,6 @@ class _AssessmentProctoringScreenState
                 value: '$lockedLateCount',
                 icon: LucideIcons.lock,
                 accentColor: const Color(0xFFDC2626),
-                pillText: lockedLateCount > 0
-                    ? 'Action Required'
-                    : 'All On Time',
-                pillBg: (lockedLateCount > 0
-                        ? const Color(0xFFDC2626)
-                        : const Color(0xFF059669))
-                    .withValues(alpha: 0.1),
-                pillBorder: (lockedLateCount > 0
-                        ? const Color(0xFFDC2626)
-                        : const Color(0xFF059669))
-                    .withValues(alpha: 0.22),
-                pillTextColor: lockedLateCount > 0
-                    ? const Color(0xFFDC2626)
-                    : const Color(0xFF059669),
                 subtitle: 'Beyond 15-min window',
               );
 
@@ -1144,6 +1443,9 @@ class _AssessmentProctoringScreenState
               onReset: _handleResetStudent,
               onForceSubmit: _handleForceSubmit,
               onToggleAllow: _handleToggleAllow,
+              isScheduleExpired: _isTestingFinished,
+              onUpdateSchedule: _showUpdateScheduleDialog,
+              scheduleDateFormatted: _formatDateOnly(_scheduleDate),
             )
           else
             _buildItemAnalysisView(theme, isDark),
@@ -1158,10 +1460,6 @@ class _AssessmentProctoringScreenState
     required String value,
     required IconData icon,
     required Color accentColor,
-    required String pillText,
-    required Color pillBg,
-    required Color pillBorder,
-    required Color pillTextColor,
     required String subtitle,
     VoidCallback? onTap,
     bool isSelected = false,
@@ -1240,47 +1538,17 @@ class _AssessmentProctoringScreenState
               ],
             ),
             const SizedBox(height: 10),
-            // Middle Row: Value + Pill Badge
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2.5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: pillBg,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: pillBorder),
-                    ),
-                    child: Text(
-                      pillText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: pillTextColor,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            // Middle Row: Value
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             // Bottom Row: Helper Subtitle
             Text(
               subtitle,

@@ -12,6 +12,7 @@ import 'package:class_realm/features/student/sub_features/academics/screens/stud
 import 'package:class_realm/features/student/sub_features/academics/widgets/student_exam_review_modal.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 
 class StudentClassworkCard extends StatelessWidget {
   const StudentClassworkCard({
@@ -30,12 +31,9 @@ class StudentClassworkCard extends StatelessWidget {
   Future<void> _openAttachment(BuildContext context, String? signedUrl) async {
     if (_isOpeningAttachment) return;
     if (signedUrl == null || signedUrl.trim().isEmpty) {
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Attachment link is expired or unavailable.'),
-        ),
-      );
+      if (context.mounted) {
+        AppTopToast.warning(context, 'Attachment link is expired or unavailable.');
+      }
       return;
     }
 
@@ -127,27 +125,20 @@ class StudentClassworkCard extends StatelessWidget {
       }
 
       if (!launched && context.mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to open attachment.')),
-        );
+        AppTopToast.error(context, 'Unable to open attachment.');
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
         final errStr = e.toString().toLowerCase();
         final isNotFound =
             errStr.contains('404') ||
             errStr.contains('not_found') ||
             errStr.contains('object not found');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isNotFound
-                  ? 'The attached file is no longer available on cloud storage. Please ask your teacher to re-upload it.'
-                  : 'Unable to open attachment.',
-            ),
-          ),
+        AppTopToast.error(
+          context,
+          isNotFound
+              ? 'The attached file is no longer available on cloud storage. Please ask your teacher to re-upload it.'
+              : 'Unable to open attachment.',
         );
       }
     } finally {
@@ -343,14 +334,7 @@ class StudentClassworkCard extends StatelessWidget {
                       ? 'No deadline'
                       : 'Due ${_formatDate(classwork.deadline!)}',
                 ),
-                if (classwork.score != null)
-                  _Detail(
-                    icon: Icons.grade_rounded,
-                    text: 'Score: ${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts',
-                    color: AppTheme.catBlue,
-                    fontWeight: FontWeight.bold,
-                  )
-                else if (classwork.maxScore > 0)
+                if (classwork.maxScore > 0)
                   _Detail(
                     icon: Icons.stars_outlined,
                     text: '${_formatScore(classwork.maxScore)} points',
@@ -364,23 +348,37 @@ class StudentClassworkCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 8,
+                  vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6).withValues(alpha: isDark ? 0.15 : 0.1),
+                  color: isDark
+                      ? theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.3)
+                      : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: const Color(0xFF8B5CF6).withValues(alpha: isDark ? 0.35 : 0.25),
+                    color: isDark
+                        ? theme.colorScheme.outline.withValues(alpha: 0.2)
+                        : const Color(0xFFE2E8F0),
                   ),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.handshake_outlined,
-                      size: 16,
-                      color: Color(0xFF8B5CF6),
+                    Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary
+                            .withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        Icons.handshake_outlined,
+                        size: 15,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         classwork.type == 'exam'
@@ -390,8 +388,9 @@ class StudentClassworkCard extends StatelessWidget {
                             : 'In-Person ${classwork.type == 'performance_task' ? 'Performance Task' : 'Activity'}: Submit your physical work directly to your teacher in class. Your score and status will appear here once recorded.',
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? const Color(0xFFA78BFA) : const Color(0xFF6D28D9),
+                          height: 1.4,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -540,6 +539,7 @@ class StudentClassworkCard extends StatelessWidget {
                       children: [
                         if (isEntranceClosed) ...[
                           Container(
+                            width: double.infinity,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
                               vertical: 6,
@@ -557,7 +557,6 @@ class StudentClassworkCard extends StatelessWidget {
                               ),
                             ),
                             child: const Row(
-                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
                                   Icons.lock_clock_outlined,
@@ -565,12 +564,14 @@ class StudentClassworkCard extends StatelessWidget {
                                   color: Color(0xFFDC2626),
                                 ),
                                 SizedBox(width: 6),
-                                Text(
-                                  'Entrance Window Expired (15 mins past start) • Instructor authorization required',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFFDC2626),
+                                Expanded(
+                                  child: Text(
+                                    'Entrance Window Expired (15 mins past start) • Instructor authorization required',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFFDC2626),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -581,10 +582,13 @@ class StudentClassworkCard extends StatelessWidget {
                           alignment: Alignment.centerRight,
                           child: FilledButton.icon(
                             style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFDC2626),
+                              backgroundColor: theme.colorScheme.primary,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 10,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
                             onPressed: () => _startAssessmentFlow(context),
@@ -598,6 +602,7 @@ class StudentClassworkCard extends StatelessWidget {
                                   : 'Take Examination (App)',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
+                                fontSize: 13,
                               ),
                             ),
                           ),
@@ -708,11 +713,16 @@ class StudentClassworkCard extends StatelessWidget {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: AppTheme.catBlue.withValues(alpha: 0.08),
+                  color: isDark
+                      ? theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.3)
+                      : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: AppTheme.catBlue.withValues(alpha: 0.3),
-                    width: 1.2,
+                    color: isDark
+                        ? theme.colorScheme.outline.withValues(alpha: 0.2)
+                        : const Color(0xFFE2E8F0),
+                    width: 1.0,
                   ),
                 ),
                 child: Row(
@@ -720,13 +730,13 @@ class StudentClassworkCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: AppTheme.catBlue.withValues(alpha: 0.15),
+                        color: const Color(0xFF10B981).withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
-                        Icons.grade_rounded,
-                        size: 20,
-                        color: AppTheme.catBlue,
+                        Icons.star_rounded,
+                        size: 18,
+                        color: Color(0xFF059669),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -734,22 +744,22 @@ class StudentClassworkCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Score Recorded by Teacher',
                             style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.catBlue,
-                              letterSpacing: 0.3,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurfaceVariant,
+                              letterSpacing: 0.2,
                             ),
                           ),
                           const SizedBox(height: 1),
                           Text(
                             '${_formatScore(classwork.score!)} / ${_formatScore(classwork.maxScore)} pts',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                              color: AppTheme.catBlue,
+                              fontSize: 15,
+                              color: theme.colorScheme.onSurface,
                             ),
                           ),
                         ],
@@ -1026,12 +1036,9 @@ class StudentClassworkCard extends StatelessWidget {
           ? '${diff.inHours}h ${diff.inMinutes % 60}m'
           : '${diff.inMinutes} minutes';
       final label = classwork.type == 'quiz' ? 'quiz' : 'examination';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'This $label is scheduled for ${_formatDate(classwork.assignedAt!)}. Testing window opens in $timeStr.',
-          ),
-        ),
+      AppTopToast.info(
+        context,
+        'This $label is scheduled for ${_formatDate(classwork.assignedAt!)}. Testing window opens in $timeStr.',
       );
       return;
     }
@@ -1258,8 +1265,7 @@ class StudentClassworkCard extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Failed to launch exam: $e')));
+        AppTopToast.error(context, 'Failed to launch exam: $e');
       }
     }
   }
@@ -1295,14 +1301,10 @@ class _Detail extends StatelessWidget {
   const _Detail({
     required this.icon,
     required this.text,
-    this.color,
-    this.fontWeight,
   });
 
   final IconData icon;
   final String text;
-  final Color? color;
-  final FontWeight? fontWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -1310,14 +1312,11 @@ class _Detail extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: color ?? defaultColor),
+        Icon(icon, size: 16, color: defaultColor),
         const SizedBox(width: 5),
         Text(
           text,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: color,
-                fontWeight: fontWeight,
-              ),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
     );

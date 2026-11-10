@@ -2653,6 +2653,16 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     try {
       final startStr = _formatDate(filter.dateRange.startDate);
       final endStr = _formatDate(filter.dateRange.endDate);
+      final cacheKey =
+          'attendance_history_${filter.subjectOfferingId}_${startStr}_${endStr}_${filter.offset}_${filter.pageSize}';
+
+      if (AppDataCache.instance.isFresh(cacheKey)) {
+        final cached =
+            AppDataCache.instance.get<AttendancePage<AttendanceWorkspaceRecord>>(
+          cacheKey,
+        );
+        if (cached != null) return cached;
+      }
 
       List<dynamic> rows;
       try {
@@ -2693,11 +2703,13 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         return AttendanceWorkspaceRecord.fromJson(map);
       }).toList();
 
-      return AttendancePage<AttendanceWorkspaceRecord>(
+      final page = AttendancePage<AttendanceWorkspaceRecord>(
         rows: recordList,
         nextOffset: filter.offset + recordList.length,
         hasMore: recordList.length == filter.pageSize,
       );
+      AppDataCache.instance.set(cacheKey, page);
+      return page;
     } catch (e) {
       debugPrint('Attendance history query notice: $e');
       return AttendancePage<AttendanceWorkspaceRecord>(
@@ -2716,6 +2728,14 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     try {
       final startStr = _formatDate(dateRange.startDate);
       final endStr = _formatDate(dateRange.endDate);
+      final cacheKey =
+          'attendance_analytics_${subjectOfferingId}_${startStr}_$endStr';
+
+      if (AppDataCache.instance.isFresh(cacheKey)) {
+        final cached =
+            AppDataCache.instance.get<AttendanceAnalyticsSummary>(cacheKey);
+        if (cached != null) return cached;
+      }
 
       final results = await Future.wait<dynamic>([
         _client
@@ -2857,7 +2877,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         );
       }
 
-      return AttendanceAnalyticsSummary(
+      final summary = AttendanceAnalyticsSummary(
         presenceRate: rate,
         absencesAndExcuses: absent + excused,
         warningCount: atRiskStudents.length,
@@ -2868,6 +2888,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         trendPoints: trendPoints,
         atRiskStudents: atRiskStudents,
       );
+      AppDataCache.instance.set(cacheKey, summary);
+      return summary;
     } catch (e) {
       debugPrint('Attendance analytics query notice: $e');
       return const AttendanceAnalyticsSummary(
@@ -2904,7 +2926,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             'status': newStatus.name,
             'recording_method': 'Manual',
             'remarks': trimmedReason,
-            if (uid != null) 'recorded_by': uid,
+            'recorded_by': ?uid,
           })
           .eq('id', recordId);
     } catch (err) {
@@ -2914,7 +2936,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             .update({
               'status': newStatus.name,
               'remarks': trimmedReason,
-              if (uid != null) 'recorded_by': uid,
+              'recorded_by': ?uid,
             })
             .eq('id', recordId);
       } else {

@@ -102,9 +102,10 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.textContaining('Rubric.docx'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(find.text('Unable to open attachment.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
     });
 
     testWidgets('renders on narrow mobile viewport (360px) without any horizontal overflow and omits redundant section/grade', (tester) async {
@@ -233,7 +234,8 @@ void main() {
       expect(find.text('Graded'), findsOneWidget);
 
       // Score in metadata and banner
-      expect(find.text('Score: 95 / 100 pts'), findsWidgets);
+      expect(find.text('95 / 100 pts'), findsOneWidget);
+      expect(find.text('100 points'), findsOneWidget);
       expect(find.text('Score Recorded by Teacher'), findsOneWidget);
 
       // Teacher remarks

@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
@@ -40,7 +41,11 @@ class AttendanceHistoryAnalyticsView extends StatefulWidget {
 }
 
 class AttendanceHistoryAnalyticsViewState
-    extends State<AttendanceHistoryAnalyticsView> {
+    extends State<AttendanceHistoryAnalyticsView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _chartAnimController;
+  late final Animation<double> _chartAnim;
+
   void setPreset(AttendanceDatePreset preset) {
     if (preset == _selectedPreset) return;
     setState(() => _selectedPreset = preset);
@@ -81,6 +86,7 @@ class AttendanceHistoryAnalyticsViewState
 
   bool _isLoadingAnalytics = true;
   AttendanceAnalyticsSummary? _analyticsSummary;
+  int? _hoveredBreakdownIndex;
 
   bool _isLoadingHistory = true;
   List<AttendanceWorkspaceRecord> _historyRows = [];
@@ -110,6 +116,14 @@ class AttendanceHistoryAnalyticsViewState
   @override
   void initState() {
     super.initState();
+    _chartAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _chartAnim = CurvedAnimation(
+      parent: _chartAnimController,
+      curve: Curves.easeOutCubic,
+    );
     _repository = widget.repository ?? SupabaseAttendanceRepository.instance;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -117,7 +131,40 @@ class AttendanceHistoryAnalyticsViewState
     final sevenDaysAgo = today.subtract(const Duration(days: 7));
     _customStartDate = sevenDaysAgo.isBefore(min2026) ? min2026 : sevenDaysAgo;
     _customEndDate = today;
+
+    // Instant SWR Hydration: Render Frame 1 immediately if cache is available
+    final initialRange = _computeCurrentDateRange();
+    final startStr = _formatDate(initialRange.startDate);
+    final endStr = _formatDate(initialRange.endDate);
+    final analyticsKey =
+        'attendance_analytics_${widget.subjectOfferingId}_${startStr}_$endStr';
+    final historyKey =
+        'attendance_history_${widget.subjectOfferingId}_${startStr}_${endStr}_0_500';
+
+    final cachedSummary =
+        AppDataCache.instance.get<AttendanceAnalyticsSummary>(analyticsKey);
+    if (cachedSummary != null) {
+      _analyticsSummary = cachedSummary;
+      _isLoadingAnalytics = false;
+      _chartAnimController.value = 1.0;
+    }
+
+    final cachedHistory =
+        AppDataCache.instance.get<AttendancePage<AttendanceWorkspaceRecord>>(
+      historyKey,
+    );
+    if (cachedHistory != null) {
+      _historyRows = List<AttendanceWorkspaceRecord>.from(cachedHistory.rows);
+      _isLoadingHistory = false;
+    }
+
     _loadAll();
+  }
+
+  @override
+  void dispose() {
+    _chartAnimController.dispose();
+    super.dispose();
   }
 
   @override
@@ -194,12 +241,29 @@ class AttendanceHistoryAnalyticsViewState
       return;
     }
 
-    setState(() {
-      _isLoadingAnalytics = true;
-    });
+    final range = _computeCurrentDateRange();
+    final startStr = _formatDate(range.startDate);
+    final endStr = _formatDate(range.endDate);
+    final cacheKey =
+        'attendance_analytics_${widget.subjectOfferingId}_${startStr}_$endStr';
+
+    final cachedSummary =
+        AppDataCache.instance.get<AttendanceAnalyticsSummary>(cacheKey);
+    if (cachedSummary != null) {
+      _analyticsSummary = cachedSummary;
+      _isLoadingAnalytics = false;
+      if (AppDataCache.instance.isFresh(cacheKey)) {
+        if (mounted) setState(() {});
+        _chartAnimController.forward(from: 0.0);
+        return;
+      }
+    } else if (_analyticsSummary == null) {
+      setState(() {
+        _isLoadingAnalytics = true;
+      });
+    }
 
     try {
-      final range = _computeCurrentDateRange();
       final summary = await _repository.getAttendanceAnalytics(
         subjectOfferingId: widget.subjectOfferingId,
         dateRange: range,
@@ -209,22 +273,25 @@ class AttendanceHistoryAnalyticsViewState
         _analyticsSummary = summary;
         _isLoadingAnalytics = false;
       });
+      _chartAnimController.forward(from: 0.0);
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _analyticsSummary = const AttendanceAnalyticsSummary(
-          presenceRate: null,
-          absencesAndExcuses: 0,
-          warningCount: 0,
-          presentCount: 0,
-          lateCount: 0,
-          absentCount: 0,
-          excusedCount: 0,
-          trendPoints: [],
-          atRiskStudents: [],
-        );
-        _isLoadingAnalytics = false;
-      });
+      if (_analyticsSummary == null) {
+        setState(() {
+          _analyticsSummary = const AttendanceAnalyticsSummary(
+            presenceRate: null,
+            absencesAndExcuses: 0,
+            warningCount: 0,
+            presentCount: 0,
+            lateCount: 0,
+            absentCount: 0,
+            excusedCount: 0,
+            trendPoints: [],
+            atRiskStudents: [],
+          );
+          _isLoadingAnalytics = false;
+        });
+      }
     }
   }
 
@@ -240,13 +307,30 @@ class AttendanceHistoryAnalyticsViewState
       return;
     }
 
-    setState(() {
-      _isLoadingHistory = true;
-      _historyRows = [];
-    });
+    final range = _computeCurrentDateRange();
+    final startStr = _formatDate(range.startDate);
+    final endStr = _formatDate(range.endDate);
+    final historyKey =
+        'attendance_history_${widget.subjectOfferingId}_${startStr}_${endStr}_0_500';
+
+    final cachedHistory =
+        AppDataCache.instance.get<AttendancePage<AttendanceWorkspaceRecord>>(
+      historyKey,
+    );
+    if (cachedHistory != null) {
+      _historyRows = List<AttendanceWorkspaceRecord>.from(cachedHistory.rows);
+      _isLoadingHistory = false;
+      if (AppDataCache.instance.isFresh(historyKey)) {
+        if (mounted) setState(() {});
+        return;
+      }
+    } else if (_historyRows.isEmpty) {
+      setState(() {
+        _isLoadingHistory = true;
+      });
+    }
 
     try {
-      final range = _computeCurrentDateRange();
       final page = await _repository.getAttendanceHistory(
         AttendanceHistoryFilter(
           subjectOfferingId: widget.subjectOfferingId,
@@ -263,10 +347,12 @@ class AttendanceHistoryAnalyticsViewState
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _historyRows = [];
-        _isLoadingHistory = false;
-      });
+      if (_historyRows.isEmpty) {
+        setState(() {
+          _historyRows = [];
+          _isLoadingHistory = false;
+        });
+      }
     }
   }
 
@@ -694,13 +780,22 @@ class AttendanceHistoryAnalyticsViewState
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: isDark
+            ? theme.colorScheme.surface.withValues(alpha: 0.82)
+            : Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(
-            alpha: isDark ? 0.16 : 0.12,
-          ),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : const Color(0xFFE2E8F0),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -710,8 +805,11 @@ class AttendanceHistoryAnalyticsViewState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: item.color.withValues(alpha: isDark ? 0.18 : 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: item.color.withValues(alpha: isDark ? 0.22 : 0.12),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                    color: item.color.withValues(alpha: isDark ? 0.35 : 0.25),
+                  ),
                 ),
                 child: Icon(item.icon, color: item.color, size: 18),
               ),
@@ -724,7 +822,7 @@ class AttendanceHistoryAnalyticsViewState
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
                   ),
                 ),
               ),
@@ -782,48 +880,170 @@ class AttendanceHistoryAnalyticsViewState
     );
   }
 
+  Widget _buildAttendanceCategoryPill(
+    String label,
+    Color color,
+    bool isDark,
+    ThemeData theme,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+      decoration: BoxDecoration(
+        color: isDark
+            ? color.withValues(alpha: 0.14)
+            : color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: color.withValues(alpha: isDark ? 0.35 : 0.25),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.45),
+                  blurRadius: 3,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : theme.colorScheme.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTrendChartCard(
     ThemeData theme,
     List<AttendanceTrendPoint> points,
   ) {
+    final isDark = theme.brightness == Brightness.dark;
+    const cPresent = Color(0xFF10B981);
+    const cAbsent = Color(0xFFEF4444);
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: isDark
+            ? theme.colorScheme.surface.withValues(alpha: 0.82)
+            : Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : const Color(0xFFE2E8F0),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
-              Icon(
-                LucideIcons.trendingUp,
-                size: 18,
-                color: theme.colorScheme.primary,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: cPresent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      LucideIcons.trendingUp,
+                      size: 16,
+                      color: cPresent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Attendance Trajectory & Trends',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Text(
-                'Attendance Trend',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Text(
+                  '${points.length} Sessions Logged',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 2),
+          Text(
+            'Historical class presence vs absences across recording periods.',
+            style: TextStyle(
+              fontSize: 11,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Category Legend Pills
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _buildAttendanceCategoryPill('Present (On-Time)', cPresent, isDark, theme),
+              _buildAttendanceCategoryPill('Absent / Excused', cAbsent, isDark, theme),
+            ],
+          ),
+          const SizedBox(height: 16),
+
           if (points.isEmpty)
             Container(
-              height: 160,
+              height: 180,
               width: double.infinity,
               decoration: BoxDecoration(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.03),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
                 ),
@@ -834,7 +1054,7 @@ class AttendanceHistoryAnalyticsViewState
                   children: [
                     Icon(
                       LucideIcons.lineChart,
-                      size: 28,
+                      size: 32,
                       color: theme.colorScheme.primary.withValues(alpha: 0.45),
                     ),
                     const SizedBox(height: 8),
@@ -863,27 +1083,55 @@ class AttendanceHistoryAnalyticsViewState
               ),
             )
           else ...[
-            SizedBox(
-              height: 160,
-              child: CustomPaint(
-                size: const Size(double.infinity, 160),
-                painter: TrendChartPainter(
-                  points: points,
-                  presentColor: AppTheme.catGreen,
-                  absentColor: AppTheme.catRed,
-                  textColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            AnimatedBuilder(
+              animation: _chartAnim,
+              builder: (context, _) {
+                return SizedBox(
+                  height: 190,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    size: const Size(double.infinity, 190),
+                    painter: TrendChartPainter(
+                      points: points,
+                      presentColor: cPresent,
+                      absentColor: cAbsent,
+                      textColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      progress: _chartAnim.value,
+                      isDark: isDark,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Semantics(
-              label: 'Trend Summary',
-              child: Text(
-                'Trend summary: ${points.length} periods recorded. Latest period had ${points.last.presentCount} present and ${points.last.absentOrExcusedCount} absent/excused.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.sparkles, size: 14, color: cPresent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Semantics(
+                      label: 'Trend Summary',
+                      child: Text(
+                        'Trend summary: ${points.length} periods recorded. Latest period had ${points.last.presentCount} present and ${points.last.absentOrExcusedCount} absent/excused.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -896,136 +1144,498 @@ class AttendanceHistoryAnalyticsViewState
     ThemeData theme,
     AttendanceAnalyticsSummary summary,
   ) {
+    final isDark = theme.brightness == Brightness.dark;
     final total =
         summary.presentCount +
         summary.lateCount +
         summary.absentCount +
         summary.excusedCount;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+    final rateVal = summary.presenceRate?.clamp(0.0, 100.0);
+    final rateStr = rateVal != null ? '${rateVal.toStringAsFixed(1)}%' : '0.0%';
+
+    final pPres = total > 0 ? (summary.presentCount / total) * 100 : 0.0;
+    final pLate = total > 0 ? (summary.lateCount / total) * 100 : 0.0;
+    final pAbs = total > 0 ? (summary.absentCount / total) * 100 : 0.0;
+    final pExc = total > 0 ? (summary.excusedCount / total) * 100 : 0.0;
+
+    const cPresent = Color(0xFF10B981);
+    const cLate = Color(0xFFF59E0B);
+    const cAbsent = Color(0xFFEF4444);
+    const cExcused = Color(0xFF6366F1);
+
+    final slices = <_AttendanceDonutSlice>[
+      _AttendanceDonutSlice(
+        label: 'Present (${summary.presentCount})',
+        sub: 'Present',
+        count: summary.presentCount,
+        pct: pPres,
+        color: cPresent,
+        dotLabel: 'Present: ${summary.presentCount} (${pPres.toStringAsFixed(1)}%)',
+      ),
+      _AttendanceDonutSlice(
+        label: 'Late (${summary.lateCount})',
+        sub: 'Late',
+        count: summary.lateCount,
+        pct: pLate,
+        color: cLate,
+        dotLabel: 'Late: ${summary.lateCount} (${pLate.toStringAsFixed(1)}%)',
+      ),
+      _AttendanceDonutSlice(
+        label: 'Absent (${summary.absentCount})',
+        sub: 'Absent',
+        count: summary.absentCount,
+        pct: pAbs,
+        color: cAbsent,
+        dotLabel: 'Absent: ${summary.absentCount} (${pAbs.toStringAsFixed(1)}%)',
+      ),
+      _AttendanceDonutSlice(
+        label: 'Excused (${summary.excusedCount})',
+        sub: 'Excused',
+        count: summary.excusedCount,
+        pct: pExc,
+        color: cExcused,
+        dotLabel: 'Excused: ${summary.excusedCount} (${pExc.toStringAsFixed(1)}%)',
+      ),
+    ];
+
+    final statusItems = [
+      (
+        title: 'Present',
+        subtitle: 'On-Time',
+        count: summary.presentCount,
+        pct: pPres,
+        color: cPresent,
+        icon: LucideIcons.checkCircle2,
+      ),
+      (
+        title: 'Late',
+        subtitle: 'Tardy',
+        count: summary.lateCount,
+        pct: pLate,
+        color: cLate,
+        icon: LucideIcons.clock,
+      ),
+      (
+        title: 'Absent',
+        subtitle: 'Unexcused',
+        count: summary.absentCount,
+        pct: pAbs,
+        color: cAbsent,
+        icon: LucideIcons.xCircle,
+      ),
+      (
+        title: 'Excused',
+        subtitle: 'Approved',
+        count: summary.excusedCount,
+        pct: pExc,
+        color: cExcused,
+        icon: LucideIcons.shieldCheck,
+      ),
+    ];
+
+    final donutWidget = SizedBox(
+      width: 180,
+      height: 180,
+      child: MouseRegion(
+        onHover: (event) {
+          const center = Offset(90, 90);
+          final dx = event.localPosition.dx - center.dx;
+          final dy = event.localPosition.dy - center.dy;
+          final dist = sqrt(dx * dx + dy * dy);
+          if (dist >= 35 && dist <= 95) {
+            var angle = atan2(dy, dx) - (-pi / 2);
+            if (angle < 0) angle += 2 * pi;
+            var cur = 0.0;
+            int? match;
+            for (int i = 0; i < slices.length; i++) {
+              if (slices[i].pct <= 0) continue;
+              final sweep = (slices[i].pct / 100) * 2 * pi;
+              if (angle >= cur && angle < cur + sweep) {
+                match = i;
+                break;
+              }
+              cur += sweep;
+            }
+            if (_hoveredBreakdownIndex != match) {
+              setState(() => _hoveredBreakdownIndex = match);
+            }
+          } else {
+            if (_hoveredBreakdownIndex != null) {
+              setState(() => _hoveredBreakdownIndex = null);
+            }
+          }
+        },
+        onExit: (_) {
+          if (_hoveredBreakdownIndex != null) {
+            setState(() => _hoveredBreakdownIndex = null);
+          }
+        },
+        child: AnimatedBuilder(
+          animation: _chartAnim,
+          builder: (context, _) {
+            final hovered = _hoveredBreakdownIndex != null &&
+                    _hoveredBreakdownIndex! < slices.length
+                ? slices[_hoveredBreakdownIndex!]
+                : null;
+
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size(170, 170),
+                  painter: _AttendanceDonutChartPainter(
+                    slices: slices,
+                    progress: _chartAnim.value,
+                    strokeWidth: 22,
+                    isDark: isDark,
+                    hoveredIndex: _hoveredBreakdownIndex,
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hovered != null) ...[
+                      Text(
+                        hovered.sub,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: hovered.color,
+                        ),
+                        maxLines: 1,
+                      ),
+                      Text(
+                        '${hovered.pct.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      Text(
+                        '${hovered.count} ${hovered.count == 1 ? 'log' : 'logs'}',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: hovered.color,
+                        ),
+                      ),
+                    ] else ...[
+                      Text(
+                        'Total Logs',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.55),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '$total',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      Text(
+                        total > 0 ? '$rateStr Pres.' : 'No Records',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: total > 0
+                              ? cPresent
+                              : theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            );
+          },
         ),
+      ),
+    );
+
+    final statusListWidget = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(statusItems.length, (i) {
+        final item = statusItems[i];
+        final isHovered = _hoveredBreakdownIndex == i;
+        return Padding(
+          padding: EdgeInsets.only(bottom: i < statusItems.length - 1 ? 4 : 0),
+          child: _buildAttendanceStatusRow(
+            title: item.title,
+            subtitle: item.subtitle,
+            count: item.count,
+            pct: item.pct,
+            color: item.color,
+            icon: item.icon,
+            isDark: isDark,
+            theme: theme,
+            isHovered: isHovered,
+            onEnter: () => setState(() => _hoveredBreakdownIndex = i),
+            onExit: () => setState(() => _hoveredBreakdownIndex = null),
+          ),
+        );
+      }),
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isDark
+            ? theme.colorScheme.surface.withValues(alpha: 0.82)
+            : Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : const Color(0xFFE2E8F0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(
-                LucideIcons.pieChart,
-                size: 18,
-                color: theme.colorScheme.primary,
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      LucideIcons.pieChart,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Status Breakdown',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3.5,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                  ),
+                ),
                 child: Text(
-                  'Status Breakdown',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  '$total Total Logs',
                   style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          _buildBreakdownRow(
-            theme,
-            'Present',
-            summary.presentCount,
-            total,
-            AppTheme.catGreen,
-          ),
-          const SizedBox(height: 8),
-          _buildBreakdownRow(
-            theme,
-            'Late',
-            summary.lateCount,
-            total,
-            AppTheme.catOrange,
-          ),
-          const SizedBox(height: 8),
-          _buildBreakdownRow(
-            theme,
-            'Absent',
-            summary.absentCount,
-            total,
-            AppTheme.catRed,
-          ),
-          const SizedBox(height: 8),
-          _buildBreakdownRow(
-            theme,
-            'Excused',
-            summary.excusedCount,
-            total,
-            AppTheme.catSlate,
-          ),
-          if (total == 0) ...[
-            const SizedBox(height: 12),
-            Text(
-              'No attendance status breakdown recorded for this period yet.',
-              style: TextStyle(
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-              ),
+          const SizedBox(height: 2),
+          Text(
+            'Proportion of verified attendance logs for this period.',
+            style: TextStyle(
+              fontSize: 11,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
-          ],
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 440) {
+                return Column(
+                  children: [
+                    Center(child: donutWidget),
+                    const SizedBox(height: 14),
+                    statusListWidget,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  donutWidget,
+                  const SizedBox(width: 16),
+                  Expanded(child: statusListWidget),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildBreakdownRow(
-    ThemeData theme,
-    String label,
-    int count,
-    int total,
-    Color color,
-  ) {
-    final pct = total > 0 ? (count / total) * 100 : 0.0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildAttendanceStatusRow({
+    required String title,
+    required String subtitle,
+    required int count,
+    required double pct,
+    required Color color,
+    required IconData icon,
+    required bool isDark,
+    required ThemeData theme,
+    required bool isHovered,
+    required VoidCallback onEnter,
+    required VoidCallback onExit,
+  }) {
+    return MouseRegion(
+      onEnter: (_) => onEnter(),
+      onExit: (_) => onExit(),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isHovered
+              ? color.withValues(alpha: isDark ? 0.16 : 0.08)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isHovered
+                ? color.withValues(alpha: isDark ? 0.6 : 0.45)
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFE2E8F0)),
+            width: isHovered ? 1.5 : 1.0,
+          ),
+          boxShadow: isHovered
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: isDark ? 0.25 : 0.12),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface,
+            Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: isDark ? 0.25 : 0.12),
+                shape: BoxShape.circle,
               ),
+              child: Icon(icon, size: 12, color: color),
             ),
-            Text(
-              '$count (${pct.toStringAsFixed(1)}%)',
-              style: TextStyle(
-                fontSize: 12,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '$count ${count == 1 ? 'log' : 'logs'}',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.7,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(
+                                alpha: isDark ? 0.22 : 0.12,
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: color.withValues(
+                                  alpha: isDark ? 0.4 : 0.25,
+                                ),
+                              ),
+                            ),
+                            child: Text(
+                              '${pct.toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: (pct / 100).clamp(0.0, 1.0),
+                      minHeight: 3.5,
+                      backgroundColor: isDark
+                          ? Colors.white10
+                          : const Color(0xFFE2E8F0),
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: total > 0 ? count / total : 0,
-            backgroundColor: color.withValues(alpha: 0.15),
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-            minHeight: 6,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -2062,22 +2672,130 @@ class _AttendanceCorrectionDialogState
   }
 }
 
+class _AttendanceDonutSlice {
+  final String label;
+  final String sub;
+  final int count;
+  final double pct;
+  final Color color;
+  final String dotLabel;
+
+  const _AttendanceDonutSlice({
+    required this.label,
+    required this.sub,
+    required this.count,
+    required this.pct,
+    required this.color,
+    required this.dotLabel,
+  });
+}
+
+class _AttendanceDonutChartPainter extends CustomPainter {
+  final List<_AttendanceDonutSlice> slices;
+  final double progress;
+  final double strokeWidth;
+  final bool isDark;
+  final int? hoveredIndex;
+
+  _AttendanceDonutChartPainter({
+    required this.slices,
+    required this.progress,
+    required this.strokeWidth,
+    this.isDark = false,
+    this.hoveredIndex,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width - strokeWidth) / 2;
+
+    // Track Ring
+    final trackPaint = Paint()
+      ..color = isDark ? Colors.white10 : const Color(0xFFF1F5F9)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    canvas.drawCircle(center, radius, trackPaint);
+
+    if (slices.isEmpty) return;
+
+    var startAngle = -pi / 2;
+
+    for (int i = 0; i < slices.length; i++) {
+      final slice = slices[i];
+      if (slice.pct <= 0) continue;
+      final sweepAngle = (slice.pct / 100) * 2 * pi * progress;
+
+      final isHovered = hoveredIndex == i;
+      final effectiveStroke = isHovered ? strokeWidth + 4 : strokeWidth;
+
+      if (isHovered) {
+        final glowPaint = Paint()
+          ..color = slice.color.withValues(alpha: 0.45)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = effectiveStroke + 4
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius),
+          startAngle,
+          sweepAngle,
+          false,
+          glowPaint,
+        );
+      }
+
+      final slicePaint = Paint()
+        ..color = slice.color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = effectiveStroke
+        ..strokeCap = StrokeCap.butt;
+
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweepAngle,
+        false,
+        slicePaint,
+      );
+
+      startAngle += (slice.pct / 100) * 2 * pi;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AttendanceDonutChartPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.slices != slices ||
+        oldDelegate.isDark != isDark ||
+        oldDelegate.hoveredIndex != hoveredIndex;
+  }
+}
+
 class TrendChartPainter extends CustomPainter {
   final List<AttendanceTrendPoint> points;
   final Color presentColor;
   final Color absentColor;
   final Color textColor;
+  final double progress;
+  final bool isDark;
 
   TrendChartPainter({
     required this.points,
     required this.presentColor,
     required this.absentColor,
     required this.textColor,
+    this.progress = 1.0,
+    this.isDark = false,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
+
+    const bottomPadding = 22.0;
+    const topPadding = 14.0;
+    final chartHeight = size.height - bottomPadding - topPadding;
+    final baseline = size.height - bottomPadding;
 
     final maxVal = points.fold<int>(
       1,
@@ -2085,68 +2803,181 @@ class TrendChartPainter extends CustomPainter {
           max(prev, max(elem.presentCount, elem.absentOrExcusedCount)),
     );
 
+    // Subtle horizontal grid lines with glassmorphism style
     final gridPaint = Paint()
-      ..color = textColor.withValues(alpha: 0.15)
+      ..color = textColor.withValues(alpha: isDark ? 0.12 : 0.08)
       ..strokeWidth = 1;
 
     for (int i = 0; i <= 3; i++) {
-      final y = size.height - (size.height * i / 3);
+      final y = baseline - (chartHeight * i / 3);
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    final presentPaint = Paint()
-      ..color = presentColor
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke;
-
-    final absentPaint = Paint()
-      ..color = absentColor
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke;
-
-    final dotPresentPaint = Paint()
-      ..color = presentColor
-      ..style = PaintingStyle.fill;
-
-    final dotAbsentPaint = Paint()
-      ..color = absentColor
-      ..style = PaintingStyle.fill;
-
     final n = points.length;
     final stepX = n > 1 ? size.width / (n - 1) : size.width / 2;
+    final clampedProgress = progress.clamp(0.0, 1.0);
+
+    final presentOffsets = <Offset>[];
+    final absentOffsets = <Offset>[];
+
+    for (int i = 0; i < n; i++) {
+      final x = n > 1 ? i * stepX : size.width / 2;
+      final yPres = baseline -
+          ((points[i].presentCount / maxVal) * chartHeight * clampedProgress);
+      final yAbs = baseline -
+          ((points[i].absentOrExcusedCount / maxVal) *
+              chartHeight *
+              clampedProgress);
+
+      presentOffsets.add(Offset(x, yPres));
+      absentOffsets.add(Offset(x, yAbs));
+    }
+
+    // 1. Draw glowing gradient areas under lines (Glassmorphism fill)
+    if (presentOffsets.length > 1) {
+      final presentAreaPath = Path()..moveTo(presentOffsets.first.dx, baseline);
+      for (final pt in presentOffsets) {
+        presentAreaPath.lineTo(pt.dx, pt.dy);
+      }
+      presentAreaPath.lineTo(presentOffsets.last.dx, baseline);
+      presentAreaPath.close();
+
+      final presentAreaPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            presentColor.withValues(alpha: isDark ? 0.30 : 0.18),
+            presentColor.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromLTWH(0, topPadding, size.width, chartHeight))
+        ..style = PaintingStyle.fill;
+
+      canvas.drawPath(presentAreaPath, presentAreaPaint);
+
+      final absentAreaPath = Path()..moveTo(absentOffsets.first.dx, baseline);
+      for (final pt in absentOffsets) {
+        absentAreaPath.lineTo(pt.dx, pt.dy);
+      }
+      absentAreaPath.lineTo(absentOffsets.last.dx, baseline);
+      absentAreaPath.close();
+
+      final absentAreaPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            absentColor.withValues(alpha: isDark ? 0.25 : 0.14),
+            absentColor.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromLTWH(0, topPadding, size.width, chartHeight))
+        ..style = PaintingStyle.fill;
+
+      canvas.drawPath(absentAreaPath, absentAreaPaint);
+    }
+
+    // 2. Stroke lines
+    final presentLinePaint = Paint()
+      ..color = presentColor
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    final absentLinePaint = Paint()
+      ..color = absentColor
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
 
     final presentPath = Path();
     final absentPath = Path();
 
     for (int i = 0; i < n; i++) {
-      final x = n > 1 ? i * stepX : size.width / 2;
-      final yPres =
-          size.height -
-          (points[i].presentCount / maxVal * (size.height - 20)) -
-          10;
-      final yAbs =
-          size.height -
-          (points[i].absentOrExcusedCount / maxVal * (size.height - 20)) -
-          10;
-
       if (i == 0) {
-        presentPath.moveTo(x, yPres);
-        absentPath.moveTo(x, yAbs);
+        presentPath.moveTo(presentOffsets[i].dx, presentOffsets[i].dy);
+        absentPath.moveTo(absentOffsets[i].dx, absentOffsets[i].dy);
       } else {
-        presentPath.lineTo(x, yPres);
-        absentPath.lineTo(x, yAbs);
+        presentPath.lineTo(presentOffsets[i].dx, presentOffsets[i].dy);
+        absentPath.lineTo(absentOffsets[i].dx, absentOffsets[i].dy);
       }
-
-      canvas.drawCircle(Offset(x, yPres), 3.5, dotPresentPaint);
-      canvas.drawCircle(Offset(x, yAbs), 3.5, dotAbsentPaint);
     }
 
-    canvas.drawPath(presentPath, presentPaint);
-    canvas.drawPath(absentPath, absentPaint);
+    canvas.drawPath(presentPath, presentLinePaint);
+    canvas.drawPath(absentPath, absentLinePaint);
+
+    // 3. Glowing halo dots & X-axis date labels
+    for (int i = 0; i < n; i++) {
+      final ptPres = presentOffsets[i];
+      final ptAbs = absentOffsets[i];
+
+      // Present Point
+      canvas.drawCircle(
+        ptPres,
+        5.5,
+        Paint()..color = presentColor.withValues(alpha: 0.25),
+      );
+      canvas.drawCircle(
+        ptPres,
+        3.5,
+        Paint()..color = presentColor,
+      );
+      canvas.drawCircle(
+        ptPres,
+        1.5,
+        Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
+      );
+
+      // Absent Point
+      canvas.drawCircle(
+        ptAbs,
+        5.5,
+        Paint()..color = absentColor.withValues(alpha: 0.25),
+      );
+      canvas.drawCircle(
+        ptAbs,
+        3.5,
+        Paint()..color = absentColor,
+      );
+      canvas.drawCircle(
+        ptAbs,
+        1.5,
+        Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
+      );
+
+      // Date / Period label on X-axis
+      final rawLabel = points[i].periodLabel ??
+          (points[i].bucketStart != null
+              ? '${points[i].bucketStart!.month}/${points[i].bucketStart!.day}'
+              : 'P${i + 1}');
+
+      final label = rawLabel.length > 8 ? rawLabel.substring(0, 8) : rawLabel;
+
+      final textSpan = TextSpan(
+        text: label,
+        style: TextStyle(
+          color: textColor.withValues(alpha: 0.70),
+          fontSize: 9.5,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+      final tp = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      final labelX =
+          (ptPres.dx - tp.width / 2).clamp(0.0, size.width - tp.width);
+      tp.paint(canvas, Offset(labelX, baseline + 5));
+    }
   }
 
   @override
   bool shouldRepaint(covariant TrendChartPainter oldDelegate) {
-    return oldDelegate.points != points || oldDelegate.textColor != textColor;
+    return oldDelegate.points != points ||
+        oldDelegate.textColor != textColor ||
+        oldDelegate.progress != progress ||
+        oldDelegate.isDark != isDark;
   }
 }

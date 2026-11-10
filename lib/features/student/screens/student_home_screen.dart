@@ -229,7 +229,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         appBar: AppBar(
           title: const Text(
             'Student',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
           leading: IconButton(
             tooltip: 'Open menu',
@@ -675,8 +675,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                                       : student.fullName,
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 if (enrollmentLabel.isNotEmpty) ...[
@@ -718,7 +718,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                               ),
                             ),
                             child: CircleAvatar(
-                              radius: 28,
+                              radius: 24,
                               backgroundColor: Colors.white.withValues(
                                 alpha: 0.2,
                               ),
@@ -728,7 +728,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                                     : 'S',
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 24,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -995,9 +995,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             Expanded(
               child: Text(
                 title,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15.5,
                 ),
               ),
             ),
@@ -1553,12 +1553,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                     ),
                   ),
                   child: CircleAvatar(
-                    radius: 34,
+                    radius: 28,
                     backgroundColor: Colors.white.withValues(alpha: 0.2),
                     child: Text(
                       initial,
                       style: const TextStyle(
-                        fontSize: 28,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -1592,8 +1592,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   student.fullName,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
                 ),

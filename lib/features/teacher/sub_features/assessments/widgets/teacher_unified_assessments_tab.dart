@@ -710,13 +710,9 @@ class _TeacherUnifiedAssessmentsTabState
                           icon: Icons.description_outlined,
                           onPressed: () {
                             if (_isCurrentSubjectZeroExam) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'This subject has no Examination component under DepEd Order No. 015, s. 2026.',
-                                  ),
-                                  backgroundColor: AppTheme.catPurple,
-                                ),
+                              AppTopToast.info(
+                                context,
+                                'This subject has no Examination component under DepEd Order No. 015, s. 2026.',
                               );
                               return;
                             }
@@ -2013,14 +2009,9 @@ class _TeacherUnifiedAssessmentsTabState
         } finally {
           if (mounted) {
             setState(() => _isSyncing = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Classwork updated and synced with gradebook successfully.',
-                ),
-                duration: Duration(seconds: 2),
-                backgroundColor: Color(0xFF0F8A48),
-              ),
+            AppTopToast.success(
+              context,
+              'Classwork updated and synced with gradebook successfully.',
             );
           }
         }

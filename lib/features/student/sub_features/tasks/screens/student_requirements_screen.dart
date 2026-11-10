@@ -59,53 +59,62 @@ class _StudentRequirementsScreenState extends State<StudentRequirementsScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Performance Task'),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
+        title: const Text(
+          'Performance Task',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
-      body: _isLoading
-          ? Center(
-              child: LoadingAnimationWidget.staggeredDotsWave(
-                color: theme.colorScheme.primary,
-                size: 40,
-              ),
-            )
-          : AppPullToRefresh(
-              onRefresh: () =>
-                  _loadRequirements(forceRefresh: true, silent: true),
-              child: _loadError != null
-                  ? AppPullToRefresh.scrollableState(
-                      child: _buildMessage(
-                        context,
-                        icon: Icons.cloud_off_outlined,
-                        title: 'Could not load performance tasks',
-                        message: _loadError.toString(),
-                        action: TextButton.icon(
-                          onPressed: () =>
-                              _loadRequirements(forceRefresh: true),
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Try again'),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: _isLoading
+              ? Center(
+                  child: LoadingAnimationWidget.staggeredDotsWave(
+                    color: theme.colorScheme.primary,
+                    size: 40,
+                  ),
+                )
+              : AppPullToRefresh(
+                  onRefresh: () =>
+                      _loadRequirements(forceRefresh: true, silent: true),
+                  child: _loadError != null
+                      ? AppPullToRefresh.scrollableState(
+                          child: _buildMessage(
+                            context,
+                            icon: Icons.cloud_off_outlined,
+                            title: 'Could not load performance tasks',
+                            message: _loadError.toString(),
+                            action: TextButton.icon(
+                              onPressed: () =>
+                                  _loadRequirements(forceRefresh: true),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Try again'),
+                            ),
+                          ),
+                        )
+                      : _requirements.isEmpty
+                      ? AppPullToRefresh.scrollableState(
+                          child: _buildMessage(
+                            context,
+                            icon: Icons.workspace_premium_outlined,
+                            title: 'No performance tasks yet',
+                            message: 'Performance tasks posted by your teachers will appear here.',
+                          ),
+                        )
+                      : ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _requirements.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) =>
+                              StudentClassworkCard(classwork: _requirements[index]),
                         ),
-                      ),
-                    )
-                  : _requirements.isEmpty
-                  ? AppPullToRefresh.scrollableState(
-                      child: _buildMessage(
-                        context,
-                        icon: Icons.workspace_premium_outlined,
-                        title: 'No performance tasks yet',
-                        message: 'Performance tasks posted by your teachers will appear here.',
-                      ),
-                    )
-                  : ListView.separated(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _requirements.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) =>
-                          StudentClassworkCard(classwork: _requirements[index]),
-                    ),
-            ),
+                ),
+        ),
+      ),
     );
   }
 
@@ -120,10 +129,10 @@ class _StudentRequirementsScreenState extends State<StudentRequirementsScreen> {
     final isDark = theme.brightness == Brightness.dark;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: theme.colorScheme.onSurface.withValues(
             alpha: isDark ? 0.14 : 0.09,
@@ -134,30 +143,33 @@ class _StudentRequirementsScreenState extends State<StudentRequirementsScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 66,
-            height: 66,
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
               color: theme.colorScheme.primary.withValues(
                 alpha: isDark ? 0.18 : 0.1,
               ),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 32, color: theme.colorScheme.primary),
+            child: Icon(icon, size: 26, color: theme.colorScheme.primary),
           ),
           const SizedBox(height: 14),
           Text(
             title,
             textAlign: TextAlign.center,
             style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             message,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
+              fontSize: 12.5,
+              height: 1.4,
             ),
           ),
           if (action != null) ...[const SizedBox(height: 12), action],

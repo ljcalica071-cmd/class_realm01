@@ -98,8 +98,8 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
                   Text(
                     s.subject,
                     style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   Text(
@@ -138,7 +138,7 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
               context,
               icon: Icons.place_outlined,
               label: 'Room / Venue',
-              value: s.room,
+              value: s.room.trim().isNotEmpty ? s.room : 'TBA / Not specified',
             ),
           ],
         ),
@@ -196,9 +196,13 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Schedule'),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
+        title: const Text(
+          'My Schedule',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         actions: [
           IconButton(
             icon: Icon(
@@ -219,9 +223,12 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
           ),
         ],
       ),
-      body: Container(
-        color: theme.scaffoldBackgroundColor,
-        child: Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: Container(
+            color: theme.scaffoldBackgroundColor,
+            child: Column(
           children: [
             // Top View Switcher Header
             Container(
@@ -375,6 +382,8 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
           ],
         ),
       ),
+    ),
+    ),
     );
   }
 
@@ -458,27 +467,51 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
                                 fontSize: 16,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.place_outlined,
-                                  size: 14,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.6,
+                            if (s.room.trim().isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.place_outlined,
+                                    size: 14,
+                                    color: theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.6,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  s.room,
-                                  style: TextStyle(
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.6),
-                                    fontSize: 13,
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    s.room,
+                                    style: TextStyle(
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
+                                      fontSize: 13,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
+                            ] else if (s.section.trim().isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.class_outlined,
+                                    size: 14,
+                                    color: theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.6,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    s.section,
+                                    style: TextStyle(
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
