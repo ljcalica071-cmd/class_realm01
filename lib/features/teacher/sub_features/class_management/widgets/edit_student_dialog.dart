@@ -312,8 +312,8 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
           icon: Icons.save_outlined,
           onPressed: _isSaving ? null : _submit,
           isLoading: _isSaving,
-          width: 180,
-          height: 44,
+          minWidth: 130,
+          height: 40,
         ),
       ],
     );

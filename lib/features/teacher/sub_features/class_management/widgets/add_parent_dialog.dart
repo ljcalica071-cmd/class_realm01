@@ -742,26 +742,28 @@ class _AddParentDialogState extends State<AddParentDialog> {
           children: [
             AppSecondaryButton(
               label: 'Cancel',
-              width: 140,
-              height: 44,
+              minWidth: 90,
+              height: 40,
               onPressed: () => Navigator.of(context).pop(),
             ),
-            const SizedBox(width: 12),
-            AppPrimaryButton(
-              label: _detectedExistingParent != null
-                  ? 'Link to Existing Parent'
-                  : 'Create Parent Account',
-              icon: _detectedExistingParent != null
-                  ? Icons.link_rounded
-                  : Icons.person_add_alt_1,
-              isLoading: _isSubmitting,
-              onPressed: _isSubmitting
-                  ? null
-                  : (_detectedExistingParent != null
-                        ? _submitLinkToExistingParent
-                        : _submitNewParent),
-              width: 220,
-              height: 44,
+            const SizedBox(width: 10),
+            Flexible(
+              child: AppPrimaryButton(
+                label: _detectedExistingParent != null
+                    ? 'Link to Existing Parent'
+                    : 'Create Parent Account',
+                icon: _detectedExistingParent != null
+                    ? Icons.link_rounded
+                    : Icons.person_add_alt_1,
+                isLoading: _isSubmitting,
+                onPressed: _isSubmitting
+                    ? null
+                    : (_detectedExistingParent != null
+                          ? _submitLinkToExistingParent
+                          : _submitNewParent),
+                minWidth: 140,
+                height: 40,
+              ),
             ),
           ],
         ),

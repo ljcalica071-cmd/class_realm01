@@ -3670,17 +3670,19 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               children: [
                 AppSecondaryButton(
                   label: 'Cancel',
-                  width: 130,
-                  height: 42,
+                  minWidth: 90,
+                  height: 40,
                   onPressed: () => Navigator.of(context).pop(),
                 ),
-                const SizedBox(width: 12),
-                AppPrimaryButton(
-                  label: _isSubmitting ? 'Enrolling...' : 'Enroll Student',
-                  icon: LucideIcons.userPlus,
-                  width: 160,
-                  height: 42,
-                  onPressed: _isSubmitting ? null : _submitSingleStudent,
+                const SizedBox(width: 10),
+                Flexible(
+                  child: AppPrimaryButton(
+                    label: _isSubmitting ? 'Enrolling...' : 'Enroll Student',
+                    icon: LucideIcons.userPlus,
+                    minWidth: 130,
+                    height: 40,
+                    onPressed: _isSubmitting ? null : _submitSingleStudent,
+                  ),
                 ),
               ],
             ),

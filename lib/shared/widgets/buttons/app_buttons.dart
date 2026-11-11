@@ -24,6 +24,7 @@ class AppButton extends StatelessWidget {
   final AppButtonType type;
   final bool isLoading;
   final double? width;
+  final double? minWidth;
   final double height;
   final bool isSmall;
   final Color? backgroundColor;
@@ -36,6 +37,7 @@ class AppButton extends StatelessWidget {
     this.type = AppButtonType.primary,
     this.isLoading = false,
     this.width,
+    this.minWidth,
     this.height = 42,
     this.isSmall = false,
     this.backgroundColor,
@@ -49,6 +51,7 @@ class AppButton extends StatelessWidget {
     this.icon,
     this.isLoading = false,
     this.width,
+    this.minWidth,
     this.isSmall = false,
     this.backgroundColor,
   }) : type = AppButtonType.primary,
@@ -61,6 +64,7 @@ class AppButton extends StatelessWidget {
     this.icon,
     this.isLoading = false,
     this.width,
+    this.minWidth,
     this.isSmall = false,
     this.backgroundColor,
   }) : type = AppButtonType.success,
@@ -73,6 +77,7 @@ class AppButton extends StatelessWidget {
     this.icon,
     this.isLoading = false,
     this.width,
+    this.minWidth,
     this.isSmall = false,
     this.backgroundColor,
   }) : type = AppButtonType.danger,
@@ -85,6 +90,7 @@ class AppButton extends StatelessWidget {
     this.icon,
     this.isLoading = false,
     this.width,
+    this.minWidth,
     this.isSmall = false,
     this.backgroundColor,
   }) : type = AppButtonType.outline,
@@ -97,6 +103,7 @@ class AppButton extends StatelessWidget {
     this.icon,
     this.isLoading = false,
     this.width,
+    this.minWidth,
     this.isSmall = false,
     this.backgroundColor,
   }) : type = AppButtonType.outline,
@@ -109,6 +116,7 @@ class AppButton extends StatelessWidget {
     this.icon,
     this.isLoading = false,
     this.width,
+    this.minWidth,
     this.isSmall = false,
     this.backgroundColor,
   }) : type = AppButtonType.ghost,
@@ -155,12 +163,13 @@ class AppButton extends StatelessWidget {
     final theme = Theme.of(context);
     final fg = _fgColor(context);
     final bg = _bgColor(context);
-    final double fontSize = isSmall ? 12 : 14;
-    final double iconSize = isSmall ? 15 : 17;
-    final double h = isSmall ? 34 : height;
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
+    final double fontSize = isSmall ? 11.5 : (isMobile ? 12.5 : 13.0);
+    final double iconSize = isSmall ? 14 : 16;
+    final double h = isSmall ? 32 : height;
     final EdgeInsets padding = isSmall
-        ? const EdgeInsets.symmetric(horizontal: 12, vertical: 6)
-        : const EdgeInsets.symmetric(horizontal: 16, vertical: 10);
+        ? const EdgeInsets.symmetric(horizontal: 10, vertical: 5)
+        : const EdgeInsets.symmetric(horizontal: 14, vertical: 8);
 
     final borderRadius = BorderRadius.circular(9);
     final isDark = theme.brightness == Brightness.dark;
@@ -193,15 +202,19 @@ class AppButton extends StatelessWidget {
             const SizedBox(width: 6),
           ],
           Flexible(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: fontSize,
-                fontWeight: FontWeight.w600,
-                color: effectiveFg,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w600,
+                  color: effectiveFg,
+                  letterSpacing: 0.15,
+                ),
               ),
             ),
           ),
@@ -209,10 +222,16 @@ class AppButton extends StatelessWidget {
       ],
     );
 
+    final constraints = BoxConstraints(
+      minWidth: minWidth ?? (width ?? 0),
+      maxWidth: width ?? double.infinity,
+      minHeight: h,
+      maxHeight: h,
+    );
+
     if (type == AppButtonType.outline) {
-      return SizedBox(
-        width: width,
-        height: h,
+      return ConstrainedBox(
+        constraints: constraints,
         child: OutlinedButton(
           style: OutlinedButton.styleFrom(
             foregroundColor: fg,
@@ -235,9 +254,8 @@ class AppButton extends StatelessWidget {
     }
 
     if (type == AppButtonType.ghost) {
-      return SizedBox(
-        width: width,
-        height: h,
+      return ConstrainedBox(
+        constraints: constraints,
         child: TextButton(
           style: TextButton.styleFrom(
             foregroundColor: fg,
@@ -251,9 +269,8 @@ class AppButton extends StatelessWidget {
       );
     }
 
-    return SizedBox(
-      width: width,
-      height: h,
+    return ConstrainedBox(
+      constraints: constraints,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: bg,
@@ -282,7 +299,9 @@ class AppPrimaryButton extends StatelessWidget {
   final bool isLoading;
   final Color? backgroundColor;
   final double? width;
+  final double? minWidth;
   final double height;
+  final bool isSmall;
 
   const AppPrimaryButton({
     super.key,
@@ -292,7 +311,9 @@ class AppPrimaryButton extends StatelessWidget {
     this.isLoading = false,
     this.backgroundColor,
     this.width,
+    this.minWidth,
     this.height = 42,
+    this.isSmall = false,
   });
 
   @override
@@ -316,7 +337,9 @@ class AppPrimaryButton extends StatelessWidget {
       icon: icon,
       isLoading: isLoading,
       width: width,
+      minWidth: minWidth,
       height: height,
+      isSmall: isSmall,
       type: resolvedType,
       backgroundColor: backgroundColor,
     );
@@ -328,7 +351,9 @@ class AppSecondaryButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final IconData? icon;
   final double? width;
+  final double? minWidth;
   final double height;
+  final bool isSmall;
 
   const AppSecondaryButton({
     super.key,
@@ -336,7 +361,9 @@ class AppSecondaryButton extends StatelessWidget {
     required this.onPressed,
     this.icon,
     this.width,
+    this.minWidth,
     this.height = 42,
+    this.isSmall = false,
   });
 
   @override
@@ -346,7 +373,9 @@ class AppSecondaryButton extends StatelessWidget {
       onPressed: onPressed,
       icon: icon,
       width: width,
+      minWidth: minWidth,
       height: height,
+      isSmall: isSmall,
       type: AppButtonType.outline,
     );
   }
