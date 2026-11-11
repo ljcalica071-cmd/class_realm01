@@ -20,6 +20,10 @@ class StudentDashboardRepository {
   StudentDashboardData? _cachedDashboard;
   StudentDashboardData? get currentDashboard => _cachedDashboard;
 
+  void clearMemoryCache() {
+    _cachedDashboard = null;
+  }
+
   Future<StudentDashboardData> loadDashboard({
     bool forceRefresh = false,
   }) async {
@@ -32,7 +36,10 @@ class StudentDashboardRepository {
     }
 
     if (!forceRefresh && _cachedDashboard != null) {
-      return _cachedDashboard!;
+      if (authUser != null && _cachedDashboard!.student.id == authUser.uid) {
+        return _cachedDashboard!;
+      }
+      _cachedDashboard = null;
     }
 
     // 1. FAST LOCAL READ (0 milliseconds load, Web + Native parity)
@@ -53,18 +60,21 @@ class StudentDashboardRepository {
         return cachedWeb;
       }
 
-      // SQLite Native Fallback
+      // SQLite Native Fallback (Scoped strictly to the authenticated student UID)
       try {
         final cachedJsonStr = await AppDatabase.instance.getSetting(
-          'cached_student_dashboard',
+          'cached_student_dashboard_${authUser.uid}',
         );
         if (cachedJsonStr != null && cachedJsonStr.isNotEmpty) {
           final data = jsonDecode(cachedJsonStr) as Map<String, dynamic>;
-          _cachedDashboard = StudentDashboardData.fromJson(data);
+          final studentData = data['student'] as Map<String, dynamic>?;
+          if (studentData != null && studentData['id'] == authUser.uid) {
+            _cachedDashboard = StudentDashboardData.fromJson(data);
 
-          // Trigger background cloud refresh silently
-          unawaited(_fetchFromCloud());
-          return _cachedDashboard!;
+            // Trigger background cloud refresh silently
+            unawaited(_fetchFromCloud());
+            return _cachedDashboard!;
+          }
         }
       } catch (_) {}
     }
@@ -582,7 +592,7 @@ class StudentDashboardRepository {
 
       try {
         await AppDatabase.instance.setSetting(
-          'cached_student_dashboard',
+          'cached_student_dashboard_${authUser.uid}',
           jsonEncode(data),
         );
       } catch (_) {}
@@ -597,7 +607,10 @@ class StudentDashboardRepository {
       return _cachedDashboard!;
     } catch (e) {
       debugPrint('Pure Dart student dashboard notice: $e');
-      if (_cachedDashboard != null) return _cachedDashboard!;
+      if (_cachedDashboard != null &&
+          _cachedDashboard!.student.id == authUser.uid) {
+        return _cachedDashboard!;
+      }
       return _fallbackForAuthenticatedUser(authUser);
     }
   }

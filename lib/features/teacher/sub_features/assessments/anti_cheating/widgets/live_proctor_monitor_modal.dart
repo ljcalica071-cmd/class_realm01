@@ -65,6 +65,7 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
   bool _isLoadingItemAnalysis = false;
   List<ItemDifficultyStat> _itemStats = [];
   bool _resultsReleased = false;
+  Timer? _liveAutoSyncTimer;
 
   @override
   void initState() {
@@ -73,6 +74,11 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
       assessmentId: widget.assessmentId,
     );
     _initializeRoster();
+    _liveAutoSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted) {
+        _channelService.loadHistoricalViolations();
+      }
+    });
   }
 
   bool get _isTestingFinished {
@@ -348,6 +354,7 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
 
   @override
   void dispose() {
+    _liveAutoSyncTimer?.cancel();
     _channelSub?.cancel();
     _channelService.dispose();
     super.dispose();

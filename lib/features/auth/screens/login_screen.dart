@@ -131,6 +131,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final cachedUser = await AuthRepository.instance.restoreSession();
       if (cachedUser != null && mounted) {
+        // Guard against race conditions: If the user has already submitted a login or typed
+        // a different email, do NOT hijack the screen with the background auto-restored session.
+        if (_hasSubmitted || _isLoading) return;
+        final currentEnteredEmail = _emailController.text.trim().toLowerCase();
+        if (currentEnteredEmail.isNotEmpty &&
+            cachedUser.email.trim().toLowerCase() != currentEnteredEmail) {
+          return;
+        }
+
         if (cachedUser.role != UserRole.admin && isMaintenance) {
           await AuthRepository.instance.logout('maintenance_forced');
           if (mounted) {

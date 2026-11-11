@@ -18,6 +18,7 @@ import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
+import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -107,6 +108,7 @@ class AuthRepository {
         LocalStorageService.clearCachedUser();
         _currentUser = null;
         clearWarmSession();
+        unawaited(_firebaseAuth.signOut().catchError((_) {}));
         return null;
       }
     }
@@ -659,6 +661,7 @@ class AuthRepository {
     _activeSessionId = null;
     clearWarmSession();
     AppDataCache.instance.clearAll();
+    StudentDashboardRepository.instance.clearMemoryCache();
     await LocalStorageService.clearAuth();
     try {
       await _firebaseAuth.signOut();

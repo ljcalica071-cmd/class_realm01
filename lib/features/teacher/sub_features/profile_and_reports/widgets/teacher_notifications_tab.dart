@@ -220,12 +220,14 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
         // Filter & Search Controls Bar
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
               // Search Input
               ConstrainedBox(
                 constraints: const BoxConstraints(minWidth: 240, maxWidth: 360),
@@ -365,6 +367,7 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
             ],
           ),
         ),
+      ),
 
         // List Area
         Expanded(

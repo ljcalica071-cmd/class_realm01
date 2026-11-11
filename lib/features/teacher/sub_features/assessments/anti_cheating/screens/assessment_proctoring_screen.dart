@@ -50,6 +50,8 @@ class _AssessmentProctoringScreenState
   List<ItemDifficultyStat> _itemStats = [];
 
   Timer? _lateCheckTimer;
+  Timer? _liveProctorAutoSyncTimer;
+  bool _isSyncingLearners = false;
   DateTime? _overrideScheduleDate;
 
   DateTime get _scheduleDate => _overrideScheduleDate ?? widget.assessment.scheduleDate;
@@ -137,6 +139,13 @@ class _AssessmentProctoringScreenState
     _lateCheckTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) _evaluateLateWindowStatus();
     });
+
+    // Auto-sync live learners, active violations & attempts every 4 seconds in the background
+    _liveProctorAutoSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted) {
+        _loadLearners(silent: true);
+      }
+    });
   }
 
   void _onGradebookSynced() {
@@ -153,12 +162,15 @@ class _AssessmentProctoringScreenState
     TeacherGradebookTab.gradebookRefreshNotifier.removeListener(_onGradebookSynced);
     _tabController.dispose();
     _lateCheckTimer?.cancel();
+    _liveProctorAutoSyncTimer?.cancel();
     _proctorSub?.cancel();
     _proctorService.dispose();
     super.dispose();
   }
 
   Future<void> _loadLearners({bool silent = false}) async {
+    if (_isSyncingLearners) return;
+    _isSyncingLearners = true;
     if (!silent && _rosterStudents.isEmpty) {
       setState(() => _isLoading = true);
     }
@@ -659,6 +671,8 @@ class _AssessmentProctoringScreenState
     } catch (e) {
       debugPrint('Error loading proctoring learners: $e');
       if (mounted) setState(() => _isLoading = false);
+    } finally {
+      _isSyncingLearners = false;
     }
   }
 
