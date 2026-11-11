@@ -1218,6 +1218,10 @@ class SubjectRepository {
       await LocalStorageService.saveTeacherSubjects(teacherId, updated);
       AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
     }
+    AppDataCache.instance.invalidatePrefix('student_dashboard_');
+    AppDataCache.instance.invalidatePrefix('parent_');
+    AppDataCache.instance.invalidatePrefix('schedule_');
+    AppDataCache.instance.invalidatePrefix('my_attendance_');
   }
 
   /// Restores a single archived offering (restore section)
@@ -1259,6 +1263,10 @@ class SubjectRepository {
       AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
       await _syncOfferingsFromCloud(teacherId, '2026-2027');
     }
+    AppDataCache.instance.invalidatePrefix('student_dashboard_');
+    AppDataCache.instance.invalidatePrefix('parent_');
+    AppDataCache.instance.invalidatePrefix('schedule_');
+    AppDataCache.instance.invalidatePrefix('my_attendance_');
   }
 
   /// Archives all subject offerings for a teacher and subject, synchronizing Drift & LocalStorage
@@ -1306,6 +1314,10 @@ class SubjectRepository {
         .toList();
     await LocalStorageService.saveTeacherSubjects(teacherId, updated);
     AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
+    AppDataCache.instance.invalidatePrefix('student_dashboard_');
+    AppDataCache.instance.invalidatePrefix('parent_');
+    AppDataCache.instance.invalidatePrefix('schedule_');
+    AppDataCache.instance.invalidatePrefix('my_attendance_');
   }
 
   /// Restores all subject offerings for a teacher and subject, synchronizing Drift & LocalStorage
@@ -1339,6 +1351,10 @@ class SubjectRepository {
     }
 
     AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');
+    AppDataCache.instance.invalidatePrefix('student_dashboard_');
+    AppDataCache.instance.invalidatePrefix('parent_');
+    AppDataCache.instance.invalidatePrefix('schedule_');
+    AppDataCache.instance.invalidatePrefix('my_attendance_');
     // Resync active offerings from cloud into Drift & LocalStorage
     await _syncOfferingsFromCloud(teacherId, '2026-2027');
   }

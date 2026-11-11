@@ -55,18 +55,20 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
             .select('''
               subject_offerings!inner (
                 id,
+                is_archived,
                 ww_weight,
                 pt_weight,
                 ex_weight,
                 terms_taught,
                 term_block,
-                subjects ( subject_name, subject_code, grade_level ),
+                subjects!inner ( subject_name, subject_code, grade_level, is_archived ),
                 sections ( section_name, grade_level ),
                 teacher_profiles ( first_name, last_name, gender )
               )
             ''')
             .eq('student_id', student.id)
-            .ilike('status', 'enrolled'),
+            .ilike('status', 'enrolled')
+            .eq('subject_offerings.is_archived', false),
         client
             .from('term_grades')
             .select(
@@ -78,7 +80,13 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
       final offeringRows = (responses[0] as List)
           .map((row) => Map<String, dynamic>.from(row as Map))
           .map((row) => _asMap(row['subject_offerings']))
-          .where((offering) => offering.isNotEmpty)
+          .where((offering) {
+            if (offering.isEmpty) return false;
+            if (offering['is_archived'] == true) return false;
+            final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
+            if (sub['is_archived'] == true) return false;
+            return true;
+          })
           .toList();
       final gradesByOffering = <String, Map<int, Map<String, dynamic>>>{};
       for (final row in responses[1] as List) {

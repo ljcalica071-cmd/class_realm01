@@ -119,22 +119,24 @@ class StudentDashboardRepository {
         debugPrint('Student settings fetch notice: $e');
       }
 
-      // 2. Fetch student enrollments directly via Pure Dart
+      // 2. Fetch student enrollments directly via Pure Dart (excluding archived subjects/offerings)
       List<dynamic> enrollmentRows = [];
       try {
         final res = await client
             .from('student_enrollments')
             .select('''
               subject_offering_id,
-              subject_offerings (
+              subject_offerings!inner (
                 id,
-                subjects ( id, subject_name, subject_code, grade_level ),
+                is_archived,
+                subjects!inner ( id, subject_name, subject_code, grade_level, is_archived ),
                 sections ( id, section_name, grade_level ),
                 teacher_profiles ( teacher_id, first_name, last_name, gender )
               )
             ''')
             .eq('student_id', uid)
-            .ilike('status', 'enrolled');
+            .ilike('status', 'enrolled')
+            .eq('subject_offerings.is_archived', false);
         enrollmentRows = res as List? ?? [];
       } catch (e) {
         debugPrint(
@@ -145,21 +147,33 @@ class StudentDashboardRepository {
               .from('student_enrollments')
               .select('''
                 subject_offering_id,
-                subject_offerings (
+                subject_offerings!inner (
                   id,
-                  subjects ( id, subject_name, subject_code, grade_level ),
+                  is_archived,
+                  subjects!inner ( id, subject_name, subject_code, grade_level, is_archived ),
                   sections ( id, section_name, grade_level )
                 )
               ''')
               .eq('student_id', uid)
-              .ilike('status', 'enrolled');
+              .ilike('status', 'enrolled')
+              .eq('subject_offerings.is_archived', false);
           enrollmentRows = res as List? ?? [];
         } catch (e2) {
           debugPrint('Enrollments fallback query notice: $e2');
         }
       }
 
-      final enrollmentsList = enrollmentRows.map((row) {
+      // Defensive filtering: ensure any archived offering or subject is excluded
+      final activeEnrollmentRows = enrollmentRows.where((row) {
+        final offering =
+            row['subject_offerings'] as Map<String, dynamic>? ?? {};
+        final isOfferingArchived = offering['is_archived'] == true;
+        final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
+        final isSubArchived = sub['is_archived'] == true;
+        return !isOfferingArchived && !isSubArchived;
+      }).toList();
+
+      final enrollmentsList = activeEnrollmentRows.map((row) {
         final offering =
             row['subject_offerings'] as Map<String, dynamic>? ?? {};
         final sub = offering['subjects'] as Map<String, dynamic>? ?? {};

@@ -76,7 +76,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       final summary = results[0] as AttendanceStudentSummary;
       final page = results[1] as AttendancePage<AttendanceRecord>;
 
-      // Attempt to load enrolled subjects for this student
+      // Attempt to load active enrolled subjects for this student
       try {
         final client = Supabase.instance.client;
         final user = client.auth.currentUser;
@@ -84,16 +84,22 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
           final enrollments = await client
               .from('student_enrollments')
               .select('''
-                subject_offerings (
-                  subjects ( subject_name )
+                subject_offerings!inner (
+                  is_archived,
+                  subjects!inner ( subject_name, is_archived )
                 )
               ''')
               .eq('student_id', user.id)
-              .eq('status', 'enrolled');
+              .eq('status', 'enrolled')
+              .eq('subject_offerings.is_archived', false)
+              .eq('subject_offerings.subjects.is_archived', false);
           final subs = <String>{};
           for (final e in (enrollments as List)) {
             final off = e['subject_offerings'] as Map<String, dynamic>?;
+            final isOfferingArchived = off?['is_archived'] == true;
             final sub = off?['subjects'] as Map<String, dynamic>?;
+            final isSubArchived = sub?['is_archived'] == true;
+            if (isOfferingArchived || isSubArchived) continue;
             final name = sub?['subject_name']?.toString().trim();
             if (name != null && name.isNotEmpty) {
               subs.add(name);
@@ -162,7 +168,10 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   }
 
   List<String> get _availableSubjectNames {
-    final set = <String>{..._enrolledSubjectNames};
+    if (_enrolledSubjectNames.isNotEmpty) {
+      return _enrolledSubjectNames;
+    }
+    final set = <String>{};
     for (final r in _records) {
       final name = _extractSubjectName(r);
       if (name.isNotEmpty && name != 'General' && name != 'Class') {
@@ -318,7 +327,6 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     final lateCount = _scopedLateCount;
     final absentCount = _scopedAbsentCount;
     final ratePercent = _scopedRatePercent;
-    final showEarlyWarning = absentCount >= 3;
 
     final filtered = _filteredRecords;
     final currentRows = _currentPageRecords;
@@ -403,9 +411,6 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                   ),
                 ],
               ),
-
-              if (showEarlyWarning)
-                _buildAbsenceTierAlert(theme, isDark, absentCount),
 
               const SizedBox(height: 10),
 
@@ -1023,152 +1028,164 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
         totalCount == 0 ? 0 : (_currentPage - 1) * _pageSize + 1;
     final endIndex = min(_currentPage * _pageSize, totalCount);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
           ),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              totalCount == 0
-                  ? 'Showing 0 of 0 logs'
-                  : 'Showing $startIndex–$endIndex of $totalCount logs',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
             ),
-          ),
-          const SizedBox(width: 8),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Previous button
-              InkWell(
-                onTap: _currentPage > 1
-                    ? () => setState(() => _currentPage--)
-                    : null,
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.chevron_left_rounded,
-                        size: 15,
-                        color: _currentPage > 1
-                            ? theme.colorScheme.onSurface
-                            : theme.colorScheme.onSurface
-                                .withValues(alpha: 0.3),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                totalCount == 0
+                    ? 'Showing 0 of 0 logs'
+                    : 'Showing $startIndex–$endIndex of $totalCount logs',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Previous button
+                InkWell(
+                  onTap: _currentPage > 1
+                      ? () => setState(() => _currentPage--)
+                      : null,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color:
+                            isDark ? Colors.white12 : const Color(0xFFE2E8F0),
                       ),
-                      const SizedBox(width: 2),
-                      Text(
-                        'Prev',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.chevron_left_rounded,
+                          size: 16,
                           color: _currentPage > 1
                               ? theme.colorScheme.onSurface
                               : theme.colorScheme.onSurface
                                   .withValues(alpha: 0.3),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              // Page indicator pill
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(
-                    alpha: isDark ? 0.2 : 0.1,
-                  ),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: theme.colorScheme.primary.withValues(
-                      alpha: isDark ? 0.4 : 0.25,
+                        const SizedBox(width: 3),
+                        Text(
+                          'Prev',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: _currentPage > 1
+                                ? theme.colorScheme.onSurface
+                                : theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.3),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                child: Text(
-                  '$_currentPage / ${max(1, totalPages)}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              // Next button
-              InkWell(
-                onTap: _currentPage < totalPages
-                    ? () => setState(() => _currentPage++)
-                    : null,
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
+                const SizedBox(width: 6),
+                // Page indicator pill
+                Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                    color: theme.colorScheme.primary.withValues(
+                      alpha: isDark ? 0.2 : 0.1,
+                    ),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                      color: theme.colorScheme.primary.withValues(
+                        alpha: isDark ? 0.4 : 0.25,
+                      ),
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Next',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                  child: Text(
+                    '$_currentPage / ${max(1, totalPages)}',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                // Next button
+                InkWell(
+                  onTap: _currentPage < totalPages
+                      ? () => setState(() => _currentPage++)
+                      : null,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color:
+                            isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Next',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: _currentPage < totalPages
+                                ? theme.colorScheme.onSurface
+                                : theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.3),
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
                           color: _currentPage < totalPages
                               ? theme.colorScheme.onSurface
                               : theme.colorScheme.onSurface
                                   .withValues(alpha: 0.3),
                         ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 15,
-                        color: _currentPage < totalPages
-                            ? theme.colorScheme.onSurface
-                            : theme.colorScheme.onSurface
-                                .withValues(alpha: 0.3),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1411,89 +1428,5 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
-  }
-
-  Widget _buildAbsenceTierAlert(ThemeData theme, bool isDark, int absentCount) {
-    if (absentCount < 3) return const SizedBox.shrink();
-
-    final Color bannerColor;
-    final Color borderColor;
-    final Color textColor;
-    final String title;
-    final String subtitle;
-    final IconData icon;
-
-    if (absentCount >= 10) {
-      bannerColor =
-          isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2);
-      borderColor = const Color(0xFFDC2626);
-      textColor = isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B);
-      icon = Icons.error_rounded;
-      title = 'Critical Notice: $absentCount Recorded Absences (SARDO Risk)';
-      subtitle =
-          'You have reached 10 absences, placing you at critical risk of drop-out status under DepEd policy. Please schedule an urgent conference with your adviser.';
-    } else if (absentCount >= 5) {
-      bannerColor =
-          isDark ? const Color(0xFF431407) : const Color(0xFFFFF7ED);
-      borderColor = const Color(0xFFEA580C);
-      textColor = isDark ? const Color(0xFFFDBA74) : const Color(0xFF9A3412);
-      icon = Icons.warning_amber_rounded;
-      title = 'Attendance Alert: $absentCount Recorded Absences';
-      subtitle =
-          'Attendance intervention required. Please coordinate with your subject teacher or class adviser to submit excuse letters or make-up work.';
-    } else {
-      bannerColor =
-          isDark ? const Color(0xFF422006) : const Color(0xFFFEFCE8);
-      borderColor = const Color(0xFFCA8A04);
-      textColor = isDark ? const Color(0xFFFDE047) : const Color(0xFF854D0E);
-      icon = Icons.info_outline_rounded;
-      title = 'Early Warning: $absentCount Recorded Absences';
-      subtitle =
-          'You have accumulated 3 absences. Please coordinate with your subject teacher regarding missed sessions.';
-    }
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: bannerColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: borderColor.withValues(alpha: isDark ? 0.6 : 0.4),
-          width: 1.0,
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 16, color: borderColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: textColor,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.78),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

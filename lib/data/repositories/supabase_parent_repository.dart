@@ -1214,13 +1214,16 @@ class SupabaseParentRepository {
               ex_weight,
               terms_taught,
               term_block,
-              subjects ( id, subject_name, subject_code, grade_level ),
+              is_archived,
+              subjects!inner ( id, subject_name, subject_code, grade_level, is_archived ),
               sections ( id, section_name, grade_level ),
               teacher_profiles ( teacher_id, first_name, middle_name, last_name, gender )
             )
           ''')
           .eq('student_id', studentId)
-          .ilike('status', 'enrolled');
+          .ilike('status', 'enrolled')
+          .eq('subject_offerings.is_archived', false)
+          .eq('subject_offerings.subjects.is_archived', false);
 
       final offerings = (rawEnrollments as List)
           .map((row) => Map<String, dynamic>.from(row as Map))
@@ -1232,7 +1235,13 @@ class SupabaseParentRepository {
             if (off is Map) return Map<String, dynamic>.from(off);
             return <String, dynamic>{};
           })
-          .where((offering) => offering.isNotEmpty)
+          .where((offering) {
+            if (offering.isEmpty) return false;
+            if (offering['is_archived'] == true) return false;
+            final sub = offering['subjects'];
+            if (sub is Map && sub['is_archived'] == true) return false;
+            return true;
+          })
           .toList();
 
       if (offerings.isEmpty) return [];
@@ -1549,9 +1558,17 @@ class SupabaseParentRepository {
     try {
       final enrollResp = await _client
           .from('student_enrollments')
-          .select('subject_offering_id')
+          .select('''
+            subject_offering_id,
+            subject_offerings!inner (
+              is_archived,
+              subjects!inner ( is_archived )
+            )
+          ''')
           .eq('student_id', studentId)
-          .ilike('status', 'enrolled');
+          .ilike('status', 'enrolled')
+          .eq('subject_offerings.is_archived', false)
+          .eq('subject_offerings.subjects.is_archived', false);
 
       final offeringIds = (enrollResp as List)
           .map((r) => r['subject_offering_id']?.toString())
@@ -1566,12 +1583,14 @@ class SupabaseParentRepository {
             .select('''
               id, day_of_week, start_time, end_time, room, is_active,
               subject_offerings!inner (
-                id, teacher_id, ww_weight, pt_weight, ex_weight,
-                subjects ( id, subject_name, grade_level ),
+                id, teacher_id, ww_weight, pt_weight, ex_weight, is_archived,
+                subjects!inner ( id, subject_name, grade_level, is_archived ),
                 sections ( id, section_name, grade_level )
               )
             ''')
             .filter('subject_offering_id', 'in', offeringIds)
+            .eq('subject_offerings.is_archived', false)
+            .eq('subject_offerings.subjects.is_archived', false)
             .order('day_of_week')
             .order('start_time');
 

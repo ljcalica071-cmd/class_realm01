@@ -2008,7 +2008,9 @@ class AuthRepository {
 
     _lastChangePasswordOtpSentAt = now;
     _changePasswordOtpCode = code;
-    _changePasswordOtpExpiry = now.add(const Duration(minutes: 5)); // Exactly 5 minutes
+    _changePasswordOtpExpiry = now.add(
+      const Duration(minutes: 5),
+    ); // Exactly 5 minutes
     _changePasswordEmail = cleanEmail;
     _changePasswordVerified = false;
     if (isResend) {
@@ -2117,7 +2119,9 @@ class AuthRepository {
             return FirstLoginOtpVerification(
               verified: false,
               reason: 'locked',
-              retryAfter: failStatus.remainingSeconds > 0 ? failStatus.remainingSeconds : 300,
+              retryAfter: failStatus.remainingSeconds > 0
+                  ? failStatus.remainingSeconds
+                  : 300,
             );
           }
         } catch (_) {}
@@ -2150,10 +2154,13 @@ class AuthRepository {
         targetIdentifier: email,
       );
       try {
-        await _supabaseClient.from('password_reset_otps').update({
-          'is_verified': true,
-          'updated_at': now.toUtc().toIso8601String(),
-        }).eq('email', email);
+        await _supabaseClient
+            .from('password_reset_otps')
+            .update({
+              'is_verified': true,
+              'updated_at': now.toUtc().toIso8601String(),
+            })
+            .eq('email', email);
       } catch (_) {}
     }
 
@@ -2189,7 +2196,9 @@ class AuthRepository {
           await fbUser.updatePassword(newPassword);
           updated = true;
         } catch (clientErr) {
-          debugPrint('[AuthRepository] Client updatePassword notice: $clientErr');
+          debugPrint(
+            '[AuthRepository] Client updatePassword notice: $clientErr',
+          );
         }
       }
 
@@ -2249,12 +2258,8 @@ class AuthRepository {
           .from('users')
           .select()
           .eq('role', 'teacher');
-      final profilesFuture = _supabaseClient
-          .from('teacher_profiles')
-          .select();
-      final settingsFuture = _supabaseClient
-          .from('teacher_settings')
-          .select();
+      final profilesFuture = _supabaseClient.from('teacher_profiles').select();
+      final settingsFuture = _supabaseClient.from('teacher_settings').select();
 
       final results = await Future.wait([
         usersFuture,
@@ -2415,9 +2420,8 @@ class AuthRepository {
 
         // Disable account in Firebase Auth so they cannot log in
         try {
-          await FirebaseAuthAdminService.setUserDisabled(
-            uid: uid,
-            disabled: true,
+          unawaited(
+            FirebaseAuthAdminService.setUserDisabled(uid: uid, disabled: true),
           );
         } catch (_) {}
 
@@ -2504,178 +2508,57 @@ class AuthRepository {
           .select('id')
           .eq('teacher_id', teacherId);
 
-      final Set<String> affectedStudentIds = {};
+      if (offerings.isNotEmpty) {
+        final offeringIds = offerings
+            .map((o) => o['id']?.toString())
+            .whereType<String>()
+            .toList();
 
-      for (var off in offerings) {
-        final offId = off['id'];
-
-        // Get enrolled students
-        final enr = await _supabaseClient
-            .from('student_enrollments')
-            .select('student_id')
-            .eq('subject_offering_id', offId);
-        for (var row in enr) {
-          if (row['student_id'] != null) {
-            affectedStudentIds.add(row['student_id'].toString());
-          }
+        if (offeringIds.isNotEmpty) {
+          // Fast parallel cleanup of empty offering dependencies
+          await Future.wait([
+            _supabaseClient
+                .from('teacher_schedule')
+                .delete()
+                .inFilter('subject_offering_id', offeringIds),
+            _supabaseClient
+                .from('attendance_records')
+                .delete()
+                .inFilter('subject_offering_id', offeringIds),
+            _supabaseClient
+                .from('term_grades')
+                .delete()
+                .inFilter('subject_offering_id', offeringIds),
+            _supabaseClient
+                .from('gradebook_term_sheets')
+                .delete()
+                .inFilter('subject_offering_id', offeringIds),
+            _supabaseClient
+                .from('student_enrollments')
+                .delete()
+                .inFilter('subject_offering_id', offeringIds),
+            _supabaseClient
+                .from('digital_assessments')
+                .delete()
+                .inFilter('subject_offering_id', offeringIds),
+            _supabaseClient
+                .from('classwork_items')
+                .delete()
+                .inFilter('subject_offering_id', offeringIds),
+            _supabaseClient
+                .from('folders')
+                .delete()
+                .inFilter('subject_offering_id', offeringIds),
+          ]);
         }
 
-        // Delete dependencies under this subject offering
-        try {
-          await _supabaseClient
-              .from('teacher_schedule')
-              .delete()
-              .eq('subject_offering_id', offId);
-        } catch (_) {}
-
-        try {
-          await _supabaseClient
-              .from('attendance_records')
-              .delete()
-              .eq('subject_offering_id', offId);
-        } catch (_) {}
-
-        try {
-          await _supabaseClient
-              .from('term_grades')
-              .delete()
-              .eq('subject_offering_id', offId);
-        } catch (_) {}
-
-        try {
-          await _supabaseClient
-              .from('gradebook_term_sheets')
-              .delete()
-              .eq('subject_offering_id', offId);
-        } catch (_) {}
-
-        // Digital assessments
-        try {
-          final assessments = await _supabaseClient
-              .from('digital_assessments')
-              .select('id')
-              .eq('subject_offering_id', offId);
-          for (var a in assessments) {
-            final aId = a['id'];
-            final attempts = await _supabaseClient
-                .from('assessment_attempts')
-                .select('id')
-                .eq('assessment_id', aId);
-            for (var att in attempts) {
-              await _supabaseClient
-                  .from('anti_cheating_logs')
-                  .delete()
-                  .eq('assessment_attempt_id', att['id']);
-              await _supabaseClient
-                  .from('assessment_responses')
-                  .delete()
-                  .eq('attempt_id', att['id']);
-            }
-            await _supabaseClient
-                .from('assessment_attempts')
-                .delete()
-                .eq('assessment_id', aId);
-
-            final questions = await _supabaseClient
-                .from('assessment_questions')
-                .select('id')
-                .eq('assessment_id', aId);
-            for (var q in questions) {
-              await _supabaseClient
-                  .from('assessment_question_options')
-                  .delete()
-                  .eq('question_id', q['id']);
-            }
-            await _supabaseClient
-                .from('assessment_questions')
-                .delete()
-                .eq('assessment_id', aId);
-            await _supabaseClient
-                .from('digital_assessment_extensions')
-                .delete()
-                .eq('assessment_id', aId);
-          }
-          await _supabaseClient
-              .from('digital_assessments')
-              .delete()
-              .eq('subject_offering_id', offId);
-        } catch (_) {}
-
-        // Classwork items
-        try {
-          final classworks = await _supabaseClient
-              .from('classwork_items')
-              .select('id')
-              .eq('subject_offering_id', offId);
-          for (var cw in classworks) {
-            final cwId = cw['id'];
-            final subs = await _supabaseClient
-                .from('student_classwork_submissions')
-                .select('id')
-                .eq('classwork_id', cwId);
-            for (var s in subs) {
-              await _supabaseClient
-                  .from('submission_attachments')
-                  .delete()
-                  .eq('submission_id', s['id']);
-            }
-            await _supabaseClient
-                .from('student_classwork_submissions')
-                .delete()
-                .eq('classwork_id', cwId);
-            await _supabaseClient
-                .from('classwork_attachments')
-                .delete()
-                .eq('classwork_id', cwId);
-            await _supabaseClient
-                .from('classwork_extensions')
-                .delete()
-                .eq('classwork_id', cwId);
-          }
-          await _supabaseClient
-              .from('classwork_items')
-              .delete()
-              .eq('subject_offering_id', offId);
-        } catch (_) {}
-
-        // Folders and materials
-        try {
-          final folders = await _supabaseClient
-              .from('folders')
-              .select('id')
-              .eq('subject_offering_id', offId);
-          for (var f in folders) {
-            await _supabaseClient
-                .from('learning_materials')
-                .delete()
-                .eq('folder_id', f['id']);
-          }
-          await _supabaseClient
-              .from('folders')
-              .delete()
-              .eq('subject_offering_id', offId);
-        } catch (_) {}
-
-        // Delete enrollments
-        try {
-          await _supabaseClient
-              .from('student_enrollments')
-              .delete()
-              .eq('subject_offering_id', offId);
-        } catch (_) {}
-
-        // Delete offering
-        try {
-          await _supabaseClient
-              .from('subject_offerings')
-              .delete()
-              .eq('id', offId);
-        } catch (_) {}
+        await _supabaseClient
+            .from('subject_offerings')
+            .delete()
+            .eq('teacher_id', teacherId);
       }
 
-      // Note: Students and parents are preserved in the school directory even if a teacher is permanently deleted.
-
-      // 4. Delete Teacher records
+      // 2. Fetch Teacher email once to clean up auth records
       String? teacherEmail;
       try {
         final u = await _supabaseClient
@@ -2686,56 +2569,51 @@ class AuthRepository {
         teacherEmail = u?['email']?.toString();
       } catch (_) {}
 
-      try {
-        await _supabaseClient
+      // 3. Fast parallel delete across all teacher related tables
+      await Future.wait([
+        _supabaseClient
             .from('first_login_otp_verifications')
             .delete()
-            .eq('user_id', teacherId);
-      } catch (_) {}
-
-      if (teacherEmail != null && teacherEmail.isNotEmpty) {
-        try {
-          await _supabaseClient
+            .eq('user_id', teacherId),
+        if (teacherEmail != null && teacherEmail.isNotEmpty)
+          _supabaseClient
               .from('admin_teacher_email_challenges')
               .delete()
-              .eq('email', teacherEmail);
-        } catch (_) {}
-      }
-
-      try {
-        await _supabaseClient
+              .eq('email', teacherEmail),
+        _supabaseClient
             .from('admin_teacher_email_challenges')
             .delete()
-            .eq('created_by', teacherId);
-      } catch (_) {}
-
-      try {
-        await _supabaseClient
+            .eq('created_by', teacherId),
+        _supabaseClient
             .from('teacher_settings')
             .delete()
-            .eq('teacher_id', teacherId);
-      } catch (_) {}
-
-      try {
-        await _supabaseClient
+            .eq('teacher_id', teacherId),
+        _supabaseClient
             .from('teacher_profiles')
             .delete()
-            .eq('teacher_id', teacherId);
-      } catch (_) {}
+            .eq('teacher_id', teacherId),
+      ]);
 
-      try {
-        await _supabaseClient.from('users').delete().eq('id', teacherId);
-      } catch (_) {}
+      // 4. Finally delete the user account in public.users
+      await _supabaseClient.from('users').delete().eq('id', teacherId);
 
-      // Delete from Firebase Authentication
-      try {
-        await FirebaseAuthAdminService.deleteUser(
-          uid: teacherId,
-          email: teacherEmail,
-        );
-      } catch (fbErr) {
-        debugPrint(
-          'Firebase Auth deletion notice for teacher $teacherId: $fbErr',
+      // 5. Asynchronously remove from Firebase Authentication (unawaited / non-blocking)
+      if (teacherEmail != null && teacherEmail.isNotEmpty) {
+        unawaited(
+          FirebaseAuthAdminService.deleteUser(
+                uid: teacherId,
+                email: teacherEmail,
+              )
+              .then((res) {
+                debugPrint(
+                  'Firebase Auth deletion for teacher $teacherId finished: $res',
+                );
+              })
+              .catchError((fbErr) {
+                debugPrint(
+                  'Firebase Auth deletion notice for teacher $teacherId: $fbErr',
+                );
+              }),
         );
       }
 

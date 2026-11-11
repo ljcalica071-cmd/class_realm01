@@ -35,6 +35,24 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
   int _currentPage = 1;
   static const int _itemsPerPage = 10;
 
+  List<UserModel>? _optimisticTeachers;
+  List<UserModel> get _effectiveTeachers =>
+      _optimisticTeachers ?? widget.teachers;
+
+  @override
+  void initState() {
+    super.initState();
+    _optimisticTeachers = List.from(widget.teachers);
+  }
+
+  @override
+  void didUpdateWidget(covariant AdminTeacherManagementTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.teachers != oldWidget.teachers) {
+      _optimisticTeachers = List.from(widget.teachers);
+    }
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -133,29 +151,50 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       cooldownSeconds: 5,
     );
     if (confirm == true) {
+      final previousTeachers = List<UserModel>.from(_effectiveTeachers);
+      final updatedTeacher = t.copyWith(
+        isArchived: true,
+        status: AccountStatus.archived,
+      );
+      setState(() {
+        _optimisticTeachers = _effectiveTeachers.map((item) {
+          return item.id == t.id ? updatedTeacher : item;
+        }).toList();
+      });
+
+      if (mounted) {
+        AppTopToast.success(context, '${t.fullName} moved to archives.');
+      }
+
       final currentHint = (t.status == AccountStatus.pendingFirstLogin)
           ? 'pending_first_login'
           : 'active';
-      final success = await AuthRepository.instance.updateTeacherStatus(
-        t.id,
-        'archived',
-        currentStatusHint: currentHint,
-      );
-      if (success) {
-        AppDataCache.instance.invalidate('admin_teachers_list');
-        if (mounted) {
-          AppTopToast.success(
-            context,
-            '${t.fullName} moved to archives.',
-          );
+      try {
+        final success = await AuthRepository.instance.updateTeacherStatus(
+          t.id,
+          'archived',
+          currentStatusHint: currentHint,
+        );
+        if (success) {
+          AppDataCache.instance.invalidate('admin_teachers_list');
+          widget.onDataChanged();
+        } else {
+          if (mounted) {
+            setState(() => _optimisticTeachers = previousTeachers);
+            AppModals.showErrorDialog(
+              context: context,
+              title: 'Archive Failed',
+              message: 'Failed to archive teacher. Reverting changes.',
+            );
+          }
         }
-        widget.onDataChanged();
-      } else {
+      } catch (e) {
         if (mounted) {
+          setState(() => _optimisticTeachers = previousTeachers);
           AppModals.showErrorDialog(
             context: context,
             title: 'Archive Failed',
-            message: 'Failed to archive teacher. Please try again.',
+            message: 'Failed to archive teacher: $e',
           );
         }
       }
@@ -172,25 +211,46 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       confirmColor: Colors.green,
     );
     if (confirm == true) {
-      final success = await AuthRepository.instance.updateTeacherStatus(
-        t.id,
-        'active',
+      final previousTeachers = List<UserModel>.from(_effectiveTeachers);
+      final updatedTeacher = t.copyWith(
+        isArchived: false,
+        status: AccountStatus.active,
       );
-      if (success) {
-        AppDataCache.instance.invalidate('admin_teachers_list');
-        if (mounted) {
-          AppTopToast.success(
-            context,
-            '${t.fullName} restored from archives.',
-          );
+      setState(() {
+        _optimisticTeachers = _effectiveTeachers.map((item) {
+          return item.id == t.id ? updatedTeacher : item;
+        }).toList();
+      });
+
+      if (mounted) {
+        AppTopToast.success(context, '${t.fullName} restored from archives.');
+      }
+
+      try {
+        final success = await AuthRepository.instance.updateTeacherStatus(
+          t.id,
+          'active',
+        );
+        if (success) {
+          AppDataCache.instance.invalidate('admin_teachers_list');
+          widget.onDataChanged();
+        } else {
+          if (mounted) {
+            setState(() => _optimisticTeachers = previousTeachers);
+            AppModals.showErrorDialog(
+              context: context,
+              title: 'Restore Failed',
+              message: 'Failed to restore teacher. Reverting changes.',
+            );
+          }
         }
-        widget.onDataChanged();
-      } else {
+      } catch (e) {
         if (mounted) {
+          setState(() => _optimisticTeachers = previousTeachers);
           AppModals.showErrorDialog(
             context: context,
             title: 'Restore Failed',
-            message: 'Failed to restore teacher. Please try again.',
+            message: 'Failed to restore teacher: $e',
           );
         }
       }
@@ -211,15 +271,15 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     }
 
     // 1. Deletion Protection Guard: Verify if teacher has associated enrolled students or records
-    final hasRecords =
-        await AuthRepository.instance.hasTeacherAcademicRecords(t.id);
+    final hasRecords = await AuthRepository.instance.hasTeacherAcademicRecords(
+      t.id,
+    );
     if (hasRecords) {
       if (mounted) {
         AppModals.showErrorDialog(
           context: context,
           title: 'Cannot Delete Teacher',
-          message:
-              'This teacher cannot be permanently deleted because they have associated enrolled students or academic records.',
+          message: 'This teacher cannot be permanently deleted because they have associated enrolled students or academic records.',
         );
       }
       return;
@@ -237,22 +297,39 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
           '• Since this teacher has no active student enrollments, it is safe to remove completely.',
     );
     if (confirm == true) {
-      final success = await AuthRepository.instance.deleteTeacherRecord(t.id);
-      if (success) {
-        AppDataCache.instance.invalidate('admin_teachers_list');
-        if (mounted) {
-          AppTopToast.success(
-            context,
-            '${t.fullName} permanently deleted.',
-          );
+      final previousTeachers = List<UserModel>.from(_effectiveTeachers);
+      setState(() {
+        _optimisticTeachers = _effectiveTeachers
+            .where((item) => item.id != t.id)
+            .toList();
+      });
+
+      if (mounted) {
+        AppTopToast.success(context, '${t.fullName} permanently deleted.');
+      }
+
+      try {
+        final success = await AuthRepository.instance.deleteTeacherRecord(t.id);
+        if (success) {
+          AppDataCache.instance.invalidate('admin_teachers_list');
+          widget.onDataChanged();
+        } else {
+          if (mounted) {
+            setState(() => _optimisticTeachers = previousTeachers);
+            AppModals.showErrorDialog(
+              context: context,
+              title: 'Delete Failed',
+              message: 'Failed to delete teacher. Please try again.',
+            );
+          }
         }
-        widget.onDataChanged();
-      } else {
+      } catch (e) {
         if (mounted) {
+          setState(() => _optimisticTeachers = previousTeachers);
           AppModals.showErrorDialog(
             context: context,
             title: 'Delete Failed',
-            message: 'Failed to delete teacher. Please try again.',
+            message: 'Failed to delete teacher: $e',
           );
         }
       }
@@ -278,11 +355,11 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
         : const Color(0xFFE2E8F0);
 
     // Split archived and active teachers
-    final archivedTeachers = widget.teachers.where((t) {
+    final archivedTeachers = _effectiveTeachers.where((t) {
       return t.isArchived || t.status == AccountStatus.archived;
     }).toList();
 
-    final activeTeachers = widget.teachers.where((t) {
+    final activeTeachers = _effectiveTeachers.where((t) {
       return !t.isArchived && t.status != AccountStatus.archived;
     }).toList();
 

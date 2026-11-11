@@ -166,11 +166,11 @@ class SupabaseScheduleRepository implements ScheduleRepository {
       var query = _client.from('teacher_schedule').select('''
         id, day_of_week, start_time, end_time, room, is_active,
         subject_offerings!inner (
-          id, teacher_id, ww_weight, pt_weight, ex_weight,
-          subjects!inner ( id, subject_name, grade_level ),
+          id, teacher_id, ww_weight, pt_weight, ex_weight, is_archived,
+          subjects!inner ( id, subject_name, grade_level, is_archived ),
           sections!inner ( id, section_name, grade_level )
         )
-      ''');
+      ''').eq('subject_offerings.is_archived', false);
 
       if (teacherId != null && teacherId.isNotEmpty) {
         query = query.eq('subject_offerings.teacher_id', teacherId);
