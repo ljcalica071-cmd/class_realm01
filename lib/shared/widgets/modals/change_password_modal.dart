@@ -4,8 +4,8 @@ import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/buttons/app_buttons.dart';
-import 'package:class_realm/shared/widgets/modals/app_modals.dart';
 import 'package:class_realm/shared/widgets/modals/password_otp_dialog.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 
 /// Reusable In-App Change Password Modal.
 /// Supports both Parent (current password re-authentication) and Email accounts
@@ -205,12 +205,11 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
         return;
       }
 
-      Navigator.of(context).pop(true);
-      AppModals.showSuccessDialog(
-        context: context,
-        title: 'Password Updated',
-        message: 'Your parent account password has been changed successfully.',
+      AppTopToast.success(
+        context,
+        'Your parent account password has been changed successfully.',
       );
+      Navigator.of(context).pop(true);
     } else {
       // EMAIL ROLES (Admin, Teacher, Student): 2FA Email OTP Verification
       late Map<String, dynamic> otpResult;
@@ -270,12 +269,11 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
         return;
       }
 
-      Navigator.of(context).pop(true);
-      AppModals.showSuccessDialog(
-        context: context,
-        title: 'Password Updated',
-        message: 'Your password has been changed successfully.',
+      AppTopToast.success(
+        context,
+        'Your password has been changed successfully.',
       );
+      Navigator.of(context).pop(true);
     }
   }
 

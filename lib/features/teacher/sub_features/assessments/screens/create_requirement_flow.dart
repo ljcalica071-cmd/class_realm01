@@ -13,6 +13,7 @@ import 'package:class_realm/features/teacher/sub_features/grading/widgets/teache
 import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
+import 'package:class_realm/widgets/common/app_time_picker_field.dart';
 import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 
 class CreateRequirementFlowDialog extends StatefulWidget {
@@ -560,9 +561,17 @@ class _CreateRequirementFlowDialogState
         ? TimeOfDay.fromDateTime(currentDeadline)
         : TimeOfDay.fromDateTime(initialPickerDate);
 
-    final time = await showTimePicker(
-      context: context,
+    final isPickingForToday =
+        date.year == today.year &&
+        date.month == today.month &&
+        date.day == today.day;
+    final minTime = isPickingForToday ? TimeOfDay.fromDateTime(now) : null;
+
+    final time = await showAppTimePickerDialog(
+      context,
       initialTime: initialTime,
+      minTime: minTime,
+      title: isEdit ? 'Update Due Time' : 'Select Due Time',
     );
     if (!mounted || time == null) return;
 
@@ -861,12 +870,17 @@ class _CreateRequirementFlowDialogState
                       Container(
                         decoration: BoxDecoration(
                           color: isDark
-                              ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
-                              : const Color(0xFFF1F5F9), // 60-30-10: 30% background for field
+                              ? theme.colorScheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.35)
+                              : const Color(
+                                  0xFFF1F5F9,
+                                ), // 60-30-10: 30% background for field
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isDark
-                                ? theme.colorScheme.outline.withValues(alpha: 0.2)
+                                ? theme.colorScheme.outline.withValues(
+                                    alpha: 0.2,
+                                  )
                                 : const Color(0xFFE2E8F0),
                           ),
                         ),
@@ -885,8 +899,8 @@ class _CreateRequirementFlowDialogState
                                   decoration: BoxDecoration(
                                     color: _completionMode == 'online'
                                         ? (isDark
-                                            ? theme.colorScheme.surface
-                                            : Colors.white)
+                                              ? theme.colorScheme.surface
+                                              : Colors.white)
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
                                     boxShadow: _completionMode == 'online'
@@ -909,11 +923,13 @@ class _CreateRequirementFlowDialogState
                                         size: 16,
                                         color: _completionMode == 'online'
                                             ? (isDark
-                                                ? const Color(0xFF4ADE80)
-                                                : const Color(0xFF0F8A48))
+                                                  ? const Color(0xFF4ADE80)
+                                                  : const Color(0xFF0F8A48))
                                             : (isDark
-                                                ? theme.colorScheme.onSurfaceVariant
-                                                : Colors.grey),
+                                                  ? theme
+                                                        .colorScheme
+                                                        .onSurfaceVariant
+                                                  : Colors.grey),
                                       ),
                                       const SizedBox(width: 6),
                                       Flexible(
@@ -928,11 +944,13 @@ class _CreateRequirementFlowDialogState
                                                 : FontWeight.w500,
                                             color: _completionMode == 'online'
                                                 ? (isDark
-                                                    ? const Color(0xFF4ADE80)
-                                                    : const Color(0xFF0F8A48))
+                                                      ? const Color(0xFF4ADE80)
+                                                      : const Color(0xFF0F8A48))
                                                 : (isDark
-                                                    ? theme.colorScheme.onSurfaceVariant
-                                                    : Colors.grey.shade600),
+                                                      ? theme
+                                                            .colorScheme
+                                                            .onSurfaceVariant
+                                                      : Colors.grey.shade600),
                                           ),
                                         ),
                                       ),
@@ -964,8 +982,8 @@ class _CreateRequirementFlowDialogState
                                   decoration: BoxDecoration(
                                     color: _completionMode == 'in_person'
                                         ? (isDark
-                                            ? theme.colorScheme.surface
-                                            : Colors.white)
+                                              ? theme.colorScheme.surface
+                                              : Colors.white)
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
                                     boxShadow: _completionMode == 'in_person'
@@ -988,11 +1006,13 @@ class _CreateRequirementFlowDialogState
                                         size: 16,
                                         color: _completionMode == 'in_person'
                                             ? (isDark
-                                                ? const Color(0xFF4ADE80)
-                                                : const Color(0xFF0F8A48))
+                                                  ? const Color(0xFF4ADE80)
+                                                  : const Color(0xFF0F8A48))
                                             : (isDark
-                                                ? theme.colorScheme.onSurfaceVariant
-                                                : Colors.grey),
+                                                  ? theme
+                                                        .colorScheme
+                                                        .onSurfaceVariant
+                                                  : Colors.grey),
                                       ),
                                       const SizedBox(width: 6),
                                       Flexible(
@@ -1008,11 +1028,13 @@ class _CreateRequirementFlowDialogState
                                             color:
                                                 _completionMode == 'in_person'
                                                 ? (isDark
-                                                    ? const Color(0xFF4ADE80)
-                                                    : const Color(0xFF0F8A48))
+                                                      ? const Color(0xFF4ADE80)
+                                                      : const Color(0xFF0F8A48))
                                                 : (isDark
-                                                    ? theme.colorScheme.onSurfaceVariant
-                                                    : Colors.grey.shade600),
+                                                      ? theme
+                                                            .colorScheme
+                                                            .onSurfaceVariant
+                                                      : Colors.grey.shade600),
                                           ),
                                         ),
                                       ),
@@ -1047,13 +1069,13 @@ class _CreateRequirementFlowDialogState
                           ),
                           decoration: BoxDecoration(
                             color: isDark
-                                ? const Color(0xFF0F8A48).withValues(alpha: 0.15)
+                                ? const Color(0xFF0F8A48)
+                                      .withValues(alpha: 0.15)
                                 : const Color(0xFFE8F5E9), // Light Emerald
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: const Color(0xFF0F8A48).withValues(
-                                alpha: isDark ? 0.35 : 0.2,
-                              ),
+                              color: const Color(0xFF0F8A48)
+                                  .withValues(alpha: isDark ? 0.35 : 0.2),
                             ),
                           ),
                           alignment: Alignment.center,
@@ -1132,14 +1154,18 @@ class _CreateRequirementFlowDialogState
                                         alignment: Alignment.centerLeft,
                                         decoration: BoxDecoration(
                                           color: isDark
-                                              ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                              ? theme
+                                                    .colorScheme
+                                                    .surfaceContainerHighest
+                                                    .withValues(alpha: 0.3)
                                               : const Color(0xFFF8FAFC),
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                           border: Border.all(
                                             color: isDark
-                                                ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                                                ? theme.colorScheme.outline
+                                                      .withValues(alpha: 0.25)
                                                 : Colors.grey.shade400,
                                           ),
                                         ),
@@ -1152,13 +1178,16 @@ class _CreateRequirementFlowDialogState
                                               style: TextStyle(
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w600,
-                                                color: theme.colorScheme.onSurface,
+                                                color:
+                                                    theme.colorScheme.onSurface,
                                               ),
                                             ),
                                             Icon(
                                               Icons.lock_outline,
                                               size: 16,
-                                              color: theme.colorScheme.onSurfaceVariant,
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
                                             ),
                                           ],
                                         ),
@@ -1172,14 +1201,18 @@ class _CreateRequirementFlowDialogState
                                         alignment: Alignment.centerLeft,
                                         decoration: BoxDecoration(
                                           color: isDark
-                                              ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                              ? theme
+                                                    .colorScheme
+                                                    .surfaceContainerHighest
+                                                    .withValues(alpha: 0.3)
                                               : const Color(0xFFF8FAFC),
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                           border: Border.all(
                                             color: isDark
-                                                ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                                                ? theme.colorScheme.outline
+                                                      .withValues(alpha: 0.25)
                                                 : Colors.grey.shade400,
                                           ),
                                         ),
@@ -1255,14 +1288,18 @@ class _CreateRequirementFlowDialogState
                                         alignment: Alignment.centerLeft,
                                         decoration: BoxDecoration(
                                           color: isDark
-                                              ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                              ? theme
+                                                    .colorScheme
+                                                    .surfaceContainerHighest
+                                                    .withValues(alpha: 0.3)
                                               : const Color(0xFFF8FAFC),
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                           border: Border.all(
                                             color: isDark
-                                                ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                                                ? theme.colorScheme.outline
+                                                      .withValues(alpha: 0.25)
                                                 : Colors.grey.shade400,
                                           ),
                                         ),
@@ -1275,13 +1312,16 @@ class _CreateRequirementFlowDialogState
                                               style: TextStyle(
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w600,
-                                                color: theme.colorScheme.onSurface,
+                                                color:
+                                                    theme.colorScheme.onSurface,
                                               ),
                                             ),
                                             Icon(
                                               Icons.lock_outline,
                                               size: 16,
-                                              color: theme.colorScheme.onSurfaceVariant,
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
                                             ),
                                           ],
                                         ),
@@ -1438,15 +1478,19 @@ class _CreateRequirementFlowDialogState
                                     ),
                                     decoration: BoxDecoration(
                                       color: isDark
-                                          ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                          ? theme
+                                                .colorScheme
+                                                .surfaceContainerHighest
+                                                .withValues(alpha: 0.3)
                                           : Colors.white,
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
                                         color: _deadlineError != null
                                             ? const Color(0xFFEF4444)
                                             : (isDark
-                                                ? theme.colorScheme.outline.withValues(alpha: 0.25)
-                                                : Colors.grey.shade400),
+                                                  ? theme.colorScheme.outline
+                                                        .withValues(alpha: 0.25)
+                                                  : Colors.grey.shade400),
                                       ),
                                     ),
                                     child: Row(
@@ -1551,12 +1595,15 @@ class _CreateRequirementFlowDialogState
                             ),
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                  ? theme.colorScheme.surfaceContainerHighest
+                                        .withValues(alpha: 0.3)
                                   : const Color(0xFFF8FAFC),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: isDark
-                                    ? theme.colorScheme.outline.withValues(alpha: 0.25)
+                                    ? theme.colorScheme.outline.withValues(
+                                        alpha: 0.25,
+                                      )
                                     : Colors.grey.shade300,
                               ),
                             ),
@@ -1593,15 +1640,17 @@ class _CreateRequirementFlowDialogState
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                                  ? theme.colorScheme.surfaceContainerHighest
+                                        .withValues(alpha: 0.3)
                                   : Colors.white,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: _fileError != null
                                     ? const Color(0xFFEF4444)
                                     : (isDark
-                                        ? theme.colorScheme.outline.withValues(alpha: 0.25)
-                                        : Colors.grey.shade400),
+                                          ? theme.colorScheme.outline
+                                                .withValues(alpha: 0.25)
+                                          : Colors.grey.shade400),
                               ),
                             ),
                             child: Row(
@@ -1684,7 +1733,8 @@ class _CreateRequirementFlowDialogState
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: isDark
-                                ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                                ? const Color(0xFFEF4444)
+                                      .withValues(alpha: 0.15)
                                 : const Color(0xFFFEF2F2),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: const Color(0xFFEF4444)),

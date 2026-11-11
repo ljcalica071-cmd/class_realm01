@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lottie/lottie.dart';
 import 'package:class_realm/core/constants/asset_paths.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
@@ -96,6 +97,11 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
       if (mounted) setState(() {});
     });
 
+    _firstNameController.addListener(_clearErrorOnInput);
+    _middleNameController.addListener(_clearErrorOnInput);
+    _lastNameController.addListener(_clearErrorOnInput);
+    _emailController.addListener(_clearErrorOnInput);
+
     _otpFocusNode.onKeyEvent = (node, event) {
       if (_otpSecondsRemaining <= 0) return KeyEventResult.handled;
       if (event is KeyDownEvent) {
@@ -130,12 +136,22 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     };
   }
 
+  void _clearErrorOnInput() {
+    if (_error != null && mounted) {
+      setState(() => _error = null);
+    }
+  }
+
   @override
   void dispose() {
     _cursorBlinkController?.dispose();
     _cursorBlinkController = null;
     _resendTimer?.cancel();
     _otpExpiryTimer?.cancel();
+    _firstNameController.removeListener(_clearErrorOnInput);
+    _middleNameController.removeListener(_clearErrorOnInput);
+    _lastNameController.removeListener(_clearErrorOnInput);
+    _emailController.removeListener(_clearErrorOnInput);
     _firstNameController.dispose();
     _middleNameController.dispose();
     _lastNameController.dispose();
@@ -463,6 +479,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
             );
       _resendTimer?.cancel();
       _otpExpiryTimer?.cancel();
+      AppDataCache.instance.invalidate('admin_teachers_list');
       if (mounted) {
         setState(() {
           _isVerifying = false;
@@ -827,7 +844,12 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
     if (error is AdminTeacherException) {
       return error.message;
     }
-    String msg = error.toString().replaceFirst('Exception: ', '');
+    if (error is FormatException) {
+      return error.message;
+    }
+    String msg = error
+        .toString()
+        .replaceFirst(RegExp(r'^(FormatException|Exception):\s*'), '');
     if (msg.contains('details:')) {
       final match = RegExp(r'error:\s*([^,\}]+)').firstMatch(msg);
       if (match != null) {
@@ -872,6 +894,19 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2.0),
+      ),
+      errorStyle: const TextStyle(
+        color: Color(0xFFDC2626),
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
       ),
     );
   }
@@ -1101,6 +1136,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                       controller: _firstNameController,
                                       textCapitalization:
                                           TextCapitalization.words,
+                                      autovalidateMode: _submitted
+                                          ? AutovalidateMode.onUserInteraction
+                                          : AutovalidateMode.disabled,
                                       inputFormatters:
                                           AppValidators.nameFormatters,
                                       textInputAction: TextInputAction.next,
@@ -1129,6 +1167,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                       controller: _middleNameController,
                                       textCapitalization:
                                           TextCapitalization.characters,
+                                      autovalidateMode: _submitted
+                                          ? AutovalidateMode.onUserInteraction
+                                          : AutovalidateMode.disabled,
                                       inputFormatters:
                                           AppValidators.middleInitialFormatters,
                                       textInputAction: TextInputAction.next,
@@ -1137,6 +1178,10 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                         hintText: 'e.g. H.',
                                         isDark: isDark,
                                       ),
+                                      validator: (v) =>
+                                          AppValidators.validateMiddleInitial(
+                                            v,
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -1152,6 +1197,9 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                       controller: _lastNameController,
                                       textCapitalization:
                                           TextCapitalization.words,
+                                      autovalidateMode: _submitted
+                                          ? AutovalidateMode.onUserInteraction
+                                          : AutovalidateMode.disabled,
                                       inputFormatters:
                                           AppValidators.nameFormatters,
                                       textInputAction: TextInputAction.next,

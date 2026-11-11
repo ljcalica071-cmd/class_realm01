@@ -9,7 +9,14 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/features/teacher/widgets/timetable_grid_widget.dart';
+import 'package:class_realm/widgets/common/app_time_picker_field.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+
+enum ScheduleViewMode {
+  mySchedule,
+  grade11Master,
+  grade12Master,
+}
 
 class TeacherScheduleTab extends StatefulWidget {
   const TeacherScheduleTab({super.key});
@@ -24,6 +31,11 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
   String? _loadError;
   List<ScheduleModel> _liveSchedules = [];
   List<Map<String, dynamic>> _teacherOfferings = [];
+
+  ScheduleViewMode _viewMode = ScheduleViewMode.mySchedule;
+  String? _sectionFilter;
+  List<ScheduleModel> _masterSchedules = [];
+  bool _isLoadingMaster = false;
 
   final SupabaseScheduleRepository _repo = SupabaseScheduleRepository.instance;
 
@@ -103,6 +115,69 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
     }
   }
 
+  Future<void> _changeViewMode(ScheduleViewMode mode) async {
+    if (_viewMode == mode && !_isLoadingMaster) return;
+    setState(() {
+      _viewMode = mode;
+      _sectionFilter = null;
+    });
+
+    if (mode == ScheduleViewMode.mySchedule) {
+      return;
+    }
+
+    setState(() => _isLoadingMaster = true);
+    try {
+      final grade = mode == ScheduleViewMode.grade11Master ? 11 : 12;
+      final schedules = await _repo.getSchedules(gradeLevel: grade);
+      if (!mounted) return;
+      setState(() {
+        _masterSchedules = schedules;
+        _isLoadingMaster = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading master schedules: $e');
+      if (!mounted) return;
+      setState(() {
+        _masterSchedules = [];
+        _isLoadingMaster = false;
+      });
+    }
+  }
+
+  Future<void> _refreshMasterSchedules() async {
+    if (_viewMode == ScheduleViewMode.mySchedule) return;
+    try {
+      final grade = _viewMode == ScheduleViewMode.grade11Master ? 11 : 12;
+      final schedules = await _repo.getSchedules(gradeLevel: grade);
+      if (!mounted) return;
+      setState(() {
+        _masterSchedules = schedules;
+      });
+    } catch (_) {}
+  }
+
+  List<ScheduleModel> get _currentDisplaySchedules {
+    if (_viewMode == ScheduleViewMode.mySchedule) {
+      return _liveSchedules;
+    }
+    if (_sectionFilter != null && _sectionFilter!.isNotEmpty) {
+      return _masterSchedules
+          .where((s) => s.section == _sectionFilter)
+          .toList();
+    }
+    return _masterSchedules;
+  }
+
+  List<String> get _availableMasterSections {
+    return _masterSchedules
+        .map((s) => s.section)
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+  }
+
   String _requireTeacherId() {
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null || teacherId.isEmpty) {
@@ -133,10 +208,30 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
     }
   }
 
+  TimeOfDay _parseTimeOfDay(
+    String timeStr, {
+    TimeOfDay fallback = const TimeOfDay(hour: 7, minute: 30),
+  }) {
+    try {
+      final clean = timeStr.trim();
+      final parts = clean.split(' ');
+      final hm = parts[0].split(':');
+      int h = int.parse(hm[0]);
+      final m = int.parse(hm[1]);
+      final ampm = parts.length > 1 ? parts[1].toUpperCase() : 'AM';
+      if (ampm == 'PM' && h != 12) h += 12;
+      if (ampm == 'AM' && h == 12) h = 0;
+      return TimeOfDay(hour: h, minute: m);
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final sortedSchedules = List<ScheduleModel>.from(_liveSchedules);
+    final displayedSchedules = _currentDisplaySchedules;
+    final sortedSchedules = List<ScheduleModel>.from(displayedSchedules);
     const dayOrder = {
       'Monday': 1,
       'Tuesday': 2,
@@ -153,7 +248,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
       return a.startTime.compareTo(b.startTime);
     });
 
-    final dailyHours = _calculateDailyHours();
+    final dailyHours = _viewMode == ScheduleViewMode.mySchedule
+        ? _calculateDailyHours()
+        : <String, double>{};
     final heavyDays = dailyHours.entries.where((e) => e.value > 6.0).toList();
 
     return Padding(
@@ -312,8 +409,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         AppModals.showWarningDialog(
                           context: context,
                           title: 'Classroom Setup Required',
-                          message:
-                              'Please set up your sections and subjects in Classroom Setup before adding a schedule entry.',
+                          message: 'Please set up your sections and subjects in Classroom Setup before adding a schedule entry.',
                         );
                       },
                     ),
@@ -324,6 +420,112 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                   label: 'Add Schedule Entry',
                   icon: Icons.add,
                   onPressed: () => _showScheduleEntryDialog(context),
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Scope Switcher Bar: [ My Schedule ] [ Grade 11 Master ] [ Grade 12 Master ] + Section Filter
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                  ),
+                ),
+                padding: const EdgeInsets.all(3),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildScopeChip(
+                      label: 'My Schedule',
+                      icon: LucideIcons.user,
+                      isSelected: _viewMode == ScheduleViewMode.mySchedule,
+                      onTap: () => _changeViewMode(ScheduleViewMode.mySchedule),
+                      theme: theme,
+                    ),
+                    _buildScopeChip(
+                      label: 'Grade 11 Master',
+                      icon: LucideIcons.graduationCap,
+                      isSelected: _viewMode == ScheduleViewMode.grade11Master,
+                      onTap: () =>
+                          _changeViewMode(ScheduleViewMode.grade11Master),
+                      theme: theme,
+                    ),
+                    _buildScopeChip(
+                      label: 'Grade 12 Master',
+                      icon: LucideIcons.graduationCap,
+                      isSelected: _viewMode == ScheduleViewMode.grade12Master,
+                      onTap: () =>
+                          _changeViewMode(ScheduleViewMode.grade12Master),
+                      theme: theme,
+                    ),
+                  ],
+                ),
+              ),
+              if (_viewMode != ScheduleViewMode.mySchedule &&
+                  _availableMasterSections.isNotEmpty)
+                Container(
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: _sectionFilter,
+                      icon: const Icon(LucideIcons.chevronDown, size: 16),
+                      hint: Row(
+                        children: [
+                          Icon(
+                            LucideIcons.filter,
+                            size: 14,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'All Sections',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text(
+                            'All Sections',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ),
+                        ..._availableMasterSections.map(
+                          (sec) => DropdownMenuItem<String?>(
+                            value: sec,
+                            child: Text(
+                              'Section: $sec',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) =>
+                          setState(() => _sectionFilter = val),
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -361,7 +563,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
 
           // Body Content (Timetable Grid or List View)
           Expanded(
-            child: _isLoading
+            child: (_isLoading || _isLoadingMaster)
                 ? ShimmerLoading(
                     child: Container(
                       decoration: BoxDecoration(
@@ -461,7 +663,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                       ),
                     ),
                   )
-                : _liveSchedules.isEmpty
+                : sortedSchedules.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -481,7 +683,11 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         ),
                         const SizedBox(height: 24),
                         Text(
-                          'No Class Schedules Yet',
+                          _viewMode == ScheduleViewMode.mySchedule
+                              ? 'No Class Schedules Yet'
+                              : (_viewMode == ScheduleViewMode.grade11Master
+                                  ? 'No Grade 11 Schedules Plotted Yet'
+                                  : 'No Grade 12 Schedules Plotted Yet'),
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -490,7 +696,11 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Your teaching schedule and timetable will appear here.\nClick "Add Schedule Entry" to start organizing your classes.',
+                          _viewMode == ScheduleViewMode.mySchedule
+                              ? 'Your teaching schedule and timetable will appear here.\nClick "Add Schedule Entry" to start organizing your classes.'
+                              : (_viewMode == ScheduleViewMode.grade11Master
+                                  ? 'No class sessions have been scheduled for Grade 11 yet.'
+                                  : 'No class sessions have been scheduled for Grade 12 yet.'),
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 14,
@@ -501,7 +711,8 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        if (_teacherOfferings.isEmpty)
+                        if (_viewMode == ScheduleViewMode.mySchedule &&
+                            _teacherOfferings.isEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
@@ -533,7 +744,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                               ],
                             ),
                           )
-                        else
+                        else if (_viewMode == ScheduleViewMode.mySchedule)
                           FilledButton.icon(
                             onPressed: () => _showScheduleEntryDialog(context),
                             icon: const Icon(LucideIcons.plus),
@@ -561,9 +772,10 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: TimetableGridWidget(
-                      schedules: _liveSchedules,
-                      onEdit: (s) =>
-                          _showScheduleEntryDialog(context, schedule: s),
+                      schedules: sortedSchedules,
+                      currentTeacherId:
+                          AuthRepository.instance.currentUser?.id,
+                      onEdit: (s) => _handleScheduleTap(context, s),
                     ),
                   )
                 : _buildListView(sortedSchedules, theme),
@@ -574,6 +786,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
   }
 
   Widget _buildListView(List<ScheduleModel> sortedSchedules, ThemeData theme) {
+    final currentTeacherId = AuthRepository.instance.currentUser?.id;
     if (sortedSchedules.isEmpty) {
       return Center(
         child: Column(
@@ -595,7 +808,11 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
             ),
             const SizedBox(height: 24),
             Text(
-              'No Class Schedules Yet',
+              _viewMode == ScheduleViewMode.mySchedule
+                  ? 'No Class Schedules Yet'
+                  : (_viewMode == ScheduleViewMode.grade11Master
+                      ? 'No Grade 11 Schedules Plotted Yet'
+                      : 'No Grade 12 Schedules Plotted Yet'),
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -604,7 +821,11 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Your teaching schedule and timetable will appear here.\nClick "Add Schedule Entry" to start organizing your classes.',
+              _viewMode == ScheduleViewMode.mySchedule
+                  ? 'Your teaching schedule and timetable will appear here.\nClick "Add Schedule Entry" to start organizing your classes.'
+                  : (_viewMode == ScheduleViewMode.grade11Master
+                      ? 'No class sessions have been scheduled for Grade 11 yet.'
+                      : 'No class sessions have been scheduled for Grade 12 yet.'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -613,7 +834,8 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
               ),
             ),
             const SizedBox(height: 24),
-            if (_teacherOfferings.isEmpty)
+            if (_viewMode == ScheduleViewMode.mySchedule &&
+                _teacherOfferings.isEmpty)
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -645,7 +867,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                   ],
                 ),
               )
-            else
+            else if (_viewMode == ScheduleViewMode.mySchedule)
               FilledButton.icon(
                 onPressed: () => _showScheduleEntryDialog(context),
                 icon: const Icon(LucideIcons.plus),
@@ -667,6 +889,11 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (ctx, i) {
         final s = sortedSchedules[i];
+        final isOwner = (s.teacherId != null &&
+                currentTeacherId != null &&
+                s.teacherId == currentTeacherId) ||
+            (s.teacherId == null && _viewMode == ScheduleViewMode.mySchedule);
+
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -712,7 +939,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Section: ${s.section} â€¢ Room: ${s.room.isEmpty ? "TBD" : s.room} â€¢ Grading: WW ${s.wwWeight?.toInt() ?? 20}% / PT ${s.ptWeight?.toInt() ?? 50}% / EX ${s.exWeight?.toInt() ?? 30}%',
+                      'Section: ${s.section} • Room: ${s.room.isEmpty ? "TBD" : s.room} • Grading: WW ${s.wwWeight?.toInt() ?? 20}% / PT ${s.ptWeight?.toInt() ?? 50}% / EX ${s.exWeight?.toInt() ?? 30}%',
                       style: TextStyle(
                         fontSize: 13,
                         color: theme.colorScheme.onSurface.withValues(
@@ -720,6 +947,30 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         ),
                       ),
                     ),
+                    if (s.teacherName != null &&
+                        s.teacherName!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.person_outline,
+                            size: 14,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isOwner
+                                ? 'Teacher: ${s.teacherName} (You)'
+                                : 'Teacher: ${s.teacherName}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -730,7 +981,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '${s.dayOfWeek} â€¢ ${s.startTime} - ${s.endTime} (${s.durationMinutes} mins)',
+                          '${s.dayOfWeek} • ${s.startTime} - ${s.endTime} (${s.durationMinutes} mins)',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
@@ -742,57 +993,309 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                   ],
                 ),
               ),
-              Row(
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.edit_outlined,
-                      size: 20,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              if (isOwner)
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        size: 20,
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                      onPressed: () =>
+                          _showScheduleEntryDialog(context, schedule: s),
+                      tooltip: 'Edit entry',
                     ),
-                    onPressed: () =>
-                        _showScheduleEntryDialog(context, schedule: s),
-                    tooltip: 'Edit entry',
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      size: 20,
-                      color: AppTheme.catRed,
-                    ),
-                    onPressed: () async {
-                      final confirm = await AppModals.showConfirmDialog(
-                        context: context,
-                        title: 'Delete Schedule Entry',
-                        message:
-                            'Are you sure you want to remove this schedule for ${s.subject} (${s.section})?',
-                        confirmLabel: 'Delete',
-                        confirmColor: AppTheme.catRed,
-                      );
-                      if (confirm == true) {
-                        try {
-                          await _repo.deleteSchedule(s.id);
-                          await _loadData();
-                        } catch (_) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Could not delete this schedule. Please try again.',
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        size: 20,
+                        color: AppTheme.catRed,
+                      ),
+                      onPressed: () async {
+                        final confirm = await AppModals.showConfirmDialog(
+                          context: context,
+                          title: 'Delete Schedule Entry',
+                          message:
+                              'Are you sure you want to remove this schedule for ${s.subject} (${s.section})?',
+                          confirmLabel: 'Delete',
+                          confirmColor: AppTheme.catRed,
+                        );
+                        if (confirm == true) {
+                          try {
+                            await _repo.deleteSchedule(s.id);
+                            await _loadData();
+                            await _refreshMasterSchedules();
+                          } catch (_) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Could not delete this schedule. Please try again.',
+                                ),
                               ),
-                            ),
-                          );
+                            );
+                          }
                         }
-                      }
-                    },
-                    tooltip: 'Delete entry',
+                      },
+                      tooltip: 'Delete entry',
+                    ),
+                  ],
+                )
+              else
+                IconButton(
+                  icon: Icon(
+                    Icons.info_outline,
+                    size: 20,
+                    color: theme.colorScheme.primary,
                   ),
-                ],
-              ),
+                  onPressed: () => _showReadOnlyScheduleDetails(context, s),
+                  tooltip: 'View details',
+                ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildScopeChip({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required ThemeData theme,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? theme.colorScheme.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleScheduleTap(BuildContext context, ScheduleModel s) {
+    final currentTeacherId = AuthRepository.instance.currentUser?.id;
+    final isOwner = (s.teacherId != null &&
+            currentTeacherId != null &&
+            s.teacherId == currentTeacherId) ||
+        (s.teacherId == null && _viewMode == ScheduleViewMode.mySchedule);
+
+    if (isOwner) {
+      _showScheduleEntryDialog(context, schedule: s);
+    } else {
+      _showReadOnlyScheduleDetails(context, s);
+    }
+  }
+
+  void _showReadOnlyScheduleDetails(BuildContext context, ScheduleModel s) {
+    final theme = Theme.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                LucideIcons.calendarCheck,
+                color: theme.colorScheme.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Class Schedule Details',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    _buildDetailRow(
+                      icon: LucideIcons.bookOpen,
+                      label: 'Subject',
+                      value: s.subject,
+                      theme: theme,
+                    ),
+                    const Divider(height: 16),
+                    _buildDetailRow(
+                      icon: LucideIcons.users,
+                      label: 'Section',
+                      value:
+                          '${s.section}${s.gradeLevel != null ? " (Grade ${s.gradeLevel})" : ""}',
+                      theme: theme,
+                    ),
+                    const Divider(height: 16),
+                    _buildDetailRow(
+                      icon: LucideIcons.userCheck,
+                      label: 'Teacher',
+                      value: s.teacherName?.trim().isNotEmpty == true
+                          ? s.teacherName!
+                          : 'Assigned Teacher',
+                      theme: theme,
+                      highlight: true,
+                    ),
+                    const Divider(height: 16),
+                    _buildDetailRow(
+                      icon: LucideIcons.mapPin,
+                      label: 'Room / Venue',
+                      value: s.room.trim().isNotEmpty
+                          ? s.room.trim()
+                          : 'No room specified (TBD)',
+                      theme: theme,
+                    ),
+                    const Divider(height: 16),
+                    _buildDetailRow(
+                      icon: LucideIcons.clock,
+                      label: 'Day & Time',
+                      value:
+                          '${s.dayOfWeek} • ${s.startTime} - ${s.endTime} (${s.durationMinutes} mins)',
+                      theme: theme,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.blue.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.blue,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Viewing master schedule. Only the assigning teacher (${s.teacherName ?? "assignee"}) can edit or delete this slot.',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: Colors.blue,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required ThemeData theme,
+    bool highlight = false,
+  }) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 16,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 90,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: highlight ? FontWeight.bold : FontWeight.w600,
+              color: highlight
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -951,32 +1454,6 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) {
-          final timeSlots = [
-            '07:00 AM',
-            '07:30 AM',
-            '08:00 AM',
-            '08:30 AM',
-            '09:00 AM',
-            '09:30 AM',
-            '10:00 AM',
-            '10:30 AM',
-            '11:00 AM',
-            '11:30 AM',
-            '12:00 PM',
-            '12:30 PM',
-            '01:00 PM',
-            '01:30 PM',
-            '02:00 PM',
-            '02:30 PM',
-            '03:00 PM',
-            '03:30 PM',
-            '04:00 PM',
-            '04:30 PM',
-            '05:00 PM',
-            '05:30 PM',
-            '06:00 PM',
-          ];
-
           return AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -1099,7 +1576,8 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         // Section Selector
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            initialValue: selectedOfferingId.isNotEmpty
+                            key: ValueKey('section_selector_${selectedGrade}_$selectedSubjectName'),
+                            initialValue: currentSections.any((sec) => sec['id'].toString() == selectedOfferingId)
                                 ? selectedOfferingId
                                 : (currentSections.isNotEmpty
                                       ? currentSections.first['id'].toString()
@@ -1160,7 +1638,8 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
 
                     // Subject Selector
                     DropdownButtonFormField<String>(
-                      initialValue: selectedSubjectName.isNotEmpty
+                      key: ValueKey('subject_selector_$selectedGrade'),
+                      initialValue: currentSubjects.contains(selectedSubjectName)
                           ? selectedSubjectName
                           : (currentSubjects.isNotEmpty
                                 ? currentSubjects.first
@@ -1245,50 +1724,116 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                     Row(
                       children: [
                         Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: timeSlots.contains(startTime)
-                                ? startTime
-                                : timeSlots.first,
-                            decoration: const InputDecoration(
-                              labelText: 'START TIME',
-                              border: OutlineInputBorder(),
+                          child: InkWell(
+                            onTap: isSaving
+                                ? null
+                                : () async {
+                                    final initial = _parseTimeOfDay(
+                                      startTime,
+                                      fallback: const TimeOfDay(
+                                        hour: 7,
+                                        minute: 30,
+                                      ),
+                                    );
+                                    final picked =
+                                        await showAppTimePickerDialog(
+                                          ctx,
+                                          initialTime: initial,
+                                          minTime: const TimeOfDay(
+                                            hour: 7,
+                                            minute: 0,
+                                          ),
+                                          maxTime: const TimeOfDay(
+                                            hour: 18,
+                                            minute: 30,
+                                          ),
+                                          title:
+                                              'Select Start Time (07:00 AM - 06:30 PM)',
+                                        );
+                                    if (picked != null) {
+                                      setModalState(() {
+                                        startTime = AppTimePickerField.format(
+                                          picked,
+                                        );
+                                        clashErrorMessage = null;
+                                      });
+                                    }
+                                  },
+                            borderRadius: BorderRadius.circular(4),
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'START TIME',
+                                border: OutlineInputBorder(),
+                                suffixIcon: Icon(
+                                  Icons.schedule_outlined,
+                                  size: 20,
+                                ),
+                              ),
+                              child: Text(
+                                startTime,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                             ),
-                            items: timeSlots
-                                .map(
-                                  (t) => DropdownMenuItem(
-                                    value: t,
-                                    child: Text(t),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) => setModalState(() {
-                              startTime = v!;
-                              clashErrorMessage = null;
-                            }),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: timeSlots.contains(endTime)
-                                ? endTime
-                                : timeSlots[4],
-                            decoration: const InputDecoration(
-                              labelText: 'END TIME',
-                              border: OutlineInputBorder(),
+                          child: InkWell(
+                            onTap: isSaving
+                                ? null
+                                : () async {
+                                    final initial = _parseTimeOfDay(
+                                      endTime,
+                                      fallback: const TimeOfDay(
+                                        hour: 9,
+                                        minute: 0,
+                                      ),
+                                    );
+                                    final picked =
+                                        await showAppTimePickerDialog(
+                                          ctx,
+                                          initialTime: initial,
+                                          minTime: const TimeOfDay(
+                                            hour: 7,
+                                            minute: 30,
+                                          ),
+                                          maxTime: const TimeOfDay(
+                                            hour: 19,
+                                            minute: 0,
+                                          ),
+                                          title:
+                                              'Select End Time (07:30 AM - 07:00 PM)',
+                                        );
+                                    if (picked != null) {
+                                      setModalState(() {
+                                        endTime = AppTimePickerField.format(
+                                          picked,
+                                        );
+                                        clashErrorMessage = null;
+                                      });
+                                    }
+                                  },
+                            borderRadius: BorderRadius.circular(4),
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'END TIME',
+                                border: OutlineInputBorder(),
+                                suffixIcon: Icon(
+                                  Icons.schedule_outlined,
+                                  size: 20,
+                                ),
+                              ),
+                              child: Text(
+                                endTime,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                             ),
-                            items: timeSlots
-                                .map(
-                                  (t) => DropdownMenuItem(
-                                    value: t,
-                                    child: Text(t),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) => setModalState(() {
-                              endTime = v!;
-                              clashErrorMessage = null;
-                            }),
                           ),
                         ),
                       ],
@@ -1332,6 +1877,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                               await _repo.deleteSchedule(schedule.id);
                               if (ctx.mounted) Navigator.pop(ctx);
                               await _loadData();
+                              await _refreshMasterSchedules();
                             } catch (_) {
                               setModalState(() {
                                 clashErrorMessage = 'Could not delete this schedule. Please try again.';
@@ -1351,10 +1897,10 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                 onPressed: isSaving
                     ? null
                     : () async {
-                        // 1. Validate Weights
-                        if (wwWeight + ptWeight + exWeight != 100) {
+                        // 1. Validate Subject & Section selection
+                        if (selectedOfferingId.isEmpty || selectedSubjectName.isEmpty) {
                           setModalState(() {
-                            clashErrorMessage = 'Total DepEd weights (WW + PT + EX) must be exactly 100%.';
+                            clashErrorMessage = 'Please select a valid subject and section for Grade $selectedGrade.';
                           });
                           return;
                         }
@@ -1383,10 +1929,48 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                           return;
                         }
 
-                        // RULE 1: Max 3 hours (180 mins) single plot validation
+                        // RULE 1: Max 3 hours (180 mins) continuous single plot validation
                         if (durationMins > 180) {
                           setModalState(() {
-                            clashErrorMessage = 'Error: A single continuous class session cannot exceed 3 hours (Maximum 3 hours / 180 mins).';
+                            clashErrorMessage =
+                                'Error: A single continuous class session cannot exceed 3 hours (Maximum 3 hours / 180 mins). A subject plot like 7:00 AM - 11:00 AM (4 hrs) is not permitted. Please split into separate sessions.';
+                          });
+                          return;
+                        }
+
+                        // Check contiguous back-to-back sessions for the same subject & section on the same day
+                        final contiguousExistingMins = _liveSchedules
+                            .where((s) =>
+                                s.dayOfWeek == selectedDay &&
+                                s.section == selectedSectionName &&
+                                s.subject == selectedSubjectName &&
+                                s.id != schedule?.id)
+                            .where((s) {
+                              final sStart = _timeToMinutes(s.startTime);
+                              final sEnd = _timeToMinutes(s.endTime);
+                              return sEnd == startMins || sStart == endMins;
+                            })
+                            .fold(0, (sum, s) => sum + s.durationMinutes);
+
+                        if (durationMins + contiguousExistingMins > 180) {
+                          final totalContinuous =
+                              durationMins + contiguousExistingMins;
+                          setModalState(() {
+                            clashErrorMessage =
+                                'Error: Continuous class session for $selectedSubjectName ($selectedSectionName) exceeds the 3-hour limit (Total continuous: ${totalContinuous ~/ 60} hrs ${totalContinuous % 60} mins). Please provide a break or schedule on another day.';
+                          });
+                          return;
+                        }
+
+                        // RULE 2: School Operating Hours (Strictly 07:00 AM to 07:00 PM)
+                        const minSchoolMins = 7 * 60; // 07:00 AM (420 mins)
+                        const maxSchoolMins = 19 * 60; // 07:00 PM (1140 mins)
+                        if (startMins < minSchoolMins ||
+                            endMins > maxSchoolMins ||
+                            startMins >= maxSchoolMins) {
+                          setModalState(() {
+                            clashErrorMessage =
+                                'Error: Classes must be scheduled strictly within school hours (07:00 AM to 07:00 PM). Plots before 07:00 AM (e.g. 1:00 AM - 2:00 AM) or ending after 07:00 PM (e.g. 7:00 PM - 8:00 PM) are strictly prohibited.';
                           });
                           return;
                         }
@@ -1445,6 +2029,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                             startTime24: start24,
                             endTime24: end24,
                             excludeScheduleId: schedule?.id,
+                            room: roomCtrl.text.trim(),
                           );
 
                           if (clash != null) {
@@ -1481,6 +2066,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                             Navigator.pop(ctx);
                           }
                           await _loadData();
+                          await _refreshMasterSchedules();
                         } catch (e) {
                           setModalState(() {
                             clashErrorMessage = 'Unable to validate or save this schedule. Please try again.';

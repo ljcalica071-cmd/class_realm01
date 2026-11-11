@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:class_realm/models/academic_models.dart';
-import 'package:class_realm/widgets/common/app_buttons.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 class TeacherGradingSystemTab extends StatelessWidget {
   final List<GradingCriteria> criteria;
@@ -71,10 +70,9 @@ class TeacherGradingSystemTab extends StatelessWidget {
             AppPrimaryButton(
               label: 'Update Weighting Criteria',
               onPressed: () {
-                AppModals.showSuccessDialog(
-                  context: context,
-                  title: 'Criteria Updated',
-                  message: 'Grading percentages successfully updated for score calculations.',
+                AppTopToast.success(
+                  context,
+                  'Grading weighting criteria updated.',
                 );
               },
             ),

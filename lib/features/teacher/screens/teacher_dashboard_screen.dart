@@ -1104,18 +1104,29 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               child: const Text('Activity / Assignment'),
             ),
           if (category != 'PT')
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                CreateAssessmentFlowDialog.show(
-                  context,
-                  initialSection: _selectedClassSection,
-                  initialIsExam: category == 'EX',
-                  skipTypeSelection: true,
-                  onAssessmentCreated: () => setState(() {}),
+            Builder(
+              builder: (context) {
+                final cooldownSec =
+                    CreateAssessmentFlowDialog.creationCooldown.remainingSeconds;
+                final baseLabel = category == 'EX' ? 'Exam' : 'Quiz';
+                return TextButton(
+                  onPressed: cooldownSec > 0
+                      ? null
+                      : () {
+                          Navigator.pop(dialogContext);
+                          CreateAssessmentFlowDialog.show(
+                            context,
+                            initialSection: _selectedClassSection,
+                            initialIsExam: category == 'EX',
+                            skipTypeSelection: true,
+                            onAssessmentCreated: () => setState(() {}),
+                          );
+                        },
+                  child: Text(
+                    cooldownSec > 0 ? '$baseLabel (${cooldownSec}s)' : baseLabel,
+                  ),
                 );
               },
-              child: Text(category == 'EX' ? 'Exam' : 'Quiz'),
             ),
           if (category != 'WW' && category != 'EX')
             TextButton(

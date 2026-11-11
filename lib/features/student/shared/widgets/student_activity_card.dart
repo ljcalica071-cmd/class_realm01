@@ -126,10 +126,9 @@ class StudentActivityCard extends StatelessWidget {
                     ? 'Upload Performance Task'
                     : 'Upload & Submit Document',
                 onPressed: () {
-                  AppModals.showSuccessDialog(
-                    context: context,
-                    title: 'Submission Successful',
-                    message: 'File uploaded and status updated to Submitted.',
+                  AppTopToast.success(
+                    context,
+                    'File uploaded and submitted successfully!',
                   );
                   onSubmitted();
                 },

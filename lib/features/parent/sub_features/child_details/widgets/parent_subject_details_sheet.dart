@@ -6,7 +6,7 @@ import 'package:class_realm/core/utils/deped_grading_engine.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 class ParentSubjectDetailsSheet extends StatelessWidget {
   final Map<String, dynamic> offering;
@@ -422,11 +422,9 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                         ClipboardData(text: teacherEmail),
                                       );
                                       if (context.mounted) {
-                                        AppModals.showSuccessDialog(
-                                          context: context,
-                                          title: 'Email Copied',
-                                          message:
-                                              'Teacher email copied to clipboard: $teacherEmail',
+                                        AppTopToast.success(
+                                          context,
+                                          'Teacher email copied: $teacherEmail',
                                         );
                                       }
                                     }
@@ -474,11 +472,9 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                       ClipboardData(text: contactNumber),
                                     );
                                     if (context.mounted) {
-                                      AppModals.showSuccessDialog(
-                                        context: context,
-                                        title: 'Phone Copied',
-                                        message:
-                                            'Contact number copied: $contactNumber',
+                                      AppTopToast.success(
+                                        context,
+                                        'Contact number copied: $contactNumber',
                                       );
                                     }
                                   },
@@ -535,11 +531,9 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                         ClipboardData(text: facebookLink),
                                       );
                                       if (context.mounted) {
-                                        AppModals.showSuccessDialog(
-                                          context: context,
-                                          title: 'Link Copied',
-                                          message:
-                                              'Facebook link copied: $facebookLink',
+                                        AppTopToast.success(
+                                          context,
+                                          'Facebook link copied: $facebookLink',
                                         );
                                       }
                                     }

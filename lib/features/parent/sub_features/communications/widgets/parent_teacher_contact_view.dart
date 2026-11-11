@@ -577,10 +577,9 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
                 } else {
                   await Clipboard.setData(ClipboardData(text: email));
                   if (context.mounted) {
-                    AppModals.showSuccessDialog(
-                      context: context,
-                      title: 'Email Copied',
-                      message: 'Teacher email copied to clipboard: $email',
+                    AppTopToast.success(
+                      context,
+                      'Teacher email copied to clipboard: $email',
                     );
                   }
                 }
@@ -600,10 +599,9 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
               onAction: () async {
                 await Clipboard.setData(ClipboardData(text: phone));
                 if (context.mounted) {
-                  AppModals.showSuccessDialog(
-                    context: context,
-                    title: 'Phone Copied',
-                    message: 'Contact number copied to clipboard: $phone',
+                  AppTopToast.success(
+                    context,
+                    'Contact number copied to clipboard: $phone',
                   );
                 }
               },
@@ -629,10 +627,9 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
                 } else {
                   await Clipboard.setData(ClipboardData(text: facebook));
                   if (context.mounted) {
-                    AppModals.showSuccessDialog(
-                      context: context,
-                      title: 'Link Copied',
-                      message: 'Facebook link copied to clipboard: $facebook',
+                    AppTopToast.success(
+                      context,
+                      'Facebook link copied to clipboard: $facebook',
                     );
                   }
                 }

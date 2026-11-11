@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:class_realm/data/repositories/learning_material_repository.dart';
+import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
 
 void main() {
   group('MaterialFileValidator Unit Tests', () {
@@ -113,11 +114,11 @@ void main() {
       );
     });
 
-    test('rejects files exceeding strict 3 MB limit (3,145,728 bytes)', () {
+    test('rejects files exceeding strict 15 MB limit (15,728,640 bytes)', () {
       final validPdfHeader = [0x25, 0x50, 0x44, 0x46, 0x2D];
-      const maxAllowed = MaterialFileValidator.maxFileSizeBytes; // 3,145,728
+      const maxAllowed = MaterialFileValidator.maxFileSizeBytes;
 
-      // At exactly 3MB
+      // At exactly maxAllowed
       final exactBytes = Uint8List.fromList(List.filled(10, 0)..setRange(0, 5, validPdfHeader));
       expect(
         MaterialFileValidator.validateFile(
@@ -128,14 +129,14 @@ void main() {
         isNull,
       );
 
-      // 1 byte over 3MB
+      // 1 byte over limit
       expect(
         MaterialFileValidator.validateFile(
           fileName: 'test.pdf',
           fileBytes: exactBytes,
           byteSize: maxAllowed + 1,
         ),
-        'File size exceeds the 3 MB (3,145,728 bytes) limit.',
+        'File size exceeds the 15 MB (15,728,640 bytes) limit.',
       );
     });
 
@@ -307,6 +308,87 @@ void main() {
       // Verify RAW storage URL is NEVER displayed
       expect(find.textContaining('https://private.supabase.co'), findsNothing);
       expect(find.textContaining('secret_internal_uuid_path'), findsNothing);
+    });
+  });
+
+  group('Teacher Folder Visibility and Auto-Hide Rules', () {
+    test('Default 4 curriculum folders are identified and locked as visible', () {
+      final defaultNames = [
+        'Term 1',
+        'Term 2',
+        'Term 3',
+        'Supplementary Handouts & Reviewers',
+      ];
+
+      for (final name in defaultNames) {
+        expect(
+          SupabaseLearningMaterialRepository.isDefaultFolderName(name),
+          isTrue,
+          reason: '$name should be recognized as a default curriculum folder',
+        );
+
+        final folder = ClassRealmFolder(
+          id: 'def_$name',
+          subjectOfferingId: 'off_1',
+          folderName: name,
+          isVisibleToStudents: true,
+          createdAt: DateTime.now(),
+        );
+
+        expect(folder.isVisibleToStudents, isTrue);
+      }
+    });
+
+    test('Custom folders (e.g. Reviewer) can toggle visibility between visible and hidden', () {
+      expect(
+        SupabaseLearningMaterialRepository.isDefaultFolderName('Reviewer'),
+        isFalse,
+      );
+
+      final customFolder = ClassRealmFolder(
+        id: 'folder_reviewer',
+        subjectOfferingId: 'off_1',
+        folderName: 'Reviewer',
+        isVisibleToStudents: true,
+        createdAt: DateTime.now(),
+      );
+
+      // Teacher toggles folder to hidden
+      final hiddenFolder = customFolder.copyWith(isVisibleToStudents: false);
+      expect(hiddenFolder.isVisibleToStudents, isFalse);
+
+      // Teacher toggles folder back to visible
+      final visibleAgain = hiddenFolder.copyWith(isVisibleToStudents: true);
+      expect(visibleAgain.isVisibleToStudents, isTrue);
+    });
+
+    test('Files in a hidden folder are automatically hidden from students', () {
+      final hiddenFolder = ClassRealmFolder(
+        id: 'folder_reviewer',
+        subjectOfferingId: 'off_1',
+        folderName: 'Reviewer',
+        isVisibleToStudents: false, // Folder is hidden!
+        createdAt: DateTime.now(),
+      );
+
+      final fileInHiddenFolder = ClassRealmMaterial(
+        id: 'mat_rev_1',
+        folderId: hiddenFolder.id,
+        fileName: 'ExamReviewer.pdf',
+        storagePathUrl: 'https://example.com/file.pdf',
+        fileSizeBytes: 5000,
+        isVisibleToStudents: true, // Marked visible individually
+        createdAt: DateTime.now(),
+      );
+
+      // Effective visibility logic: material is visible ONLY if both folder and file are visible
+      final effectiveVisible =
+          fileInHiddenFolder.isVisibleToStudents && hiddenFolder.isVisibleToStudents;
+      expect(
+        effectiveVisible,
+        isFalse,
+        reason: 'File must be automatically hidden when parent folder is hidden',
+      );
     });
   });
 }

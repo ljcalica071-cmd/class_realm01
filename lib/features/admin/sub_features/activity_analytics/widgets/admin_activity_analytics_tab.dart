@@ -10,6 +10,7 @@ import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class AdminActivityAnalyticsTab extends StatefulWidget {
@@ -27,7 +28,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
   bool _hasInitialLoaded = false;
   bool _isSwitchingFilter = false;
-  String _activeFilter = 'today'; // 'today', 'week', 'custom', 'all'
+  int _loadSequence = 0;
+  String _activeFilter = 'today'; // 'today', 'week', 'month', 'custom', 'all'
   DateTime? _selectedCustomDate;
   int _currentHistoryPage = 1;
   static const int _historyItemsPerPage = 10;
@@ -214,12 +216,43 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         });
   }
 
-  String _getCacheKey() {
-    if (_activeFilter == 'custom' && _selectedCustomDate != null) {
-      final d = _selectedCustomDate!;
+  String _getCacheKey() => _getCacheKeyFor(_activeFilter, _selectedCustomDate);
+
+  String _getCacheKeyFor(String filter, DateTime? customDate) {
+    if (filter == 'custom' && customDate != null) {
+      final d = customDate;
       return 'custom_${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     }
-    return _activeFilter;
+    return filter;
+  }
+
+  void _switchFilter(String key) {
+    if (_activeFilter == key) return;
+
+    final nextCacheKey = _getCacheKeyFor(key, _selectedCustomDate);
+    final cachedLogs = _sessionLogsCache[nextCacheKey];
+    final cachedWorkloads = _workloadCache[nextCacheKey];
+
+    setState(() {
+      _activeFilter = key;
+      _currentHistoryPage = 1;
+      if (cachedLogs != null) {
+        _sessionLogs = cachedLogs;
+        if (cachedWorkloads != null) {
+          _workloadSummaries = cachedWorkloads;
+        }
+        _isSwitchingFilter = false;
+      } else {
+        final restored = _restoreCachedData(nextCacheKey);
+        if (!restored) {
+          // Do not leak old filter's logs into new filter's timeline
+          _sessionLogs = [];
+        }
+        _isSwitchingFilter = !restored;
+      }
+    });
+
+    _loadData(isFilterSwitch: true, expectedFilter: key);
   }
 
   String _persistentCacheKey(String filterKey) {
@@ -276,8 +309,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   Future<void> _loadData({
     bool isSilent = false,
     bool isFilterSwitch = false,
+    String? expectedFilter,
   }) async {
-    final cacheKey = _getCacheKey();
+    final targetFilter = expectedFilter ?? _activeFilter;
+    final thisSequence = ++_loadSequence;
+    final cacheKey = _getCacheKeyFor(targetFilter, _selectedCustomDate);
 
     if (isFilterSwitch && !_sessionLogsCache.containsKey(cacheKey)) {
       _restoreCachedData(cacheKey);
@@ -285,31 +321,35 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
     // If cached and switching filters, immediately display cached data with zero latency
     if (isFilterSwitch && _sessionLogsCache.containsKey(cacheKey)) {
-      setState(() {
-        _currentHistoryPage = 1;
-        _sessionLogs = _sessionLogsCache[cacheKey]!;
-        if (_workloadCache.containsKey(cacheKey)) {
-          _workloadSummaries = _workloadCache[cacheKey]!;
-        }
-        _isSwitchingFilter = false;
-      });
+      if (mounted && _activeFilter == targetFilter) {
+        setState(() {
+          _currentHistoryPage = 1;
+          _sessionLogs = _sessionLogsCache[cacheKey]!;
+          if (_workloadCache.containsKey(cacheKey)) {
+            _workloadSummaries = _workloadCache[cacheKey]!;
+          }
+          _isSwitchingFilter = false;
+        });
+      }
       // Fetch in background silently to verify sync
       isSilent = true;
     } else if (isFilterSwitch) {
-      setState(() {
-        _currentHistoryPage = 1;
-        _isSwitchingFilter = true;
-      });
+      if (mounted && _activeFilter == targetFilter) {
+        setState(() {
+          _currentHistoryPage = 1;
+          _isSwitchingFilter = true;
+        });
+      }
     }
 
     final now = DateTime.now();
     DateTime? startDate;
     DateTime? endDate;
 
-    if (_activeFilter == 'today') {
+    if (targetFilter == 'today') {
       startDate = DateTime(now.year, now.month, now.day);
       endDate = DateTime(now.year, now.month, now.day);
-    } else if (_activeFilter == 'week') {
+    } else if (targetFilter == 'week') {
       // Monday to Sunday of current week
       startDate = DateTime(
         now.year,
@@ -317,7 +357,14 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         now.day,
       ).subtract(Duration(days: now.weekday - 1));
       endDate = startDate.add(const Duration(days: 6));
-    } else if (_activeFilter == 'custom' && _selectedCustomDate != null) {
+    } else if (targetFilter == 'month') {
+      // 1st of current month to end of current month
+      startDate = DateTime(now.year, now.month, 1);
+      final nextMonth = now.month == 12
+          ? DateTime(now.year + 1, 1, 1)
+          : DateTime(now.year, now.month + 1, 1);
+      endDate = nextMonth.subtract(const Duration(days: 1));
+    } else if (targetFilter == 'custom' && _selectedCustomDate != null) {
       final d = _selectedCustomDate!;
       startDate = DateTime(d.year, d.month, d.day);
       endDate = DateTime(d.year, d.month, d.day);
@@ -355,7 +402,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         }),
       );
 
-      if (mounted) {
+      final wasInitial = !_hasInitialLoaded;
+      // Discard stale in-flight responses if user already clicked another filter
+      if (mounted && thisSequence == _loadSequence && _activeFilter == targetFilter) {
         setState(() {
           _sessionLogs = logs;
           _workloadSummaries = workloads;
@@ -363,13 +412,79 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
           _isSwitchingFilter = false;
         });
       }
+      if (wasInitial) {
+        unawaited(_prewarmAllFilters());
+      }
     } catch (_) {
-      if (mounted) {
+      if (mounted && thisSequence == _loadSequence && _activeFilter == targetFilter) {
         setState(() {
           _hasInitialLoaded = true;
           _isSwitchingFilter = false;
         });
       }
+    }
+  }
+
+  /// Silently pre-fetches and caches standard filters ('week', 'month', 'all')
+  /// in the background so switching between them is 100% instantaneous with zero loading flicker!
+  Future<void> _prewarmAllFilters() async {
+    final filtersToPrewarm = ['week', 'month', 'all'];
+    for (final filter in filtersToPrewarm) {
+      if (!mounted) return;
+      final cacheKey = _getCacheKeyFor(filter, null);
+      if (_sessionLogsCache.containsKey(cacheKey)) continue;
+
+      // Try restoring from persistent cache first
+      final restored = _restoreCachedData(cacheKey);
+      if (restored && _sessionLogsCache.containsKey(cacheKey)) continue;
+
+      try {
+        final now = DateTime.now();
+        DateTime? startDate;
+        DateTime? endDate;
+
+        if (filter == 'week') {
+          startDate = DateTime(
+            now.year,
+            now.month,
+            now.day,
+          ).subtract(Duration(days: now.weekday - 1));
+          endDate = startDate.add(const Duration(days: 6));
+        } else if (filter == 'month') {
+          startDate = DateTime(now.year, now.month, 1);
+          final nextMonth = now.month == 12
+              ? DateTime(now.year + 1, 1, 1)
+              : DateTime(now.year, now.month + 1, 1);
+          endDate = nextMonth.subtract(const Duration(days: 1));
+        }
+
+        final logs = await AdminRepository.instance.getTeacherSessionLogs(
+          startDate: startDate,
+          endDate: endDate,
+        );
+
+        if (!mounted) return;
+        _sessionLogsCache[cacheKey] = logs;
+
+        unawaited(
+          AppDataCache.instance.setCache(_persistentCacheKey(cacheKey), {
+            'logs': logs.map((log) {
+              return {...log.toJson(), 'teacher_name': log.teacherName};
+            }).toList(),
+            'workloads': _workloadSummaries.map((summary) {
+              return {
+                'teacher_id': summary.teacherId,
+                'teacher_name': summary.teacherName,
+                'total_subjects_count': summary.totalSubjectsCount,
+                'total_sections_count': summary.totalSectionsCount,
+                'is_active_now': summary.isActiveNow,
+                'today_duration_seconds': summary.todayDurationSeconds,
+                'week_duration_seconds': summary.weekDurationSeconds,
+              };
+            }).toList(),
+          }),
+        );
+      } catch (_) {}
     }
   }
 
@@ -415,10 +530,31 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       return;
     }
 
-    _activeFilter = 'custom';
-    _selectedCustomDate = picked;
+    final customKey =
+        'custom_${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    final cachedLogs = _sessionLogsCache[customKey];
+    final cachedWorkloads = _workloadCache[customKey];
 
-    _loadData(isFilterSwitch: true);
+    setState(() {
+      _activeFilter = 'custom';
+      _selectedCustomDate = picked;
+      _currentHistoryPage = 1;
+      if (cachedLogs != null) {
+        _sessionLogs = cachedLogs;
+        if (cachedWorkloads != null) {
+          _workloadSummaries = cachedWorkloads;
+        }
+        _isSwitchingFilter = false;
+      } else {
+        final restored = _restoreCachedData(customKey);
+        if (!restored) {
+          _sessionLogs = [];
+        }
+        _isSwitchingFilter = !restored;
+      }
+    });
+
+    _loadData(isFilterSwitch: true, expectedFilter: 'custom');
   }
 
   String _formatTimestamp(DateTime dt) {
@@ -543,6 +679,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
     if (_activeFilter == 'all') {
       return 'Historical timeline across all recorded session dates';
+    } else if (_activeFilter == 'month') {
+      return 'Daily faculty usage breakdown this month (${_shortMonth(DateTime.now().month)})';
     } else if (_activeFilter == 'week') {
       return 'Daily faculty usage breakdown this week (Monday – Sunday)';
     } else if (_activeFilter == 'custom' && _selectedCustomDate != null) {
@@ -819,11 +957,13 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         ),
 
         // Subtle top progress bar when switching filters (No screen flash / destruction)
-        if (_isSwitchingFilter)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: AnimatedOpacity(
+            opacity: _isSwitchingFilter ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 200),
             child: LinearProgressIndicator(
               minHeight: 3,
               backgroundColor: Colors.transparent,
@@ -832,6 +972,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
               ),
             ),
           ),
+        ),
       ],
     );
   }
@@ -901,6 +1042,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             children: [
               _buildFilterButton('Today', 'today'),
               _buildFilterButton('This Week', 'week'),
+              _buildFilterButton('This Month', 'month'),
               _buildDateFilterButton(customDateLabel, 'custom'),
               _buildFilterButton('All Records', 'all'),
             ],
@@ -933,11 +1075,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     final isDark = theme.brightness == Brightness.dark;
 
     return InkWell(
-      onTap: () {
-        if (_activeFilter == key) return;
-        _activeFilter = key;
-        _loadData(isFilterSwitch: true);
-      },
+      onTap: () => _switchFilter(key),
       borderRadius: BorderRadius.circular(8),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -1037,6 +1175,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       filterSubtitle = 'Recorded today';
     } else if (_activeFilter == 'week') {
       filterSubtitle = 'This week (Mon - Sun)';
+    } else if (_activeFilter == 'month') {
+      filterSubtitle = 'This month (${_shortMonth(DateTime.now().month)})';
     } else if (_activeFilter == 'custom' && _selectedCustomDate != null) {
       filterSubtitle = 'Date: ${_formatDate(_selectedCustomDate!)}';
     } else {
@@ -1246,8 +1386,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   Widget _buildUsageCurveChartCard(BuildContext context, bool isDark) {
     final theme = Theme.of(context);
 
+    final currentCacheKey = _getCacheKey();
+    final bool isFilterDataReady = _sessionLogsCache.containsKey(currentCacheKey);
+    final bool showGraphLoader = _isSwitchingFilter && !isFilterDataReady;
+
     // Prepare chart series data based on active filter and teacher selection
-    final seriesList = _generateChartData();
+    final seriesList = showGraphLoader ? <_TeacherSeries>[] : _generateChartData();
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -1318,18 +1462,69 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
           ),
           const SizedBox(height: 20),
 
-          // Custom Curve Chart Painter with smooth hover and multi-series support
+          // Custom Curve Chart with smooth entrance animation or clean in-graph loading state
           SizedBox(
-            height: seriesList.length > 1 ? 260 : 230,
-            child: _TeacherActivityCurveChart(
-              seriesList: seriesList,
-              isDark: isDark,
-              activeFilter: _activeFilter,
-              selectedTeacherId: _selectedTeacherId,
-              selectedCustomDate: _selectedCustomDate,
-              onTeacherSelected: (teacherId) {
-                setState(() => _selectedTeacherId = teacherId);
-              },
+            height: 260,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 240),
+              child: showGraphLoader
+                  ? _buildGraphLoadingPlaceholder(theme, isDark)
+                  : _TeacherActivityCurveChart(
+                      key: ValueKey(
+                        'chart_${_activeFilter}_${_selectedTeacherId}_${_selectedCustomDate?.toIso8601String()}_${_sessionLogs.length}',
+                      ),
+                      seriesList: seriesList,
+                      isDark: isDark,
+                      activeFilter: _activeFilter,
+                      selectedTeacherId: _selectedTeacherId,
+                      selectedCustomDate: _selectedCustomDate,
+                      onTeacherSelected: (teacherId) {
+                        setState(() => _selectedTeacherId = teacherId);
+                      },
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGraphLoadingPlaceholder(ThemeData theme, bool isDark) {
+    return Container(
+      key: const ValueKey('chart_loading_placeholder'),
+      height: 260,
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.02)
+            : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _ChartGridPlaceholderPainter(isDark: isDark),
+            ),
+          ),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LoadingAnimationWidget.staggeredDotsWave(
+                  color: theme.colorScheme.primary,
+                  size: 32,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Loading activity analytics...',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1449,6 +1644,49 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             teacherId: teacher.id,
             teacherName: teacher.name,
             date: date,
+          );
+        }).toList();
+
+        return _TeacherSeries(
+          teacherId: teacher.id,
+          teacherName: teacher.name,
+          color: teacher.color,
+          points: points,
+        );
+      }).toList();
+    }
+
+    if (_activeFilter == 'month') {
+      final totalDays = DateTime(currentNow.year, currentNow.month + 1, 0).day;
+      final upToDay = currentNow.day.clamp(1, totalDays);
+      final displayDates = List.generate(
+        upToDay,
+        (i) => DateTime(currentNow.year, currentNow.month, i + 1),
+      );
+
+      return targetTeachers.map((teacher) {
+        final teacherLogs = relevantLogs
+            .where((s) => s.userId == teacher.id)
+            .toList();
+        final points = displayDates.map((dayDate) {
+          int sec = 0;
+          for (final log in teacherLogs) {
+            if (log.loginAt.year == dayDate.year &&
+                log.loginAt.month == dayDate.month &&
+                log.loginAt.day == dayDate.day) {
+              sec += _effectiveSessionSeconds(log, currentNow);
+            }
+          }
+          sec = sec.clamp(0, _maxDailyDurationSeconds);
+          final hoursVal = (sec / 3600.0).clamp(0.0, 24.0);
+          final dateLabel = '${_shortMonth(dayDate.month)} ${dayDate.day}';
+          return _ChartPoint(
+            label: dateLabel,
+            value: hoursVal,
+            totalSeconds: sec,
+            teacherId: teacher.id,
+            teacherName: teacher.name,
+            date: dayDate,
           );
         }).toList();
 
@@ -1768,6 +2006,8 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                                 periodLabel = 'Today Usage:';
                               } else if (_activeFilter == 'week') {
                                 periodLabel = 'This Week Usage:';
+                              } else if (_activeFilter == 'month') {
+                                periodLabel = 'This Month Usage:';
                               } else if (_activeFilter == 'custom' &&
                                   _selectedCustomDate != null) {
                                 periodLabel = 'Date Usage:';
@@ -2661,6 +2901,7 @@ class _TeacherActivityCurveChart extends StatefulWidget {
   final ValueChanged<String?>? onTeacherSelected;
 
   const _TeacherActivityCurveChart({
+    super.key,
     required this.isDark,
     this.seriesList = const [],
     this.activeFilter = 'today',
@@ -2689,7 +2930,7 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
     super.initState();
     _entranceAnimController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 850),
+      duration: const Duration(milliseconds: 350),
     );
     _entranceAnimation = CurvedAnimation(
       parent: _entranceAnimController,
@@ -2710,11 +2951,14 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
   @override
   void didUpdateWidget(covariant _TeacherActivityCurveChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Only re-trigger entrance animation when the user explicitly changes filter,
-    // custom date, or selected teacher — never on silent background syncs!
-    if (oldWidget.activeFilter != widget.activeFilter ||
+    // Trigger entrance animation when user changes filter, custom date,
+    // selected teacher, or when new series data arrives
+    final filterChanged = oldWidget.activeFilter != widget.activeFilter ||
         oldWidget.selectedTeacherId != widget.selectedTeacherId ||
-        oldWidget.selectedCustomDate != widget.selectedCustomDate) {
+        oldWidget.selectedCustomDate != widget.selectedCustomDate;
+    final seriesChanged = oldWidget.seriesList != widget.seriesList;
+
+    if (filterChanged || seriesChanged) {
       _hoveredPointIndex = null;
       _hoveredSeriesIndex = null;
       _entranceAnimController.forward(from: 0.0);
@@ -2744,7 +2988,17 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
               : <_TeacherSeries>[]);
 
     if (effectiveSeries.isEmpty || effectiveSeries.first.points.isEmpty) {
-      return const SizedBox.shrink();
+      return Container(
+        height: 230,
+        alignment: Alignment.center,
+        child: Text(
+          'No activity recorded for this period',
+          style: TextStyle(
+            fontSize: 12.5,
+            color: widget.isDark ? Colors.white38 : const Color(0xFF94A3B8),
+          ),
+        ),
+      );
     }
 
     final pointsCount = effectiveSeries.first.points.length;
@@ -2974,7 +3228,7 @@ class _CurveChartPainter extends CustomPainter {
 
     for (int i = 0; i < n - 1; i++) {
       final dx = points[i + 1].dx - points[i].dx;
-      deltas[i] = dx != 0 ? (points[i + 1].dy - points[i].dy) / dx : 0.0;
+      deltas[i] = dx.abs() > 1e-6 ? (points[i + 1].dy - points[i].dy) / dx : 0.0;
     }
 
     m[0] = deltas[0];
@@ -2989,7 +3243,7 @@ class _CurveChartPainter extends CustomPainter {
     }
 
     for (int i = 0; i < n - 1; i++) {
-      if (deltas[i] == 0) {
+      if (deltas[i].abs() < 1e-6) {
         m[i] = 0;
         m[i + 1] = 0;
       } else {
@@ -3206,7 +3460,9 @@ class _CurveChartPainter extends CustomPainter {
 
     if (targetPointIdx != null &&
         targetSeriesIdx < effectiveSeries.length &&
-        targetPointIdx < effectiveSeries[targetSeriesIdx].points.length) {
+        targetSeriesIdx < allSeriesCoords.length &&
+        targetPointIdx < effectiveSeries[targetSeriesIdx].points.length &&
+        targetPointIdx < allSeriesCoords[targetSeriesIdx].length) {
       final targetSeries = effectiveSeries[targetSeriesIdx];
       final targetPoint = targetSeries.points[targetPointIdx];
       final pt = allSeriesCoords[targetSeriesIdx][targetPointIdx];
@@ -3400,7 +3656,16 @@ class _CurveChartPainter extends CustomPainter {
     );
 
     final firstPoints = effectiveSeries.first.points;
+    final int step = pointsCount > 22
+        ? 4
+        : pointsCount > 13
+            ? 2
+            : 1;
+
     for (int i = 0; i < firstPoints.length; i++) {
+      final isEdge = (i == 0 || i == firstPoints.length - 1);
+      if (!isEdge && (i % step != 0)) continue;
+
       final x = leftPadding + (dx * i);
       final tp = TextPainter(
         text: TextSpan(text: firstPoints[i].label, style: textStyle),
@@ -3427,6 +3692,56 @@ class _CurveChartPainter extends CustomPainter {
         oldDelegate.entranceProgress != entranceProgress ||
         oldDelegate.activeFilter != activeFilter;
   }
+}
+
+class _ChartGridPlaceholderPainter extends CustomPainter {
+  final bool isDark;
+
+  const _ChartGridPlaceholderPainter({required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const leftPadding = 42.0;
+    const rightPadding = 18.0;
+    const topPadding = 20.0;
+    const bottomPadding = 26.0;
+    final chartHeight = size.height - topPadding - bottomPadding;
+
+    final gridPaint = Paint()
+      ..color = isDark ? Colors.white10 : const Color(0xFFE2E8F0)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    final yAxisStyle = TextStyle(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w600,
+      fontFamily: 'monospace',
+      color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+    );
+
+    final levels = ['18h', '12h', '6h', '0h'];
+    for (int i = 0; i <= 3; i++) {
+      final y = topPadding + (chartHeight / 3.0) * i;
+      canvas.drawLine(
+        Offset(leftPadding, y),
+        Offset(size.width - rightPadding, y),
+        gridPaint,
+      );
+
+      final tpLevel = TextPainter(
+        text: TextSpan(text: levels[i], style: yAxisStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tpLevel.paint(
+        canvas,
+        Offset(leftPadding - tpLevel.width - 8, y - tpLevel.height / 2),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChartGridPlaceholderPainter oldDelegate) =>
+      oldDelegate.isDark != isDark;
 }
 
 // =========================================================================

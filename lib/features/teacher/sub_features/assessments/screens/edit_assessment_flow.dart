@@ -4,7 +4,7 @@ import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/models/academic_models.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 class EditAssessmentFlowDialog extends StatefulWidget {
   final QuizOrExamModel assessment;
@@ -402,14 +402,11 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
       await widget.onAssessmentUpdated();
 
       if (!mounted) return;
-      Navigator.of(context).pop();
-
-      await AppModals.showSuccessDialog(
-        context: context,
-        title: 'Questions Updated',
-        message:
-            'All ${widget.assessment.title} questions and answer keys have been saved and synchronized.',
+      AppTopToast.success(
+        context,
+        'Questions for "${widget.assessment.title}" updated.',
       );
+      Navigator.of(context).pop();
     } catch (e) {
       debugPrint('Save questions error: $e');
       if (mounted) {

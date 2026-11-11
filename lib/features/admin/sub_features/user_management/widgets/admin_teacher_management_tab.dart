@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -85,6 +86,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     );
 
     if (created == true && mounted) {
+      AppDataCache.instance.invalidate('admin_teachers_list');
       widget.onDataChanged();
     }
   }
@@ -97,10 +99,9 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
     );
     if (updated == true && mounted) {
       widget.onDataChanged();
-      AppModals.showSuccessDialog(
-        context: context,
-        title: 'Teacher Updated',
-        message: 'Teacher profile details have been successfully updated.',
+      AppTopToast.success(
+        context,
+        'Teacher profile details updated successfully.',
       );
     }
   }
@@ -141,12 +142,11 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
         currentStatusHint: currentHint,
       );
       if (success) {
+        AppDataCache.instance.invalidate('admin_teachers_list');
         if (mounted) {
-          AppModals.showSuccessDialog(
-            context: context,
-            title: 'Teacher Archived',
-            message: '${t.fullName} has been moved to archives.',
-            onConfirm: widget.onDataChanged,
+          AppTopToast.success(
+            context,
+            '${t.fullName} moved to archives.',
           );
         }
         widget.onDataChanged();
@@ -177,13 +177,11 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
         'active',
       );
       if (success) {
+        AppDataCache.instance.invalidate('admin_teachers_list');
         if (mounted) {
-          AppModals.showSuccessDialog(
-            context: context,
-            title: 'Teacher Restored',
-            message:
-                '${t.fullName} has been successfully restored from archives.',
-            onConfirm: widget.onDataChanged,
+          AppTopToast.success(
+            context,
+            '${t.fullName} restored from archives.',
           );
         }
         widget.onDataChanged();
@@ -212,6 +210,23 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       return;
     }
 
+    // 1. Deletion Protection Guard: Verify if teacher has associated enrolled students or records
+    final hasRecords =
+        await AuthRepository.instance.hasTeacherAcademicRecords(t.id);
+    if (hasRecords) {
+      if (mounted) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Cannot Delete Teacher',
+          message:
+              'This teacher cannot be permanently deleted because they have associated enrolled students or academic records.',
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
     final confirm = await AppModals.showTypeToConfirmDeleteDialog(
       context: context,
       title: 'Permanently Delete Teacher',
@@ -219,18 +234,16 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
           'Are you sure you want to permanently delete ${t.fullName}?\n\n'
           '• This action is permanent and IRREVERSIBLE.\n'
           '• Teacher profile, credentials, and account records will be permanently erased.\n'
-          '• All associated class schedules, activities, and teacher files will be removed from the system.\n'
-          '• Enrolled students will remain in the school directory, but this teacher cannot be restored.',
+          '• Since this teacher has no active student enrollments, it is safe to remove completely.',
     );
     if (confirm == true) {
       final success = await AuthRepository.instance.deleteTeacherRecord(t.id);
       if (success) {
+        AppDataCache.instance.invalidate('admin_teachers_list');
         if (mounted) {
-          AppModals.showSuccessDialog(
-            context: context,
-            title: 'Teacher Deleted',
-            message: '${t.fullName} has been permanently deleted.',
-            onConfirm: widget.onDataChanged,
+          AppTopToast.success(
+            context,
+            '${t.fullName} permanently deleted.',
           );
         }
         widget.onDataChanged();

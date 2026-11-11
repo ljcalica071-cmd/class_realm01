@@ -3,6 +3,7 @@
 // Features Online (Take via App) & In-Person (Manual Record), sequential slot
 // locking (ST1 -> ST2 -> TE), split-box Date/Time/Duration, and category-isolated Question Builder.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -12,8 +13,10 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/cooldown_tracker.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/gemini_service.dart';
@@ -24,8 +27,7 @@ import 'package:class_realm/data/repositories/supabase_teacher_classwork_reposit
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
-import 'package:class_realm/widgets/common/app_buttons.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/widgets/common/app_time_picker_field.dart';
 import 'package:class_realm/widgets/common/app_duration_picker_field.dart';
@@ -99,6 +101,30 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
     this.initialLectureDocument,
   });
 
+  /// Shared 1-minute anti-spam cooldown applied after creating a quiz or exam.
+  static final CooldownTracker creationCooldown = CooldownTracker(
+    duration: const Duration(minutes: 1),
+    readPersistedMs: () => LocalStorageService.getCooldownTimestampMs(
+      LocalStorageService.keyAssessmentCreationCooldown,
+    ),
+    writePersistedMs: (ms) => LocalStorageService.saveCooldownTimestampMs(
+      LocalStorageService.keyAssessmentCreationCooldown,
+      ms,
+    ),
+  );
+
+  /// Shared 1-minute cooldown applied after a successful AI question generation.
+  static final CooldownTracker aiGenerationCooldown = CooldownTracker(
+    duration: const Duration(minutes: 1),
+    readPersistedMs: () => LocalStorageService.getCooldownTimestampMs(
+      LocalStorageService.keyAiAssessmentCooldown,
+    ),
+    writePersistedMs: (ms) => LocalStorageService.saveCooldownTimestampMs(
+      LocalStorageService.keyAiAssessmentCooldown,
+      ms,
+    ),
+  );
+
   static Future<void> show(
     BuildContext context, {
     required VoidCallback onAssessmentCreated,
@@ -112,6 +138,14 @@ class CreateAssessmentFlowDialog extends StatefulWidget {
     GeminiService? geminiService,
     ExtractedLectureDocument? initialLectureDocument,
   }) {
+    final remaining = creationCooldown.remainingSeconds;
+    if (remaining > 0) {
+      AppTopToast.info(
+        context,
+        'Cooldown active: Please wait ${remaining}s before creating another quiz or exam.',
+      );
+      return Future.value();
+    }
     return showDialog(
       context: context,
       barrierDismissible: false,
@@ -223,6 +257,20 @@ class _CreateAssessmentFlowDialogState
   String? _editorError;
 
   bool _isPublishing = false;
+  Timer? _aiCooldownTimer;
+
+  void _startAiCooldownTimer() {
+    _aiCooldownTimer?.cancel();
+    if (!CreateAssessmentFlowDialog.aiGenerationCooldown.isActive) return;
+    _aiCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted ||
+          !CreateAssessmentFlowDialog.aiGenerationCooldown.isActive) {
+        timer.cancel();
+        _aiCooldownTimer = null;
+      }
+      if (mounted) setState(() {});
+    });
+  }
 
   bool get _isZeroExamSubject {
     if (!_isExam) return false;
@@ -259,6 +307,9 @@ class _CreateAssessmentFlowDialogState
       );
     }
     _uploadedLectureDoc = widget.initialLectureDocument;
+    if (CreateAssessmentFlowDialog.aiGenerationCooldown.isActive) {
+      _startAiCooldownTimer();
+    }
     _instructionsCtrl.addListener(() {
       if (_instructionsError != null) {
         setState(() => _instructionsError = null);
@@ -446,6 +497,7 @@ class _CreateAssessmentFlowDialogState
 
   @override
   void dispose() {
+    _aiCooldownTimer?.cancel();
     if (kIsWeb) {
       unregisterWebDrop();
     }
@@ -1212,16 +1264,15 @@ class _CreateAssessmentFlowDialogState
       TeacherGradebookTab.gradebookRefreshNotifier.value++;
 
       if (!mounted) return;
+      AppTopToast.success(
+        context,
+        _isExam
+            ? '$title saved in Gradebook as an In-Person examination.'
+            : '$title saved in Gradebook as an In-Person quiz.',
+      );
+      CreateAssessmentFlowDialog.creationCooldown.trigger();
       Navigator.of(context).pop();
       widget.onAssessmentCreated();
-
-      AppModals.showSuccessDialog(
-        context: context,
-        title: _isExam ? 'Examination Recorded' : 'Quiz Recorded',
-        message: _isExam
-            ? '$title has been saved in Gradebook as an In-Person examination with $hpsPoints total points.'
-            : '$title has been saved in Gradebook as an In-Person quiz with $hpsPoints total points under Written Works (WW $_quizSlotIndex).',
-      );
     } catch (e) {
       if (mounted) {
         setState(() => _isPublishing = false);
@@ -1454,16 +1505,13 @@ class _CreateAssessmentFlowDialogState
       TeacherGradebookTab.gradebookRefreshNotifier.value++;
 
       if (!mounted) return;
+      AppTopToast.success(
+        context,
+        '$title published successfully.',
+      );
+      CreateAssessmentFlowDialog.creationCooldown.trigger();
       Navigator.of(context).pop();
       widget.onAssessmentCreated();
-
-      AppModals.showSuccessDialog(
-        context: context,
-        title: _isExam ? 'Examination Published' : 'Quiz Published',
-        message: _isExam
-            ? '$title has been published for ${_selectedOffering!['section_name']} (${_termLabel(_termNumber)}). Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).'
-            : '$title has been published for ${_selectedOffering!['section_name']} (${_termLabel(_termNumber)}) under Written Works (WW $_quizSlotIndex). Scheduled for ${_formatDate(_scheduledDate)} at ${AppTimePickerField.format(_startTime)} (${duration}m duration).',
-      );
     } catch (e) {
       // Rollback any partially created records so orphan rows never remain in DB (child-first cascade)
       if (createdAssessmentId != null) {
@@ -1725,6 +1773,15 @@ class _CreateAssessmentFlowDialogState
 
   Future<void> _generateQuestionsWithAi() async {
     if (_isGeneratingAiQuestions) return;
+    final aiCooldownSec =
+        CreateAssessmentFlowDialog.aiGenerationCooldown.remainingSeconds;
+    if (aiCooldownSec > 0) {
+      setState(() {
+        _aiGenerationError =
+            'Cooldown active: Please wait ${aiCooldownSec}s before generating questions with AI again.';
+      });
+      return;
+    }
 
     setState(() {
       _aiFileError = null;
@@ -1853,6 +1910,9 @@ class _CreateAssessmentFlowDialogState
             'Read each question carefully and select or type the correct answer based on the lecture material.';
         _instructionsError = null;
       }
+
+      CreateAssessmentFlowDialog.aiGenerationCooldown.trigger();
+      _startAiCooldownTimer();
 
       setState(() {
         _mcCountCtrl.text = res.multipleChoice.isEmpty
@@ -2912,9 +2972,13 @@ class _CreateAssessmentFlowDialogState
     final id = int.tryParse(_idCountCtrl.text.trim()) ?? 0;
     final totalPlanned = mc + tf + id;
     final bool isCountValid = totalPlanned >= 1 && totalPlanned <= 100;
+    final int aiCooldownSec =
+        CreateAssessmentFlowDialog.aiGenerationCooldown.remainingSeconds;
+    final bool isAiInCooldown = aiCooldownSec > 0;
     final bool canGenerateAi = _uploadedLectureDoc != null &&
         isCountValid &&
         !_isGeneratingAiQuestions &&
+        !isAiInCooldown &&
         !_areAllSlotsFilled;
 
     return Container(
@@ -3294,13 +3358,20 @@ class _CreateAssessmentFlowDialogState
                         color: Colors.white,
                       ),
                     )
-                  : const Icon(LucideIcons.sparkles, size: 16),
+                  : Icon(
+                      isAiInCooldown
+                          ? Icons.hourglass_bottom_rounded
+                          : LucideIcons.sparkles,
+                      size: 16,
+                    ),
               label: Text(
                 _isGeneratingAiQuestions
                     ? 'Generating Questions from Document...'
-                    : (_isExam
-                          ? 'Generate Exam Questions with AI'
-                          : 'Generate Quiz Questions with AI'),
+                    : (isAiInCooldown
+                          ? 'Wait ${aiCooldownSec}s to Regenerate with AI'
+                          : (_isExam
+                                ? 'Generate Exam Questions with AI'
+                                : 'Generate Quiz Questions with AI')),
                 style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
@@ -3353,6 +3424,18 @@ class _CreateAssessmentFlowDialogState
                 style: TextStyle(
                   fontSize: 11,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
+              ),
+            ),
+          ] else if (isAiInCooldown) ...[
+            const SizedBox(height: 6),
+            Center(
+              child: Text(
+                '1-minute AI cooldown active (${aiCooldownSec}s remaining) to prevent duplicate requests.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),

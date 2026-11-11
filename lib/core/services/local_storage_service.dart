@@ -21,6 +21,9 @@ class LocalStorageService {
   static const String keyCachedUser = _cachedUserKey;
   static const String keyIsDarkMode = _darkModeKey;
   static const String keyDeviceId = _deviceIdKey;
+  static const String keyAssessmentCreationCooldown =
+      'cooldown.assessment_creation_ms';
+  static const String keyAiAssessmentCooldown = 'cooldown.ai_assessment_gen_ms';
 
   static SharedPreferences? _preferences;
 
@@ -157,6 +160,8 @@ class LocalStorageService {
     await prefs.remove('session.tab_admin');
     await prefs.remove('session.tab_student');
     await prefs.remove('session.tab_parent');
+    await prefs.remove(keyAssessmentCreationCooldown);
+    await prefs.remove(keyAiAssessmentCooldown);
     await _ensureSaved(await prefs.remove(keyRememberMe));
     await _ensureSaved(await prefs.remove(keySavedEmail));
     await _ensureSaved(await prefs.remove(keySavedPassword));
@@ -725,6 +730,22 @@ class LocalStorageService {
       return 0;
     }
     return (remainingMs / 1000).ceil();
+  }
+
+  /// Reads a stored cooldown trigger timestamp (epoch ms) synchronously.
+  static int? getCooldownTimestampMs(String key) {
+    return _preferences?.getInt(key);
+  }
+
+  /// Persists or clears a cooldown trigger timestamp (epoch ms).
+  static void saveCooldownTimestampMs(String key, int? epochMs) {
+    final prefs = _preferences;
+    if (prefs == null) return;
+    if (epochMs == null) {
+      prefs.remove(key);
+    } else {
+      prefs.setInt(key, epochMs);
+    }
   }
 
   static Future<void> _ensureSaved(bool saved) async {

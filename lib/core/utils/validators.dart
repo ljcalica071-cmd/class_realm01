@@ -20,11 +20,12 @@ class AppValidators {
       'Use 1 letter and 1 period only (e.g., H.)';
   static final RegExp _middleInitialPattern = RegExp(r'^[a-zA-ZñÑ]\.$');
 
-  /// Reusable input formatters for middle initial fields (max 2 chars, letters & dot only, no numbers, no spaces)
+  /// Reusable input formatters for middle initial fields (max 2 chars, letters & dot only, no numbers, no spaces, uppercase)
   static List<TextInputFormatter> get middleInitialFormatters => [
     LengthLimitingTextInputFormatter(2),
     FilteringTextInputFormatter.allow(RegExp(r"[a-zA-ZñÑ\.]")),
     FilteringTextInputFormatter.deny(RegExp(r'\s')),
+    _UpperCaseTextFormatter(),
   ];
 
   /// Reusable input formatters for name fields (max 30 chars, no consecutive spaces/periods, capitalize first letter)
@@ -228,19 +229,20 @@ class AppValidators {
   static String? validateMiddleInitial(String? value) {
     if (value == null || value.isEmpty) return null;
     final trimmed = value.trim();
-    if (trimmed.isEmpty || !_middleInitialPattern.hasMatch(trimmed)) {
+    if (trimmed.isEmpty) return null;
+    if (!RegExp(r'^[a-zA-ZñÑ]\.?$').hasMatch(trimmed)) {
       return invalidMiddleInitialMessage;
     }
     return null;
   }
 
   static String? normalizeMiddleInitial(String? value) {
-    final validationError = validateMiddleInitial(value);
-    if (validationError != null) {
-      throw FormatException(validationError);
+    if (value == null || value.trim().isEmpty) return null;
+    final formatted = formatMiddleInitial(value);
+    if (!_middleInitialPattern.hasMatch(formatted)) {
+      throw FormatException(invalidMiddleInitialMessage);
     }
-    if (value == null || value.isEmpty) return null;
-    return value.trim().toUpperCase();
+    return formatted;
   }
 
   static bool isMiddleInitialConstraintViolation(Object error) {
@@ -255,7 +257,10 @@ class AppValidators {
     if (_middleInitialPattern.hasMatch(trimmed)) {
       return trimmed.toUpperCase();
     }
-    return '${trimmed[0].toUpperCase()}.';
+    if (trimmed.isNotEmpty) {
+      return '${trimmed[0].toUpperCase()}.';
+    }
+    return '';
   }
 
   /// Email validator (Strict & Reusable across the system)
@@ -719,17 +724,52 @@ class _PasswordInputFormatter extends TextInputFormatter {
     final text = newValue.text;
     if (text.isEmpty) return newValue;
 
-    // Prevent leading space
+    // Prevent leading space: trim leading spaces instead of reverting to oldValue
+    // so backspacing characters before a space does not freeze the input.
     if (text.startsWith(' ')) {
-      return oldValue;
+      final trimmed = text.trimLeft();
+      final diff = text.length - trimmed.length;
+      final newOffset = (newValue.selection.baseOffset - diff).clamp(
+        0,
+        trimmed.length,
+      );
+      return TextEditingValue(
+        text: trimmed,
+        selection: TextSelection.collapsed(offset: newOffset),
+      );
     }
 
-    // Prevent consecutive spaces without deleting text
+    // Prevent consecutive spaces without rejecting deletions
     if (text.contains('  ')) {
+      if (newValue.text.length < oldValue.text.length) {
+        // Deletion in progress: collapse consecutive spaces instead of freezing
+        final collapsed = text.replaceAll(RegExp(r' {2,}'), ' ');
+        final newOffset = newValue.selection.baseOffset.clamp(
+          0,
+          collapsed.length,
+        );
+        return TextEditingValue(
+          text: collapsed,
+          selection: TextSelection.collapsed(offset: newOffset),
+        );
+      }
       return oldValue;
     }
 
     return newValue;
+  }
+}
+
+class _UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
+    );
   }
 }
 

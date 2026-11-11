@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
@@ -64,6 +65,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ctrl.selection.end < 0 ||
         ctrl.selection.end > text.length) {
       ctrl.selection = TextSelection.collapsed(offset: text.length);
+    }
+  }
+
+  void _handleFieldTap(TextEditingController ctrl, FocusNode focusNode) {
+    _ensureValidSelection(ctrl);
+    if (!focusNode.hasFocus) {
+      focusNode.requestFocus();
+    } else {
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show');
     }
   }
 
@@ -276,17 +286,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         return;
       }
 
-      // 5. Success confirmation (saving/updating is handled cleanly upon actual login)
-      AppModals.showSuccessDialog(
-        context: context,
-        title: 'Password Reset Successful',
-        message:
-            'Your account password has been updated securely. You can now log in using your new password.',
-        confirmLabel: 'Proceed to Login',
-        onConfirm: () {
-          Navigator.pushReplacementNamed(context, AppRoutes.login);
-        },
+      // 5. Success notification and redirect to login
+      AppTopToast.success(
+        context,
+        'Password reset successfully! You can now log in.',
       );
+      Navigator.pushReplacementNamed(context, AppRoutes.login);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -347,12 +352,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             controller: _newPassController,
             focusNode: _newPassFocusNode,
             obscureText: _obscureNew,
-            autofillHints: const <String>[],
+            autofillHints: null,
             enableSuggestions: false,
             autocorrect: false,
             maxLength: 50,
             textInputAction: TextInputAction.next,
-            onTap: () => _ensureValidSelection(_newPassController),
+            onTap: () => _handleFieldTap(_newPassController, _newPassFocusNode),
             onFieldSubmitted: (_) {
               FocusScope.of(context).requestFocus(_confirmPassFocusNode);
             },
@@ -423,12 +428,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             controller: _confirmPassController,
             focusNode: _confirmPassFocusNode,
             obscureText: _obscureConfirm,
-            autofillHints: const <String>[],
+            autofillHints: null,
             enableSuggestions: false,
             autocorrect: false,
             maxLength: 50,
             textInputAction: TextInputAction.done,
-            onTap: () => _ensureValidSelection(_confirmPassController),
+            onTap: () => _handleFieldTap(_confirmPassController, _confirmPassFocusNode),
             onFieldSubmitted: (_) {
               if (_isFormValid && !_isLoading) {
                 _handleResetFlow();

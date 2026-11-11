@@ -268,27 +268,48 @@ class _TeacherLearningMaterialsTabState
     }
   }
 
+  static bool _isDefaultFolderName(String name) {
+    final clean = name.trim().toLowerCase();
+    return clean == 'term 1' ||
+        clean == 'term 2' ||
+        clean == 'term 3' ||
+        clean == 'supplementary handouts & reviewers' ||
+        clean == 'term 1 - first quarter' ||
+        clean == 'term 2 - second quarter' ||
+        clean == 'term 3 - third quarter';
+  }
+
+  bool _isDefaultFolder(ClassRealmFolder folder) {
+    if (folder.parentFolderId != null && folder.parentFolderId!.isNotEmpty) {
+      return false;
+    }
+    return _isDefaultFolderName(folder.folderName);
+  }
+
   static final List<ClassRealmFolder> _defaultPlaceholderFolders = [
     ClassRealmFolder(
       id: 'placeholder_term_1',
       subjectOfferingId: '',
-      folderName: 'Term 1 - First Quarter',
+      folderName: 'Term 1',
       createdAt: DateTime.now(),
       fileCount: 0,
+      isVisibleToStudents: true,
     ),
     ClassRealmFolder(
       id: 'placeholder_term_2',
       subjectOfferingId: '',
-      folderName: 'Term 2 - Second Quarter',
+      folderName: 'Term 2',
       createdAt: DateTime.now(),
       fileCount: 0,
+      isVisibleToStudents: true,
     ),
     ClassRealmFolder(
       id: 'placeholder_term_3',
       subjectOfferingId: '',
-      folderName: 'Term 3 - Third Quarter',
+      folderName: 'Term 3',
       createdAt: DateTime.now(),
       fileCount: 0,
+      isVisibleToStudents: true,
     ),
     ClassRealmFolder(
       id: 'placeholder_term_handouts',
@@ -296,6 +317,7 @@ class _TeacherLearningMaterialsTabState
       folderName: 'Supplementary Handouts & Reviewers',
       createdAt: DateTime.now(),
       fileCount: 0,
+      isVisibleToStudents: true,
     ),
   ];
 
@@ -797,14 +819,20 @@ class _TeacherLearningMaterialsTabState
                           ),
                         ),
                         subtitle: Text(
-                          isVisibleToStudents
-                              ? 'Live mode: Students can view and download immediately.'
-                              : 'Draft mode: Only visible to you until made live.',
+                          targetFolder != null &&
+                                  !targetFolder.isVisibleToStudents
+                              ? 'Destination folder "${targetFolder.folderName}" is currently hidden. This file will remain hidden from students until the folder is made visible.'
+                              : (isVisibleToStudents
+                                  ? 'Live mode: Students can view and download immediately.'
+                                  : 'Draft mode: Only visible to you until made live.'),
                           style: TextStyle(
                             fontSize: 11,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
+                            color: targetFolder != null &&
+                                    !targetFolder.isVisibleToStudents
+                                ? Colors.amber.shade900
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.6,
+                                  ),
                           ),
                         ),
                         value: isVisibleToStudents,
@@ -991,6 +1019,9 @@ class _TeacherLearningMaterialsTabState
                         if (v == null || v.trim().isEmpty) {
                           return 'Folder name is required.';
                         }
+                        if (_isDefaultFolderName(v.trim())) {
+                          return 'This folder name is reserved for default curriculum folders.';
+                        }
                         return null;
                       },
                       decoration: _buildInputDecoration(
@@ -1009,9 +1040,16 @@ class _TeacherLearningMaterialsTabState
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      subtitle: const Text(
-                        'Students can browse contents of this folder',
-                        style: TextStyle(fontSize: 11),
+                      subtitle: Text(
+                        isVisible
+                            ? 'Students can browse contents of this folder'
+                            : 'Folder and all its contents will be hidden from students',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isVisible
+                              ? null
+                              : Colors.amber.shade900,
+                        ),
                       ),
                       value: isVisible,
                       activeThumbColor: Colors.green,
@@ -1061,8 +1099,100 @@ class _TeacherLearningMaterialsTabState
     );
   }
 
+  // --- Folder Visibility Toggle (Default folders are locked as visible, custom folders can toggle) ---
+  Future<void> _toggleFolderVisibility(ClassRealmFolder folder) async {
+    if (_isDefaultFolder(folder)) {
+      _showFeedbackModal(
+        'Default Folder',
+        'The 4 default folders (Term 1, Term 2, Term 3, and Supplementary Handouts & Reviewers) are permanently visible to students and cannot be hidden.',
+        isError: false,
+      );
+      return;
+    }
+
+    final nextState = !folder.isVisibleToStudents;
+    try {
+      await _materialRepo.updateFolder(
+        folderId: folder.id,
+        isVisibleToStudents: nextState,
+      );
+
+      setState(() {
+        final idx = _folders.indexWhere((f) => f.id == folder.id);
+        if (idx != -1) {
+          _folders[idx] = folder.copyWith(isVisibleToStudents: nextState);
+        }
+        if (_currentFolder?.id == folder.id) {
+          _currentFolder = _currentFolder!.copyWith(
+            isVisibleToStudents: nextState,
+          );
+        }
+        for (int i = 0; i < _folderStack.length; i++) {
+          if (_folderStack[i].id == folder.id) {
+            _folderStack[i] = _folderStack[i].copyWith(
+              isVisibleToStudents: nextState,
+            );
+          }
+        }
+      });
+    } catch (e) {
+      _showFeedbackModal(
+        'Error',
+        'Failed to update folder visibility: $e',
+        isError: true,
+      );
+    }
+  }
+
   // --- Archive & Delete Confirmations for Folders ---
+  Future<void> _archiveFolderConfirm(ClassRealmFolder folder) async {
+    if (_isDefaultFolder(folder)) {
+      _showFeedbackModal(
+        'Action Not Allowed',
+        'Default curriculum folders cannot be archived.',
+        isError: false,
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _ArchiveCooldownDialog(
+        title: 'Archive Folder?',
+        content:
+            'Archiving "${folder.folderName}" will hide it from students and move the folder and all its ${folder.fileCount} materials to the Archived Items view.\n\nYou can restore it to active status anytime.',
+        actionLabel: 'Archive Folder',
+        actionColor: Colors.orange.shade800,
+        icon: Icons.archive_outlined,
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      try {
+        await _materialRepo.archiveFolder(folder.id);
+        await _loadFolderContents();
+      } catch (e) {
+        setState(() => _isLoading = false);
+        _showFeedbackModal(
+          'Error',
+          'Failed to archive folder: $e',
+          isError: true,
+        );
+      }
+    }
+  }
+
   Future<void> _deleteFolderPermanentlyConfirm(ClassRealmFolder folder) async {
+    if (_isDefaultFolder(folder)) {
+      _showFeedbackModal(
+        'Action Not Allowed',
+        'Default curriculum folders cannot be deleted.',
+        isError: false,
+      );
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -2070,63 +2200,44 @@ class _TeacherLearningMaterialsTabState
 
           const SizedBox(width: 12),
 
-          // Cloud Storage Meter Indicator (1 GB Cap Monitoring)
+          // Class Materials Meter (Total file size in this class)
           Builder(
             builder: (context) {
               final usedMb = _totalStorageBytes / (1024 * 1024);
-              final isWarning = usedMb >= 800;
-              final isCritical = usedMb >= 950;
 
               return Tooltip(
-                message: isCritical
-                    ? 'Cloud Storage Full (1 GB reached). Remove unused items to free space.'
-                    : isWarning
-                        ? 'Storage usage is high (${usedMb.toStringAsFixed(1)} MB / 1 GB).'
-                        : 'Free-tier cloud storage usage: ${usedMb.toStringAsFixed(1)} MB of 1 GB used.',
+                message:
+                    'Total size of learning materials in this class: ${usedMb.toStringAsFixed(1)} MB',
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: isCritical
-                        ? Colors.red.withValues(alpha: 0.12)
-                        : isWarning
-                            ? Colors.amber.withValues(alpha: 0.15)
-                            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: isCritical
-                          ? Colors.red.withValues(alpha: 0.4)
-                          : isWarning
-                              ? Colors.amber.withValues(alpha: 0.4)
-                              : theme.colorScheme.outline.withValues(alpha: 0.15),
+                      color: theme.colorScheme.outline.withValues(alpha: 0.15),
                     ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        isCritical
-                            ? Icons.cloud_off
-                            : isWarning
-                                ? Icons.cloud_queue
-                                : Icons.cloud_done,
+                      const Icon(
+                        Icons.folder_open_outlined,
                         size: 15,
-                        color: isCritical
-                            ? Colors.red
-                            : isWarning
-                                ? Colors.amber.shade800
-                                : const Color(0xFF3A6B88),
+                        color: Color(0xFF3A6B88),
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Storage: ${usedMb.toStringAsFixed(1)} MB / 1 GB',
+                        'Class Files: ${usedMb.toStringAsFixed(1)} MB',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isCritical
-                              ? Colors.red
-                              : isWarning
-                                  ? Colors.amber.shade900
-                                  : theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.75,
+                          ),
                         ),
                       ),
                     ],
@@ -2229,9 +2340,6 @@ class _TeacherLearningMaterialsTabState
       );
     }
 
-    final isParentFolderHidden =
-        _currentFolder != null && !_currentFolder!.isVisibleToStudents;
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -2291,34 +2399,9 @@ class _TeacherLearningMaterialsTabState
             ),
           ],
 
-          if (isParentFolderHidden) ...[
+          if (_currentFolder != null) ...[
             const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.visibility_off,
-                    size: 12,
-                    color: Colors.amber.shade900,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Hidden from students',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.amber.shade900,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildFolderVisibilityBadge(_currentFolder!, theme),
           ],
 
           const Spacer(),
@@ -2717,7 +2800,78 @@ class _TeacherLearningMaterialsTabState
   }
 
   // --- Folder Widgets with Archive and Permanent Delete Actions ---
+  Widget _buildFolderVisibilityBadge(
+    ClassRealmFolder folder,
+    ThemeData theme, {
+    bool compact = false,
+  }) {
+    final isDefault = _isDefaultFolder(folder);
+    final isVisible = isDefault ? true : folder.isVisibleToStudents;
+
+    if (isDefault) {
+      // Default 4 folders: Permanently visible to students, cannot be hidden ("hindi na nababago yun")
+      return Tooltip(
+        message: 'Default curriculum folder (Permanently visible to students)',
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 6 : 8,
+            vertical: compact ? 2 : 4,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.green.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            'Visible to Students',
+            style: TextStyle(
+              fontSize: compact ? 10 : 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.green,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Custom folders (added by teacher, e.g. "Reviewer"):
+    // Teacher can toggle visibility
+    final label = isVisible ? 'Visible to Students' : 'Hidden from Students';
+
+    return Tooltip(
+      message: isVisible
+          ? 'Live: Visible to students. Click to hide folder.'
+          : 'Hidden: Hidden from students. Click to make visible.',
+      child: InkWell(
+        onTap: () => _toggleFolderVisibility(folder),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 6 : 8,
+            vertical: compact ? 2 : 4,
+          ),
+          decoration: BoxDecoration(
+            color: isVisible
+                ? Colors.green.withValues(alpha: 0.15)
+                : Colors.amber.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: compact ? 10 : 11,
+              fontWeight: FontWeight.bold,
+              color: isVisible ? Colors.green : Colors.amber.shade900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFolderCard(ClassRealmFolder folder, ThemeData theme) {
+    final isDefault = _isDefaultFolder(folder);
+    final isVisible = isDefault ? true : folder.isVisibleToStudents;
+
     return InkWell(
       onTap: () => _navigateToFolder(folder),
       borderRadius: BorderRadius.circular(12),
@@ -2727,7 +2881,7 @@ class _TeacherLearningMaterialsTabState
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: folder.isVisibleToStudents
+            color: isVisible
                 ? theme.colorScheme.onSurface.withValues(alpha: 0.1)
                 : Colors.amber.withValues(alpha: 0.4),
           ),
@@ -2750,7 +2904,7 @@ class _TeacherLearningMaterialsTabState
                       fontSize: 13,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       Text(
@@ -2762,27 +2916,8 @@ class _TeacherLearningMaterialsTabState
                           ),
                         ),
                       ),
-                      if (!folder.isVisibleToStudents) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            'Hidden',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: Colors.amber.shade900,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
+                      const SizedBox(width: 6),
+                      _buildFolderVisibilityBadge(folder, theme, compact: true),
                     ],
                   ),
                 ],
@@ -2796,6 +2931,9 @@ class _TeacherLearningMaterialsTabState
   }
 
   Widget _buildFolderListRow(ClassRealmFolder folder, ThemeData theme) {
+    final isDefault = _isDefaultFolder(folder);
+    final isVisible = isDefault ? true : folder.isVisibleToStudents;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
@@ -2803,7 +2941,7 @@ class _TeacherLearningMaterialsTabState
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: BorderSide(
-          color: folder.isVisibleToStudents
+          color: isVisible
               ? theme.colorScheme.onSurface.withValues(alpha: 0.1)
               : Colors.amber.withValues(alpha: 0.4),
         ),
@@ -2815,9 +2953,32 @@ class _TeacherLearningMaterialsTabState
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          '${folder.fileCount} items ${folder.isVisibleToStudents ? "" : "• Hidden from students"}',
+          '${folder.fileCount} items',
+          style: TextStyle(
+            fontSize: 11,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
         ),
-        trailing: const Icon(Icons.chevron_right),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildFolderVisibilityBadge(folder, theme, compact: false),
+            if (!isDefault) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(
+                  Icons.archive_outlined,
+                  color: Colors.grey,
+                  size: 20,
+                ),
+                tooltip: 'Archive Folder',
+                onPressed: () => _archiveFolderConfirm(folder),
+              ),
+            ],
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
         onTap: () => _navigateToFolder(folder),
       ),
     );
@@ -2826,7 +2987,9 @@ class _TeacherLearningMaterialsTabState
   // --- File Widgets (Direct View & Download, Archive without Delete Button) ---
   Widget _buildFileCard(ClassRealmMaterial material, ThemeData theme) {
     final ext = material.fileExtension;
-    final isVisible = material.isVisibleToStudents;
+    final isFolderHidden =
+        _currentFolder != null && !_currentFolder!.isVisibleToStudents;
+    final effectiveVisible = material.isVisibleToStudents && !isFolderHidden;
     final isOpening = _openingIds.contains(material.id);
     final isDownloading = _downloadingIds.contains(material.id);
 
@@ -2839,7 +3002,7 @@ class _TeacherLearningMaterialsTabState
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isVisible
+            color: effectiveVisible
                 ? theme.colorScheme.onSurface.withValues(alpha: 0.12)
                 : Colors.amber.withValues(alpha: 0.3),
           ),
@@ -2878,11 +3041,21 @@ class _TeacherLearningMaterialsTabState
                 ),
                 // Visibility Toggle Badge
                 Tooltip(
-                  message: isVisible
-                      ? 'Live: Visible to students. Click to hide.'
-                      : 'Draft: Hidden from students. Click to publish.',
+                  message: isFolderHidden
+                      ? 'Hidden: Folder "${_currentFolder?.folderName}" is hidden from students. Files inside are automatically hidden.'
+                      : (material.isVisibleToStudents
+                          ? 'Live: Visible to students. Click to hide.'
+                          : 'Draft: Hidden from students. Click to publish.'),
                   child: InkWell(
-                    onTap: () => _toggleMaterialVisibility(material),
+                    onTap: isFolderHidden
+                        ? () {
+                            _showFeedbackModal(
+                              'Folder is Hidden',
+                              'This document is automatically hidden from students because its parent folder "${_currentFolder?.folderName}" is hidden. To make this document visible, first make the folder visible.',
+                              isError: false,
+                            );
+                          }
+                        : () => _toggleMaterialVisibility(material),
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -2890,7 +3063,7 @@ class _TeacherLearningMaterialsTabState
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: isVisible
+                        color: effectiveVisible
                             ? Colors.green.withValues(alpha: 0.15)
                             : Colors.amber.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
@@ -2899,19 +3072,23 @@ class _TeacherLearningMaterialsTabState
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            isVisible ? Icons.visibility : Icons.visibility_off,
+                            effectiveVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
                             size: 12,
-                            color: isVisible
+                            color: effectiveVisible
                                 ? Colors.green
                                 : Colors.amber.shade800,
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            isVisible ? 'Live' : 'Draft',
+                            isFolderHidden
+                                ? 'Folder Hidden'
+                                : (effectiveVisible ? 'Live' : 'Draft'),
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: isVisible
+                              color: effectiveVisible
                                   ? Colors.green
                                   : Colors.amber.shade900,
                             ),
@@ -2980,7 +3157,9 @@ class _TeacherLearningMaterialsTabState
 
   Widget _buildFileListRow(ClassRealmMaterial material, ThemeData theme) {
     final ext = material.fileExtension;
-    final isVisible = material.isVisibleToStudents;
+    final isFolderHidden =
+        _currentFolder != null && !_currentFolder!.isVisibleToStudents;
+    final effectiveVisible = material.isVisibleToStudents && !isFolderHidden;
     final isOpening = _openingIds.contains(material.id);
     final isDownloading = _downloadingIds.contains(material.id);
 
@@ -3023,23 +3202,45 @@ class _TeacherLearningMaterialsTabState
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            InkWell(
-              onTap: () => _toggleMaterialVisibility(material),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isVisible
-                      ? Colors.green.withValues(alpha: 0.15)
-                      : Colors.amber.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  isVisible ? 'Visible to Students' : 'Hidden (Draft)',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: isVisible ? Colors.green : Colors.amber.shade900,
+            Tooltip(
+              message: isFolderHidden
+                  ? 'Hidden: Folder "${_currentFolder?.folderName}" is hidden from students. Files inside are automatically hidden.'
+                  : (material.isVisibleToStudents
+                      ? 'Live: Visible to students. Click to hide.'
+                      : 'Draft: Hidden from students. Click to publish.'),
+              child: InkWell(
+                onTap: isFolderHidden
+                    ? () {
+                        _showFeedbackModal(
+                          'Folder is Hidden',
+                          'This document is automatically hidden from students because its parent folder "${_currentFolder?.folderName}" is hidden. To make this document visible, first make the folder visible.',
+                          isError: false,
+                        );
+                      }
+                    : () => _toggleMaterialVisibility(material),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: effectiveVisible
+                        ? Colors.green.withValues(alpha: 0.15)
+                        : Colors.amber.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    isFolderHidden
+                        ? 'Hidden (Folder Hidden)'
+                        : (material.isVisibleToStudents
+                            ? 'Visible to Students'
+                            : 'Hidden (Draft)'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: effectiveVisible
+                          ? Colors.green
+                          : Colors.amber.shade900,
+                    ),
                   ),
                 ),
               ),

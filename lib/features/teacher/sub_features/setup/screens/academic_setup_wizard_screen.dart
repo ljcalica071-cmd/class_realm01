@@ -151,16 +151,12 @@ class _AcademicSetupWizardScreenState extends State<AcademicSetupWizardScreen> {
     if (!mounted) return;
     setState(() => _isSaving = false);
 
-    // Success dialog
-    AppModals.showSuccessDialog(
-      context: context,
-      title: 'Academic Setup Completed! 🎉',
-      message:
-          'Welcome to ClassRealm! Your teaching curriculum for $_selectedSubject ($selectedWeightFormula) has been configured. You are now being redirected to your dashboard.',
-      onConfirm: () {
-        Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
-      },
+    // Success notification and redirect to dashboard
+    AppTopToast.success(
+      context,
+      'Academic setup completed! Welcome to ClassRealm.',
     );
+    Navigator.pushReplacementNamed(context, AppRoutes.teacherDashboard);
   }
 
   String get selectedWeightFormula =>

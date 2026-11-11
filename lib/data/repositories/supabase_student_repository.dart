@@ -196,9 +196,7 @@ class SupabaseStudentRepository implements StudentRepository {
     }
 
     if (!includeArchived) {
-      query = query.ilike('status', 'enrolled');
-    } else {
-      query = query.ilike('status', 'archived');
+      query = query.neq('status', 'archived');
     }
 
     final res = await query;
@@ -272,7 +270,7 @@ class SupabaseStudentRepository implements StudentRepository {
 
       final enrollmentCompanions = <LocalEnrollmentsCompanion>[];
 
-      final mapped = response.map<UserModel>((row) {
+      final mapped = response.map<UserModel?>((row) {
         final profile = row['student_profiles'] as Map<String, dynamic>? ?? {};
         final offering =
             row['subject_offerings'] as Map<String, dynamic>? ?? {};
@@ -317,7 +315,13 @@ class SupabaseStudentRepository implements StudentRepository {
         final enrollmentStatus = row['status']?.toString().toLowerCase();
         final isEnrollmentArchived = enrollmentStatus == 'archived';
         final isUserArchived = usersData['is_archived'] == true;
-        final isArchived = isEnrollmentArchived || isUserArchived;
+        final isSettingsArchived =
+            studentSettingsStatus[studentId]?.toLowerCase() == 'archived';
+        final isArchived =
+            isEnrollmentArchived || isUserArchived || isSettingsArchived;
+
+        if (!includeArchived && isArchived) return null;
+        if (includeArchived && !isArchived) return null;
 
         AccountStatus accountStatus;
         if (isArchived) {
@@ -359,12 +363,12 @@ class SupabaseStudentRepository implements StudentRepository {
           rfidUid: resolvedRfidUid,
           departmentOrSection: sec['section_name']?.toString(),
           enrolledSubjectId:
-              sub['id']?.toString() ?? offering['id']?.toString(),
+              offering['id']?.toString() ?? sub['id']?.toString(),
           enrolledSubjectName: sub['subject_name']?.toString(),
           status: accountStatus,
           isArchived: isArchived,
         );
-      }).toList();
+      }).whereType<UserModel>().toList();
 
       // Batch persist to Drift SQLite safely on native platforms
       if (!kIsWeb) {
@@ -829,98 +833,169 @@ class SupabaseStudentRepository implements StudentRepository {
     String? subjectId,
     String? currentStatusHint,
   ]) async {
-    if (subjectId != null) {
-      await _client
-          .from('student_enrollments')
-          .update({'status': 'Archived'})
-          .match({'student_id': id, 'subject_offering_id': subjectId});
-    } else {
-      await _client
-          .from('student_enrollments')
-          .update({'status': 'Archived'})
-          .eq('student_id', id);
-    }
+    // 1. Update student enrollment status to archived
+    try {
+      if (subjectId != null && subjectId.isNotEmpty) {
+        final updated = await _client
+            .from('student_enrollments')
+            .update({'status': 'archived'})
+            .match({'student_id': id, 'subject_offering_id': subjectId})
+            .select('id');
 
-    // Only perform global user account archival if this is a school-wide archive (subjectId == null)
-    if (subjectId == null) {
-      try {
-        await _client.from('users').update({'is_archived': true}).eq('id', id);
-        try {
-          final cur = await _client
-              .from('student_settings')
-              .select('status')
-              .eq('student_id', id)
-              .maybeSingle();
-          final currentStatus = cur?['status']?.toString();
-          final statusToSave =
-              (currentStatus != null &&
-                  currentStatus.isNotEmpty &&
-                  currentStatus != 'archived')
-              ? currentStatus
-              : (currentStatusHint ?? 'active');
-
-          await _client
-              .from('student_settings')
-              .update({'previous_status': statusToSave, 'status': 'archived'})
-              .eq('student_id', id);
-        } catch (_) {}
-        try {
-          await FirebaseAuthAdminService.setUserDisabled(
-            uid: id,
-            disabled: true,
-          );
-        } catch (_) {}
-      } catch (e) {
-        debugPrint('Error archiving global student account: $e');
+        if ((updated as List).isEmpty) {
+          // If subjectId was passed as a subjects.id instead of subject_offering_id, find offerings
+          final offerings = await _client
+              .from('subject_offerings')
+              .select('id')
+              .eq('subject_id', subjectId);
+          final offeringIds = (offerings as List)
+              .map((o) => o['id']?.toString())
+              .whereType<String>()
+              .toList();
+          if (offeringIds.isNotEmpty) {
+            await _client
+                .from('student_enrollments')
+                .update({'status': 'archived'})
+                .eq('student_id', id)
+                .inFilter('subject_offering_id', offeringIds);
+          } else {
+            await _client
+                .from('student_enrollments')
+                .update({'status': 'archived'})
+                .eq('student_id', id);
+          }
+        }
+      } else {
+        await _client
+            .from('student_enrollments')
+            .update({'status': 'archived'})
+            .eq('student_id', id);
       }
+    } catch (e) {
+      debugPrint('Error updating student_enrollments to archived: $e');
     }
+
+    // 2. Mark as archived in users table (Single source of truth)
+    try {
+      await _client.from('users').update({'is_archived': true}).eq('id', id);
+    } catch (e) {
+      debugPrint('Error archiving users record for student $id: $e');
+    }
+
+    // 3. Update student_settings with previous_status and status='archived'
+    try {
+      final cur = await _client
+          .from('student_settings')
+          .select('status')
+          .eq('student_id', id)
+          .maybeSingle();
+      final currentStatus = cur?['status']?.toString();
+      final statusToSave =
+          (currentStatus != null &&
+              currentStatus.isNotEmpty &&
+              currentStatus != 'archived')
+          ? currentStatus
+          : (currentStatusHint ?? 'active');
+
+      await _client
+          .from('student_settings')
+          .update({'previous_status': statusToSave, 'status': 'archived'})
+          .eq('student_id', id);
+    } catch (e) {
+      debugPrint('Error archiving student_settings for student $id: $e');
+    }
+
+    // 4. Disable Firebase Auth
+    try {
+      await FirebaseAuthAdminService.setUserDisabled(
+        uid: id,
+        disabled: true,
+      );
+    } catch (_) {}
+
     AppDataCache.instance.invalidatePrefix('teacher_students_');
     AppDataCache.instance.invalidatePrefix('attendance_');
   }
 
   @override
   Future<void> restoreStudent(String id, [String? subjectId]) async {
-    if (subjectId != null) {
-      await _client
-          .from('student_enrollments')
-          .update({'status': 'Enrolled'})
-          .match({'student_id': id, 'subject_offering_id': subjectId});
-    } else {
-      await _client
-          .from('student_enrollments')
-          .update({'status': 'Enrolled'})
-          .eq('student_id', id);
+    // 1. Update student enrollment status to enrolled
+    try {
+      if (subjectId != null && subjectId.isNotEmpty) {
+        final updated = await _client
+            .from('student_enrollments')
+            .update({'status': 'enrolled'})
+            .match({'student_id': id, 'subject_offering_id': subjectId})
+            .select('id');
+
+        if ((updated as List).isEmpty) {
+          final offerings = await _client
+              .from('subject_offerings')
+              .select('id')
+              .eq('subject_id', subjectId);
+          final offeringIds = (offerings as List)
+              .map((o) => o['id']?.toString())
+              .whereType<String>()
+              .toList();
+          if (offeringIds.isNotEmpty) {
+            await _client
+                .from('student_enrollments')
+                .update({'status': 'enrolled'})
+                .eq('student_id', id)
+                .inFilter('subject_offering_id', offeringIds);
+          } else {
+            await _client
+                .from('student_enrollments')
+                .update({'status': 'enrolled'})
+                .eq('student_id', id);
+          }
+        }
+      } else {
+        await _client
+            .from('student_enrollments')
+            .update({'status': 'enrolled'})
+            .eq('student_id', id);
+      }
+    } catch (e) {
+      debugPrint('Error restoring student_enrollments to enrolled: $e');
     }
 
-    // Always re-enable root user and Firebase Auth on restore
+    // 2. Mark as active in users table
     try {
       await _client.from('users').update({'is_archived': false}).eq('id', id);
-      try {
-        final cur = await _client
-            .from('student_settings')
-            .select('previous_status')
-            .eq('student_id', id)
-            .maybeSingle();
-        final prev = cur?['previous_status']?.toString();
-        final targetStatus =
-            (prev != null && prev.isNotEmpty && prev != 'archived')
-            ? prev
-            : 'active';
-
-        await _client
-            .from('student_settings')
-            .update({'status': targetStatus, 'previous_status': null})
-            .eq('student_id', id);
-      } catch (_) {}
-      try {
-        await FirebaseAuthAdminService.setUserDisabled(
-          uid: id,
-          disabled: false,
-        );
-      } catch (_) {}
     } catch (e) {
-      debugPrint('Error restoring student account: $e');
+      debugPrint('Error restoring users record for student $id: $e');
     }
+
+    // 3. Restore student_settings status
+    try {
+      final cur = await _client
+          .from('student_settings')
+          .select('previous_status')
+          .eq('student_id', id)
+          .maybeSingle();
+      final prev = cur?['previous_status']?.toString();
+      final targetStatus =
+          (prev != null && prev.isNotEmpty && prev != 'archived')
+          ? prev
+          : 'active';
+
+      await _client
+          .from('student_settings')
+          .update({'status': targetStatus, 'previous_status': null})
+          .eq('student_id', id);
+    } catch (e) {
+      debugPrint('Error restoring student_settings for student $id: $e');
+    }
+
+    // 4. Re-enable Firebase Auth
+    try {
+      await FirebaseAuthAdminService.setUserDisabled(
+        uid: id,
+        disabled: false,
+      );
+    } catch (_) {}
+
     AppDataCache.instance.invalidatePrefix('teacher_students_');
     AppDataCache.instance.invalidatePrefix('attendance_');
   }
@@ -931,13 +1006,260 @@ class SupabaseStudentRepository implements StudentRepository {
   @override
   Future<void> reactivateStudent(String id) async {}
 
+  Future<String?> _resolveSubjectOfferingId(String? subjectOrOfferingId) async {
+    if (subjectOrOfferingId == null || subjectOrOfferingId.isEmpty) return null;
+    try {
+      final byOffering = await _client
+          .from('subject_offerings')
+          .select('id')
+          .eq('id', subjectOrOfferingId)
+          .maybeSingle();
+      if (byOffering != null && byOffering['id'] != null) {
+        return byOffering['id'].toString();
+      }
+      final bySubject = await _client
+          .from('subject_offerings')
+          .select('id')
+          .eq('subject_id', subjectOrOfferingId)
+          .limit(1);
+      if ((bySubject as List).isNotEmpty) {
+        return bySubject.first['id']?.toString();
+      }
+    } catch (_) {}
+    return subjectOrOfferingId;
+  }
+
+  @override
+  Future<StudentDeletionEligibility> checkStudentDeletionEligibility(
+    String id, [
+    String? subjectId,
+  ]) async {
+    try {
+      final resolvedOfferingId = await _resolveSubjectOfferingId(subjectId);
+
+      // 1. Check if student has records in THIS subject offering
+      if (resolvedOfferingId != null && resolvedOfferingId.isNotEmpty) {
+        // Attendance check
+        final att = await _client
+            .from('attendance_records')
+            .select('id')
+            .eq('student_id', id)
+            .eq('subject_offering_id', resolvedOfferingId)
+            .limit(1);
+        if ((att as List).isNotEmpty) {
+          return const StudentDeletionEligibility(
+            canDelete: false,
+            isClassRemovalOnly: false,
+            hasClassRecords: true,
+            blockReason:
+                'This student cannot be deleted from this class because they have recorded attendance data in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+          );
+        }
+
+        // Grades check - only block if student has actual recorded grade data
+        final gr = await _client
+            .from('term_grades')
+            .select('id, initial_grade, transmuted_grade, is_finalized, remarks')
+            .eq('student_id', id)
+            .eq('subject_offering_id', resolvedOfferingId);
+        final hasRealGrade = (gr as List).any((row) {
+          final isFinalized = row['is_finalized'] == true;
+          final initGrade = (row['initial_grade'] as num?)?.toDouble() ?? 0.0;
+          final transGrade =
+              (row['transmuted_grade'] as num?)?.toDouble() ?? 0.0;
+          final remarks = row['remarks']?.toString();
+          return isFinalized ||
+              initGrade > 0 ||
+              transGrade > 0 ||
+              (remarks != null && remarks != 'Incomplete');
+        });
+        if (hasRealGrade) {
+          return const StudentDeletionEligibility(
+            canDelete: false,
+            isClassRemovalOnly: false,
+            hasClassRecords: true,
+            blockReason:
+                'This student cannot be deleted from this class because they have recorded term grades in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+          );
+        }
+
+        // Classwork submissions check
+        final cwItems = await _client
+            .from('classwork_items')
+            .select('id')
+            .eq('subject_offering_id', resolvedOfferingId);
+        final cwIds = (cwItems as List)
+            .map((e) => e['id']?.toString())
+            .whereType<String>()
+            .toList();
+        if (cwIds.isNotEmpty) {
+          final cwSubs = await _client
+              .from('student_classwork_submissions')
+              .select('id')
+              .eq('student_id', id)
+              .inFilter('classwork_id', cwIds)
+              .limit(1);
+          if ((cwSubs as List).isNotEmpty) {
+            return const StudentDeletionEligibility(
+              canDelete: false,
+              isClassRemovalOnly: false,
+              hasClassRecords: true,
+              blockReason:
+                  'This student cannot be deleted from this class because they have submitted classwork activities in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+            );
+          }
+        }
+
+        // Digital assessments check
+        final daItems = await _client
+            .from('digital_assessments')
+            .select('id')
+            .eq('subject_offering_id', resolvedOfferingId);
+        final daIds = (daItems as List)
+            .map((e) => e['id']?.toString())
+            .whereType<String>()
+            .toList();
+        if (daIds.isNotEmpty) {
+          final daAttempts = await _client
+              .from('assessment_attempts')
+              .select('id')
+              .eq('student_id', id)
+              .inFilter('assessment_id', daIds)
+              .limit(1);
+          if ((daAttempts as List).isNotEmpty) {
+            return const StudentDeletionEligibility(
+              canDelete: false,
+              isClassRemovalOnly: false,
+              hasClassRecords: true,
+              blockReason:
+                  'This student cannot be deleted from this class because they have taken assessment quizzes or exams in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+            );
+          }
+        }
+      }
+
+      // 2. Check if student is enrolled in OTHER classes or has records elsewhere in the school
+      var otherEnrollmentsQuery = _client
+          .from('student_enrollments')
+          .select('id, subject_offering_id')
+          .eq('student_id', id);
+      if (resolvedOfferingId != null && resolvedOfferingId.isNotEmpty) {
+        otherEnrollmentsQuery = otherEnrollmentsQuery.neq(
+          'subject_offering_id',
+          resolvedOfferingId,
+        );
+      }
+      final otherEnrollments = await otherEnrollmentsQuery;
+      final hasOtherEnrollments = (otherEnrollments as List).isNotEmpty;
+
+      // 3. Check for any global records in other subjects across the school
+      var globalAttendanceQuery = _client
+          .from('attendance_records')
+          .select('id')
+          .eq('student_id', id);
+      if (resolvedOfferingId != null && resolvedOfferingId.isNotEmpty) {
+        globalAttendanceQuery = globalAttendanceQuery.neq(
+          'subject_offering_id',
+          resolvedOfferingId,
+        );
+      }
+      final globalAtt = await globalAttendanceQuery.limit(1);
+
+      var globalGradesQuery = _client
+          .from('term_grades')
+          .select('id, initial_grade, transmuted_grade, is_finalized, remarks')
+          .eq('student_id', id);
+      if (resolvedOfferingId != null && resolvedOfferingId.isNotEmpty) {
+        globalGradesQuery = globalGradesQuery.neq(
+          'subject_offering_id',
+          resolvedOfferingId,
+        );
+      }
+      final globalGr = await globalGradesQuery;
+      final hasGlobalRealGrade = (globalGr as List).any((row) {
+        final isFinalized = row['is_finalized'] == true;
+        final initGrade = (row['initial_grade'] as num?)?.toDouble() ?? 0.0;
+        final transGrade =
+            (row['transmuted_grade'] as num?)?.toDouble() ?? 0.0;
+        final remarks = row['remarks']?.toString();
+        return isFinalized ||
+            initGrade > 0 ||
+            transGrade > 0 ||
+            (remarks != null && remarks != 'Incomplete');
+      });
+
+      final globalCw = await _client
+          .from('student_classwork_submissions')
+          .select('id')
+          .eq('student_id', id)
+          .limit(1);
+
+      final globalAssess = await _client
+          .from('assessment_attempts')
+          .select('id')
+          .eq('student_id', id)
+          .limit(1);
+
+      final hasGlobalRecords =
+          (globalAtt as List).isNotEmpty ||
+          hasGlobalRealGrade ||
+          (globalCw as List).isNotEmpty ||
+          (globalAssess as List).isNotEmpty;
+
+      if (hasOtherEnrollments || hasGlobalRecords) {
+        if (resolvedOfferingId != null && resolvedOfferingId.isNotEmpty) {
+          return StudentDeletionEligibility(
+            canDelete: true,
+            isClassRemovalOnly: true,
+            hasOtherEnrollments: hasOtherEnrollments,
+            hasGlobalRecords: hasGlobalRecords,
+          );
+        } else {
+          return StudentDeletionEligibility(
+            canDelete: false,
+            isClassRemovalOnly: false,
+            hasOtherEnrollments: hasOtherEnrollments,
+            hasGlobalRecords: hasGlobalRecords,
+            blockReason:
+                'Cannot delete student because no specific class was identified and the student has existing enrollments or academic records.',
+          );
+        }
+      }
+
+      // 4. True isolated orphan student
+      return const StudentDeletionEligibility(
+        canDelete: true,
+        isClassRemovalOnly: false,
+        hasOtherEnrollments: false,
+        hasGlobalRecords: false,
+      );
+    } catch (e) {
+      debugPrint('Error checking student deletion eligibility: $e');
+      return const StudentDeletionEligibility(
+        canDelete: false,
+        isClassRemovalOnly: false,
+        blockReason:
+            'Unable to verify student academic records at this time. Please try again.',
+      );
+    }
+  }
+
   @override
   Future<void> permanentlyDeleteStudent(String id, [String? subjectId]) async {
     try {
-      if (subjectId != null) {
+      final resolvedOfferingId = await _resolveSubjectOfferingId(subjectId);
+
+      if (resolvedOfferingId != null && resolvedOfferingId.isNotEmpty) {
+        try {
+          await _client.from('term_grades').delete().match({
+            'student_id': id,
+            'subject_offering_id': resolvedOfferingId,
+          });
+        } catch (_) {}
+
         await _client.from('student_enrollments').delete().match({
           'student_id': id,
-          'subject_offering_id': subjectId,
+          'subject_offering_id': resolvedOfferingId,
         });
 
         final remaining = await _client
@@ -945,13 +1267,80 @@ class SupabaseStudentRepository implements StudentRepository {
             .select('id')
             .eq('student_id', id);
 
-        if (remaining.isNotEmpty) {
+        if ((remaining as List).isNotEmpty) {
           AppDataCache.instance.invalidatePrefix('teacher_students_');
           AppDataCache.instance.invalidatePrefix('attendance_');
           return;
         }
       } else {
         await _client.from('student_enrollments').delete().eq('student_id', id);
+      }
+
+      // Check if student still has any enrollment in another class
+      final remainingCheck = await _client
+          .from('student_enrollments')
+          .select('id')
+          .eq('student_id', id);
+      if ((remainingCheck as List).isNotEmpty) {
+        AppDataCache.instance.invalidatePrefix('teacher_students_');
+        AppDataCache.instance.invalidatePrefix('attendance_');
+        return;
+      }
+
+      // Check if student has any academic records anywhere in the database
+      final anyAtt = await _client
+          .from('attendance_records')
+          .select('id')
+          .eq('student_id', id)
+          .limit(1);
+      if ((anyAtt as List).isNotEmpty) {
+        AppDataCache.instance.invalidatePrefix('teacher_students_');
+        return;
+      }
+
+      final anyGr = await _client
+          .from('term_grades')
+          .select('id, initial_grade, transmuted_grade, is_finalized, remarks')
+          .eq('student_id', id);
+      final hasRealRemainingGr = (anyGr as List).any((row) {
+        final isFinalized = row['is_finalized'] == true;
+        final initGrade = (row['initial_grade'] as num?)?.toDouble() ?? 0.0;
+        final transGrade =
+            (row['transmuted_grade'] as num?)?.toDouble() ?? 0.0;
+        final remarks = row['remarks']?.toString();
+        return isFinalized ||
+            initGrade > 0 ||
+            transGrade > 0 ||
+            (remarks != null && remarks != 'Incomplete');
+      });
+      if (hasRealRemainingGr) {
+        AppDataCache.instance.invalidatePrefix('teacher_students_');
+        return;
+      }
+
+      // Safe to clean up remaining placeholder term_grades
+      try {
+        await _client.from('term_grades').delete().eq('student_id', id);
+      } catch (_) {}
+
+      final anyCw = await _client
+          .from('student_classwork_submissions')
+          .select('id')
+          .eq('student_id', id)
+          .limit(1);
+      if ((anyCw as List).isNotEmpty) {
+        AppDataCache.instance.invalidatePrefix('teacher_students_');
+        return;
+      }
+
+      final anyAssess = await _client
+          .from('assessment_attempts')
+          .select('id')
+          .eq('student_id', id)
+          .limit(1);
+      if ((anyAssess as List).isNotEmpty) {
+        AppDataCache.instance.invalidatePrefix('teacher_students_');
+        return;
       }
 
       try {

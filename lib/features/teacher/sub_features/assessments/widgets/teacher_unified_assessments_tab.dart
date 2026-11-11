@@ -60,6 +60,7 @@ class _TeacherUnifiedAssessmentsTabState
   bool _isSyncing = false;
   QuizOrExamModel? _monitoringAssessment;
   late final TabController _categoryTabController;
+  Timer? _creationCooldownTimer;
 
   @override
   void initState() {
@@ -83,6 +84,9 @@ class _TeacherUnifiedAssessmentsTabState
     });
     _loadTeacherSections();
     _tryRestoreMonitoringAssessment();
+    if (CreateAssessmentFlowDialog.creationCooldown.isActive) {
+      _startCreationCooldownTimer();
+    }
   }
 
   @override
@@ -95,8 +99,77 @@ class _TeacherUnifiedAssessmentsTabState
 
   @override
   void dispose() {
+    _creationCooldownTimer?.cancel();
     _categoryTabController.dispose();
     super.dispose();
+  }
+
+  void _startCreationCooldownTimer() {
+    _creationCooldownTimer?.cancel();
+    if (!CreateAssessmentFlowDialog.creationCooldown.isActive) return;
+    _creationCooldownTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (timer) {
+        if (!mounted || !CreateAssessmentFlowDialog.creationCooldown.isActive) {
+          timer.cancel();
+          _creationCooldownTimer = null;
+        }
+        if (mounted) setState(() {});
+      },
+    );
+  }
+
+  Future<void> _openCreateAssessmentFlow({required bool isExam}) async {
+    final sectionParam = _selectedClassSection ?? '';
+    final offeringMatch = _teacherSubjects.firstWhere(
+      (s) =>
+          (_selectedSubject == null || s['subject_name'] == _selectedSubject) &&
+          (_selectedClassSection == null ||
+              s['section_name'] == _selectedClassSection),
+      orElse: () => _teacherSubjects.isNotEmpty
+          ? _teacherSubjects.first
+          : <String, dynamic>{},
+    );
+    await CreateAssessmentFlowDialog.show(
+      context,
+      initialSection: sectionParam,
+      initialSubject: _selectedSubject,
+      initialOfferingId: offeringMatch['id']?.toString(),
+      initialOfferings: _teacherSubjects,
+      initialIsExam: isExam,
+      skipTypeSelection: true,
+      repository: widget.repository,
+      onAssessmentCreated: () async {
+        _startCreationCooldownTimer();
+        await widget.onRefresh?.call();
+        if (mounted) setState(() {});
+      },
+    );
+    if (mounted && CreateAssessmentFlowDialog.creationCooldown.isActive) {
+      _startCreationCooldownTimer();
+      setState(() {});
+    }
+  }
+
+  Widget _buildAssessmentCreateButton({
+    required String baseLabel,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    final remaining = CreateAssessmentFlowDialog.creationCooldown.remainingSeconds;
+    final inCooldown = remaining > 0;
+
+    return Tooltip(
+      message: inCooldown
+          ? 'Cooldown active: Please wait ${remaining}s before creating another quiz or exam.'
+          : baseLabel,
+      child: AppButton.primary(
+        label: inCooldown ? '$baseLabel (${remaining}s)' : baseLabel,
+        icon: inCooldown ? Icons.hourglass_bottom_rounded : icon,
+        onPressed: inCooldown ? null : onPressed,
+        isSmall: true,
+      ),
+    );
   }
 
   void _tryRestoreMonitoringAssessment() {
@@ -699,39 +772,10 @@ class _TeacherUnifiedAssessmentsTabState
                           },
                           isSmall: true,
                         ),
-                        AppButton.primary(
-                          label: 'Create Quiz',
+                        _buildAssessmentCreateButton(
+                          baseLabel: 'Create Quiz',
                           icon: Icons.quiz_outlined,
-                          onPressed: () {
-                            final sectionParam = _selectedClassSection ?? '';
-                            final offeringMatch = _teacherSubjects.firstWhere(
-                              (s) =>
-                                  (_selectedSubject == null ||
-                                      s['subject_name'] == _selectedSubject) &&
-                                  (_selectedClassSection == null ||
-                                      s['section_name'] ==
-                                          _selectedClassSection),
-                              orElse: () => _teacherSubjects.isNotEmpty
-                                  ? _teacherSubjects.first
-                                  : <String, dynamic>{},
-                            );
-                            CreateAssessmentFlowDialog.show(
-                              context,
-                              initialSection: sectionParam,
-                              initialSubject: _selectedSubject,
-                              initialOfferingId: offeringMatch['id']
-                                  ?.toString(),
-                              initialOfferings: _teacherSubjects,
-                              initialIsExam: false,
-                              skipTypeSelection: true,
-                              repository: widget.repository,
-                              onAssessmentCreated: () async {
-                                await widget.onRefresh?.call();
-                                if (mounted) setState(() {});
-                              },
-                            );
-                          },
-                          isSmall: true,
+                          onPressed: () => _openCreateAssessmentFlow(isExam: false),
                         ),
                       ],
                     ),
@@ -791,8 +835,8 @@ class _TeacherUnifiedAssessmentsTabState
                       icon: LucideIcons.award,
                       isZeroExam: _isCurrentSubjectZeroExam,
                       actionButtons: [
-                        AppButton.primary(
-                          label: 'Create Examination',
+                        _buildAssessmentCreateButton(
+                          baseLabel: 'Create Examination',
                           icon: Icons.description_outlined,
                           onPressed: () {
                             if (_isCurrentSubjectZeroExam) {
@@ -802,35 +846,8 @@ class _TeacherUnifiedAssessmentsTabState
                               );
                               return;
                             }
-                            final sectionParam = _selectedClassSection ?? '';
-                            final offeringMatch = _teacherSubjects.firstWhere(
-                              (s) =>
-                                  (_selectedSubject == null ||
-                                      s['subject_name'] == _selectedSubject) &&
-                                  (_selectedClassSection == null ||
-                                      s['section_name'] ==
-                                          _selectedClassSection),
-                              orElse: () => _teacherSubjects.isNotEmpty
-                                  ? _teacherSubjects.first
-                                  : <String, dynamic>{},
-                            );
-                            CreateAssessmentFlowDialog.show(
-                              context,
-                              initialSection: sectionParam,
-                              initialSubject: _selectedSubject,
-                              initialOfferingId: offeringMatch['id']
-                                  ?.toString(),
-                              initialOfferings: _teacherSubjects,
-                              initialIsExam: true,
-                              skipTypeSelection: true,
-                              repository: widget.repository,
-                              onAssessmentCreated: () async {
-                                await widget.onRefresh?.call();
-                                if (mounted) setState(() {});
-                              },
-                            );
+                            _openCreateAssessmentFlow(isExam: true);
                           },
-                          isSmall: true,
                         ),
                       ],
                     ),
@@ -1044,18 +1061,14 @@ class _TeacherUnifiedAssessmentsTabState
 
       if (!mounted) return;
       if (newStatus) {
-        AppModals.showSuccessDialog(
-          context: context,
-          title: 'Answer Key Released',
-          message:
-              'The answer key for "${item.title}" has been released! Students can now review their responses, see which questions they got right or wrong, and inspect the official answers.',
+        AppTopToast.success(
+          context,
+          'Answer key for "${item.title}" released.',
         );
       } else {
-        AppModals.showSuccessDialog(
-          context: context,
-          title: 'Answer Key Retracted',
-          message:
-              'Answer key access for "${item.title}" has been hidden. Students will see their submission status as pending teacher evaluation.',
+        AppTopToast.info(
+          context,
+          'Answer key for "${item.title}" hidden.',
         );
       }
     } catch (e) {
@@ -2010,14 +2023,11 @@ class _TeacherUnifiedAssessmentsTabState
                             await widget.onRefresh?.call();
                             if (mounted) {
                               setState(() => _isSyncing = false);
-                              await AppModals.showSuccessDialog(
-                                context: context,
-                                title: isInPerson
-                                    ? 'Date Updated'
-                                    : 'Schedule Updated',
-                                message: isInPerson
-                                    ? 'Scheduled date updated for "${item.title}".'
-                                    : 'Schedule updated for "${item.title}". Window opens on ${candidateCombined.month}/${candidateCombined.day}/${candidateCombined.year} at ${_formatTime(candidateCombined)}.',
+                              AppTopToast.success(
+                                context,
+                                isInPerson
+                                    ? 'Date updated for "${item.title}".'
+                                    : 'Schedule updated for "${item.title}".',
                               );
                             }
                           }

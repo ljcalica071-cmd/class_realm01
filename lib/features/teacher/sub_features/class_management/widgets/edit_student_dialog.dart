@@ -4,9 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/widgets/common/app_buttons.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
-import 'package:class_realm/widgets/common/app_text_field.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 
 class EditStudentDialog extends StatefulWidget {
@@ -118,13 +116,12 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
     }
 
     if (!mounted) return;
+    AppTopToast.success(
+      context,
+      'Student information updated successfully.',
+    );
     Navigator.of(context).pop();
     widget.onStudentUpdated();
-    AppModals.showSuccessDialog(
-      context: context,
-      title: 'Student Updated',
-      message: 'Student information has been updated successfully.',
-    );
   }
 
   @override

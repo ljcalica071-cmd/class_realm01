@@ -1,5 +1,23 @@
 import 'package:class_realm/models/user_model.dart';
 
+class StudentDeletionEligibility {
+  final bool canDelete;
+  final bool isClassRemovalOnly;
+  final bool hasClassRecords;
+  final bool hasGlobalRecords;
+  final bool hasOtherEnrollments;
+  final String blockReason;
+
+  const StudentDeletionEligibility({
+    required this.canDelete,
+    required this.isClassRemovalOnly,
+    this.hasClassRecords = false,
+    this.hasGlobalRecords = false,
+    this.hasOtherEnrollments = false,
+    this.blockReason = '',
+  });
+}
+
 abstract class StudentRepository {
   Future<List<UserModel>> getStudents({
     String? section,
@@ -41,5 +59,9 @@ abstract class StudentRepository {
   Future<void> restoreStudent(String id, [String? subjectId]);
   Future<void> deactivateStudent(String id);
   Future<void> reactivateStudent(String id);
+  Future<StudentDeletionEligibility> checkStudentDeletionEligibility(
+    String id, [
+    String? subjectId,
+  ]);
   Future<void> permanentlyDeleteStudent(String id, [String? subjectId]);
 }

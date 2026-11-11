@@ -90,11 +90,9 @@ class TeacherExamCheckerTab extends StatelessWidget {
                         label: 'Review Answers',
                         isSmall: true,
                         onPressed: () {
-                          AppModals.showSuccessDialog(
-                            context: context,
-                            title: 'Exam Verified',
-                            message:
-                                'All objective answers for ${rev.studentName} verified and matched with answer key.',
+                          AppTopToast.success(
+                            context,
+                            'Exam answers verified for ${rev.studentName}.',
                           );
                         },
                       ),

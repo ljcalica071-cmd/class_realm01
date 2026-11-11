@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
 
 import 'learning_material_repository.dart';
 
@@ -13,6 +14,25 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       SupabaseLearningMaterialRepository();
 
   static const String _bucket = 'learning_materials';
+
+  SupabaseStorageClient get _storage {
+    try {
+      return SupabaseService().adminClient.storage;
+    } catch (_) {
+      return _client.storage;
+    }
+  }
+
+  static bool isDefaultFolderName(String name) {
+    final clean = name.trim().toLowerCase();
+    return clean == 'term 1' ||
+        clean == 'term 2' ||
+        clean == 'term 3' ||
+        clean == 'supplementary handouts & reviewers' ||
+        clean == 'term 1 - first quarter' ||
+        clean == 'term 2 - second quarter' ||
+        clean == 'term 3 - third quarter';
+  }
 
   @override
   Future<void> ensureDefaultTermFolders(String subjectOfferingId) async {
@@ -90,6 +110,13 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
             'is_visible_to_students': true,
             'is_archived': false,
           });
+        } else {
+          // Guarantee default 4 folders remain visible to students and active
+          await _client
+              .from('folders')
+              .update({'is_visible_to_students': true, 'is_archived': false})
+              .eq('subject_offering_id', subjectOfferingId)
+              .eq('folder_name', name);
         }
       }
     } catch (e) {
@@ -150,7 +177,13 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
               }
               return true;
             }).length;
-            return ClassRealmFolder.fromMap(row, count: activeCount);
+            var folder = ClassRealmFolder.fromMap(row, count: activeCount);
+            // Default 4 folders must always have isVisibleToStudents = true
+            if (folder.parentFolderId == null &&
+                isDefaultFolderName(folder.folderName)) {
+              folder = folder.copyWith(isVisibleToStudents: true);
+            }
+            return folder;
           })
           .where((f) => !f.folderName.toLowerCase().contains('quarter'))
           .toList();
@@ -204,7 +237,25 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
     };
     if (folderName != null) updates['folder_name'] = folderName.trim();
     if (isVisibleToStudents != null) {
-      updates['is_visible_to_students'] = isVisibleToStudents;
+      // Check if this is one of the 4 default curriculum folders
+      final folderRes = await _client
+          .from('folders')
+          .select('folder_name, parent_folder_id')
+          .eq('id', folderId)
+          .maybeSingle();
+
+      if (folderRes != null) {
+        final name = (folderRes['folder_name'] ?? '').toString();
+        final isRoot = folderRes['parent_folder_id'] == null;
+        if (isRoot && isDefaultFolderName(name)) {
+          // Default folders are permanently visible to students
+          updates['is_visible_to_students'] = true;
+        } else {
+          updates['is_visible_to_students'] = isVisibleToStudents;
+        }
+      } else {
+        updates['is_visible_to_students'] = isVisibleToStudents;
+      }
     }
 
     await _client.from('folders').update(updates).eq('id', folderId);
@@ -309,6 +360,30 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
     bool studentOnly = false,
   }) async {
     try {
+      if (studentOnly) {
+        // Automatically hide files if the folder itself is hidden or archived
+        final folderCheck = await _client
+            .from('folders')
+            .select(
+              'folder_name, parent_folder_id, is_visible_to_students, is_archived',
+            )
+            .eq('id', folderId)
+            .maybeSingle();
+
+        if (folderCheck != null) {
+          final isArchived = folderCheck['is_archived'] == true;
+          final isVisible =
+              folderCheck['is_visible_to_students'] == true ||
+              (folderCheck['parent_folder_id'] == null &&
+                  isDefaultFolderName(
+                    folderCheck['folder_name']?.toString() ?? '',
+                  ));
+          if (isArchived || !isVisible) {
+            return [];
+          }
+        }
+      }
+
       var query = _client
           .from('learning_materials')
           .select()
@@ -390,7 +465,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       );
 
       // Atomic upload: if this throws, caller catches it, zero broken DB rows!
-      await _client.storage
+      await _storage
           .from(_bucket)
           .uploadBinary(
             storagePath,
@@ -401,7 +476,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
             ),
           );
 
-      storageUrl = _client.storage.from(_bucket).getPublicUrl(storagePath);
+      storageUrl = _storage.from(_bucket).getPublicUrl(storagePath);
     }
 
     final createdMaterials = <ClassRealmMaterial>[];
@@ -536,7 +611,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       if (remainingCount == 0) {
         final relativePath = _extractStorageRelativePath(storagePathUrl);
         if (relativePath != null && relativePath.isNotEmpty) {
-          await _client.storage.from(_bucket).remove([relativePath]);
+          await _storage.from(_bucket).remove([relativePath]);
           debugPrint(
             'Physical storage file purged from Supabase: $relativePath',
           );
@@ -627,7 +702,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
       originalFileName: sanitizedFileName,
     );
 
-    await _client.storage
+    await _storage
         .from(_bucket)
         .uploadBinary(
           newStoragePath,
@@ -638,7 +713,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
           ),
         );
 
-    final newPublicUrl = _client.storage
+    final newPublicUrl = _storage
         .from(_bucket)
         .getPublicUrl(newStoragePath);
     final nowIso = DateTime.now().toIso8601String();
@@ -665,7 +740,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
         );
         if (oldRelativePath != null) {
           try {
-            await _client.storage.from(_bucket).remove([oldRelativePath]);
+            await _storage.from(_bucket).remove([oldRelativePath]);
           } catch (e) {
             debugPrint('Cleanup old storage file error: $e');
           }
@@ -699,7 +774,7 @@ class SupabaseLearningMaterialRepository implements LearningMaterialRepository {
               currentStoragePathUrl,
             );
             if (oldRelativePath != null) {
-              await _client.storage.from(_bucket).remove([oldRelativePath]);
+              await _storage.from(_bucket).remove([oldRelativePath]);
             }
           }
         } catch (e) {

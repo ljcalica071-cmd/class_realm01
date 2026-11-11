@@ -106,11 +106,9 @@ class _TeacherAcademicSetupTabState extends State<TeacherAcademicSetupTab> {
       AuthRepository.instance.setCurrentUser(updated);
     }
 
-    AppModals.showSuccessDialog(
-      context: context,
-      title: 'Academic Configuration Saved',
-      message:
-          'Your active subject is now set to "$_selectedSubject" with grading weights ${_wwWeight.round()}% WW, ${_ptWeight.round()}% PT, ${_exWeight.round()}% EX under S.Y. $_academicYear.',
+    AppTopToast.success(
+      context,
+      'Academic configuration saved.',
     );
   }
 

@@ -177,6 +177,15 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _handlePasswordFieldTap() {
+    _healPasswordSelection();
+    if (!_passwordFocusNode.hasFocus) {
+      _passwordFocusNode.requestFocus();
+    } else {
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+    }
+  }
+
   void _handlePasswordChanged() {
     if (_passwordFocusNode.hasFocus) {
       _healPasswordSelection();
@@ -292,11 +301,15 @@ class _LoginScreenState extends State<LoginScreen> {
           message: 'Invalid email or password. Please check your credentials.',
           onConfirm: () {
             // Focus back to password without clearing it (User Friendly)
-            final len = _passwordController.text.length;
-            _passwordController.selection = TextSelection.collapsed(
-              offset: len,
-            );
-            _passwordFocusNode.requestFocus();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              final len = _passwordController.text.length;
+              _passwordController.selection = TextSelection.collapsed(
+                offset: len,
+              );
+              _passwordFocusNode.requestFocus();
+              SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+            });
           },
         );
         return;
@@ -342,11 +355,15 @@ class _LoginScreenState extends State<LoginScreen> {
             title: 'Authentication Failed',
             message: e.message,
             onConfirm: () {
-              final len = _passwordController.text.length;
-              _passwordController.selection = TextSelection.collapsed(
-                offset: len,
-              );
-              _passwordFocusNode.requestFocus();
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                final len = _passwordController.text.length;
+                _passwordController.selection = TextSelection.collapsed(
+                  offset: len,
+                );
+                _passwordFocusNode.requestFocus();
+                SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+              });
             },
           );
           return;
@@ -357,9 +374,13 @@ class _LoginScreenState extends State<LoginScreen> {
         title: 'Login Error',
         message: e.toString().replaceAll('Exception: ', ''),
         onConfirm: () {
-          final len = _passwordController.text.length;
-          _passwordController.selection = TextSelection.collapsed(offset: len);
-          _passwordFocusNode.requestFocus();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final len = _passwordController.text.length;
+            _passwordController.selection = TextSelection.collapsed(offset: len);
+            _passwordFocusNode.requestFocus();
+            SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+          });
         },
       );
     }
@@ -666,6 +687,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   Focus(
+                    canRequestFocus: false,
+                    skipTraversal: true,
                     onKeyEvent: (node, event) {
                       if (event is KeyDownEvent) {
                         final text = _passwordController.text;
@@ -709,9 +732,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       textInputAction: TextInputAction.done,
                       enableSuggestions: false,
                       autocorrect: false,
-                      onTap: () {
-                        _healPasswordSelection();
-                      },
+                      onTap: _handlePasswordFieldTap,
                       onFieldSubmitted: (_) {
                         if (!_isLoading && !_isRateLimited) {
                           _handleLogin();

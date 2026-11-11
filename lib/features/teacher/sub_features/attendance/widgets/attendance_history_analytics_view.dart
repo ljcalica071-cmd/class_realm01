@@ -444,11 +444,9 @@ class AttendanceHistoryAnalyticsViewState
     if (corrected == true && mounted) {
       await _loadAll();
       if (!mounted || !context.mounted) return;
-      await AppModals.showSuccessDialog(
-        context: context,
-        title: 'Attendance Corrected',
-        message:
-            'The historical attendance record for ${record.studentId} on ${_formatDate(record.attendanceDate)} has been updated with an audit reason.',
+      AppTopToast.success(
+        context,
+        'Attendance record updated.',
       );
     }
   }

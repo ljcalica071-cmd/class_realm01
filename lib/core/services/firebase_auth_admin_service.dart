@@ -18,7 +18,24 @@ class FirebaseAuthAdminService {
       // 1. Primary: Try Google Identity Platform batchDelete via Service Account OAuth2
       final token = await _getAccessToken();
       if (token != null && token.isNotEmpty) {
-        final projectId = EnvConfig.firebaseProjectId;
+        final projectId = EnvConfig.firebaseProjectId.isNotEmpty
+            ? EnvConfig.firebaseProjectId
+            : 'classrealm01';
+
+        // Google Identity Platform requires the user to be disabled before batchDelete
+        try {
+          await http.post(
+            Uri.parse(
+              'https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update',
+            ),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'localId': uid, 'disableUser': true}),
+          );
+        } catch (_) {}
+
         final res = await http.post(
           Uri.parse(
             'https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:batchDelete',
@@ -206,6 +223,31 @@ class FirebaseAuthAdminService {
             } catch (_) {}
           }
           return uid;
+        } else {
+          // If EMAIL_EXISTS (e.g. orphaned Firebase record from earlier test or delete),
+          // handle gracefully so teacher creation succeeds
+          try {
+            final fbErr = jsonDecode(fbRes.body);
+            final errMsg = fbErr['error']?['message']?.toString();
+            if (errMsg == 'EMAIL_EXISTS') {
+              // Sign in to retrieve UID and update password/profile
+              final signRes = await http.post(
+                Uri.parse(
+                  'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$apiKey',
+                ),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({
+                  'email': cleanEmail,
+                  'password': password,
+                  'returnSecureToken': true,
+                }),
+              );
+              if (signRes.statusCode == 200) {
+                final signData = jsonDecode(signRes.body);
+                return signData['localId']?.toString();
+              }
+            }
+          } catch (_) {}
         }
       }
     } catch (e) {

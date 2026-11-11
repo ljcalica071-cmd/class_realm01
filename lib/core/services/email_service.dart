@@ -296,12 +296,14 @@ class EmailService {
     required String recipientEmail,
     required String recipientName,
     required String otpCode,
+    bool skipBounceCheck = true,
   }) async {
     final htmlTemplate = buildFirstLoginOtpHtml(recipientName, otpCode);
     return await sendEmail(
       to: recipientEmail,
       subject: 'ClassRealm - First Login Verification Code',
       html: htmlTemplate,
+      skipBounceCheck: skipBounceCheck,
     );
   }
 
@@ -310,12 +312,14 @@ class EmailService {
     required String recipientEmail,
     required String recipientName,
     required String otpCode,
+    bool skipBounceCheck = true,
   }) async {
     final htmlTemplate = buildForgotPasswordOtpHtml(recipientName, otpCode);
     return await sendEmail(
       to: recipientEmail,
       subject: 'ClassRealm - Password Reset Verification Code',
       html: htmlTemplate,
+      skipBounceCheck: skipBounceCheck,
     );
   }
 
@@ -324,12 +328,14 @@ class EmailService {
     required String recipientEmail,
     required String recipientName,
     required String otpCode,
+    bool skipBounceCheck = true,
   }) async {
     final htmlTemplate = buildChangePasswordOtpHtml(recipientName, otpCode);
     return await sendEmail(
       to: recipientEmail,
       subject: 'ClassRealm - Change Password Security Code',
       html: htmlTemplate,
+      skipBounceCheck: skipBounceCheck,
     );
   }
 
@@ -415,6 +421,7 @@ class EmailService {
     required String recipientEmail,
     required String teacherName,
     required String code,
+    bool skipBounceCheck = true,
   }) async {
     final String htmlTemplate =
         '''
@@ -443,6 +450,7 @@ class EmailService {
       to: recipientEmail,
       subject: 'ClassRealm - Teacher Verification Code (Valid for 5 minutes)',
       html: htmlTemplate,
+      skipBounceCheck: skipBounceCheck,
     );
   }
 
@@ -451,6 +459,7 @@ class EmailService {
     required String recipientEmail,
     required String teacherName,
     required String tempPassword,
+    bool skipBounceCheck = true,
   }) async {
     final String htmlTemplate =
         '''
@@ -489,6 +498,7 @@ class EmailService {
       to: recipientEmail,
       subject: 'Welcome to ClassRealm - Teacher Account Credentials',
       html: htmlTemplate,
+      skipBounceCheck: skipBounceCheck,
     );
   }
 

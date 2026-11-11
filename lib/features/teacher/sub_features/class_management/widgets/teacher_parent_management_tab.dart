@@ -1541,12 +1541,11 @@ class _TeacherParentManagementTabState
 
       _loadData();
       if (mounted) {
-        AppModals.showSuccessDialog(
-          context: context,
-          title: isArchiving ? 'Parent Archived' : 'Parent Restored',
-          message: isArchiving
-              ? '${parent.fullName} has been moved to archives.'
-              : '${parent.fullName} has been restored to active status.',
+        AppTopToast.success(
+          context,
+          isArchiving
+              ? '${parent.fullName} moved to archives.'
+              : '${parent.fullName} restored to active status.',
         );
       }
     }
@@ -1568,10 +1567,9 @@ class _TeacherParentManagementTabState
 
       _loadData();
       if (mounted) {
-        AppModals.showSuccessDialog(
-          context: context,
-          title: 'Parent Deleted',
-          message: '${parent.fullName} has been permanently deleted.',
+        AppTopToast.success(
+          context,
+          '${parent.fullName} permanently deleted.',
         );
       }
     }

@@ -2,11 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/core/theme/subject_palette.dart';
 
+class _PositionedSchedule {
+  final ScheduleModel schedule;
+  final int columnIndex;
+  final int totalColumns;
+
+  _PositionedSchedule({
+    required this.schedule,
+    required this.columnIndex,
+    required this.totalColumns,
+  });
+}
+
 class TimetableGridWidget extends StatelessWidget {
   final List<ScheduleModel> schedules;
   final Function(ScheduleModel)? onEdit;
+  final String? currentTeacherId;
 
-  const TimetableGridWidget({super.key, required this.schedules, this.onEdit});
+  const TimetableGridWidget({
+    super.key,
+    required this.schedules,
+    this.onEdit,
+    this.currentTeacherId,
+  });
 
   static const int startHour = 7;
   static const int endHour = 20; // Expanded for full range
@@ -24,6 +42,87 @@ class TimetableGridWidget extends StatelessWidget {
     'Saturday',
     'Sunday',
   ];
+
+  List<_PositionedSchedule> _calculateDayLayout(List<ScheduleModel> daySchedules) {
+    if (daySchedules.isEmpty) return [];
+
+    final sorted = List<ScheduleModel>.from(daySchedules)
+      ..sort((a, b) {
+        final cmp = a.startMinutes.compareTo(b.startMinutes);
+        if (cmp != 0) return cmp;
+        return b.durationMinutes.compareTo(a.durationMinutes);
+      });
+
+    final positioned = <_PositionedSchedule>[];
+
+    for (int i = 0; i < sorted.length; i++) {
+      final s = sorted[i];
+      final overlapping = sorted.where((other) {
+        return !(other.endMinutes <= s.startMinutes ||
+            other.startMinutes >= s.endMinutes);
+      }).toList();
+
+      final usedCols = <int>{};
+      for (final pos in positioned) {
+        if (overlapping.contains(pos.schedule)) {
+          usedCols.add(pos.columnIndex);
+        }
+      }
+      int col = 0;
+      while (usedCols.contains(col)) {
+        col++;
+      }
+
+      positioned.add(
+        _PositionedSchedule(
+          schedule: s,
+          columnIndex: col,
+          totalColumns: 1,
+        ),
+      );
+    }
+
+    for (int i = 0; i < positioned.length; i++) {
+      final p = positioned[i];
+      final s = p.schedule;
+      final overlappingPos = positioned.where((other) {
+        return !(other.schedule.endMinutes <= s.startMinutes ||
+            other.schedule.startMinutes >= s.endMinutes);
+      }).toList();
+
+      final maxCol = overlappingPos
+          .map((e) => e.columnIndex)
+          .fold(0, (max, c) => c > max ? c : max);
+      final count = maxCol + 1;
+      positioned[i] = _PositionedSchedule(
+        schedule: p.schedule,
+        columnIndex: p.columnIndex,
+        totalColumns: count,
+      );
+    }
+
+    for (int i = 0; i < positioned.length; i++) {
+      final p = positioned[i];
+      final s = p.schedule;
+      final overlappingPos = positioned.where((other) {
+        return !(other.schedule.endMinutes <= s.startMinutes ||
+            other.schedule.startMinutes >= s.endMinutes);
+      }).toList();
+
+      final maxTotal = overlappingPos
+          .map((e) => e.totalColumns)
+          .fold(p.totalColumns, (max, t) => t > max ? t : max);
+      if (maxTotal != p.totalColumns) {
+        positioned[i] = _PositionedSchedule(
+          schedule: p.schedule,
+          columnIndex: p.columnIndex,
+          totalColumns: maxTotal,
+        );
+      }
+    }
+
+    return positioned;
+  }
 
   Color _getSectionColor(String subject, BuildContext context) {
     final uniqueSubjects = schedules.map((s) => s.subject).toSet().toList();
@@ -113,6 +212,12 @@ class TimetableGridWidget extends StatelessWidget {
             ? Colors.white.withValues(alpha: 0.14)
             : const Color(0xFFE2E8F0);
 
+        final allPositioned = <_PositionedSchedule>[];
+        for (final day in days) {
+          final dayList = schedules.where((s) => s.dayOfWeek == day).toList();
+          allPositioned.addAll(_calculateDayLayout(dayList));
+        }
+
         Widget gridContent = Container(
           width: totalGridWidth,
           decoration: BoxDecoration(
@@ -130,8 +235,8 @@ class TimetableGridWidget extends StatelessWidget {
                   child: Stack(
                     children: [
                       _buildGridBackground(dayWidth, theme, isDark),
-                      ...schedules.map(
-                        (s) => _buildScheduleBlock(s, dayWidth, context),
+                      ...allPositioned.map(
+                        (pos) => _buildScheduleBlock(pos, dayWidth, context),
                       ),
                     ],
                   ),
@@ -259,10 +364,11 @@ class TimetableGridWidget extends StatelessWidget {
   }
 
   Widget _buildScheduleBlock(
-    ScheduleModel s,
+    _PositionedSchedule pos,
     double dayWidth,
     BuildContext context,
   ) {
+    final s = pos.schedule;
     final int dayIndex = days.indexOf(s.dayOfWeek);
     if (dayIndex == -1) return const SizedBox.shrink();
 
@@ -278,18 +384,31 @@ class TimetableGridWidget extends StatelessWidget {
     final Color bgColor = _getSectionColor(s.subject, context);
     final Color textColor = _getSubjectDarkColor(s.subject, context);
 
+    final bool isOtherTeacher = currentTeacherId != null &&
+        s.teacherId != null &&
+        s.teacherId != currentTeacherId;
+
+    final double availableWidth = dayWidth - 8;
+    final double subWidth = availableWidth / pos.totalColumns;
+    final double leftOffset = timeColumnWidth +
+        (dayIndex * dayWidth) +
+        4 +
+        (pos.columnIndex * subWidth);
+
     return Positioned(
-      left: timeColumnWidth + (dayIndex * dayWidth) + 4,
+      left: leftOffset,
       top: topOffset + 1,
-      width: dayWidth - 8,
+      width: subWidth - (pos.totalColumns > 1 ? 2 : 0),
       height: blockHeight - 2,
       child: Container(
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: textColor.withValues(alpha: 0.15),
-            width: 1.5,
+            color: isOtherTeacher
+                ? textColor.withValues(alpha: 0.35)
+                : textColor.withValues(alpha: 0.15),
+            width: isOtherTeacher ? 1.8 : 1.5,
           ),
           boxShadow: [
             BoxShadow(
@@ -306,7 +425,10 @@ class TimetableGridWidget extends StatelessWidget {
             child: InkWell(
               onTap: () => onEdit?.call(s),
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: EdgeInsets.symmetric(
+                  horizontal: pos.totalColumns > 1 ? 6.0 : 10.0,
+                  vertical: 6.0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -314,24 +436,55 @@ class TimetableGridWidget extends StatelessWidget {
                       s.subject,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                        fontSize: pos.totalColumns > 1 ? 12 : 14,
                         color: textColor,
-                        height: 1.2,
+                        height: 1.15,
                       ),
-                      maxLines: 3,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 3),
                     Text(
                       s.room.trim().isEmpty
                           ? s.section
                           : '${s.section} • ${s.room.trim()}',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: pos.totalColumns > 1 ? 10 : 11,
                         color: textColor.withValues(alpha: 0.85),
                         fontWeight: FontWeight.w600,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    if (s.teacherName != null &&
+                        s.teacherName!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.person_outline,
+                            size: 11,
+                            color: textColor.withValues(alpha: 0.75),
+                          ),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            child: Text(
+                              isOtherTeacher
+                                  ? s.teacherName!.trim()
+                                  : '${s.teacherName!.trim()} (You)',
+                              style: TextStyle(
+                                fontSize: pos.totalColumns > 1 ? 9 : 10,
+                                fontWeight: FontWeight.w600,
+                                color: textColor.withValues(alpha: 0.9),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

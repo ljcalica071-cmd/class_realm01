@@ -37,7 +37,6 @@ class _TeacherStudentManagementTabState
   String _selectedSectionFilter = '— All Sections —';
   String _sortColumn = 'lastName';
   bool _sortAscending = true;
-  final Set<String> _selectedStudentIds = {};
   RealtimeChannel? _realtimeChannel;
 
   List<UserModel> _activeStudents = [];
@@ -278,6 +277,105 @@ class _TeacherStudentManagementTabState
     final birthdayThisYear = DateTime(today.year, birthday.month, birthday.day);
     if (today.isBefore(birthdayThisYear)) age--;
     return age;
+  }
+
+  Future<void> _handlePermanentlyDeleteStudent(UserModel s) async {
+    try {
+      final studentRepo = SupabaseStudentRepository();
+
+      // Determine the subject offering ID if possible
+      String? subjectOfferingId = s.enrolledSubjectId;
+      if (subjectOfferingId == null || subjectOfferingId.isEmpty) {
+        if (_selectedSubjectFilter != '— All Subjects —') {
+          for (final row in _teacherSubjectsData) {
+            if (row['subject_name'] == _selectedSubjectFilter) {
+              subjectOfferingId = row['id']?.toString();
+              break;
+            }
+          }
+        }
+      }
+
+      // Check deletion eligibility against single source of truth (database)
+      final eligibility = await studentRepo.checkStudentDeletionEligibility(
+        s.id,
+        subjectOfferingId,
+      );
+
+      if (!mounted) return;
+
+      // Tier 1: Hard block if student has recorded academic data in this subject
+      if (!eligibility.canDelete) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Cannot Delete Student',
+          message: eligibility.blockReason.isNotEmpty
+              ? eligibility.blockReason
+              : '${s.fullName} cannot be deleted from this class because they have recorded academic data (attendance records, classwork submissions, or grades) in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+        );
+        return;
+      }
+
+      // Tier 2: Class-only removal if student is enrolled in other subjects or has global records
+      if (eligibility.isClassRemovalOnly) {
+        final confirm = await AppModals.showTypeToConfirmDeleteDialog(
+          context: context,
+          title: 'Remove Student from Class',
+          message:
+              '${s.fullName} is also enrolled in other subjects with other teachers.\n\n'
+              '• Since they have no academic records in this subject, typing the confirmation phrase will remove their enrollment from your class only.\n'
+              '• Their student account, login credentials, and enrollments in other classes will remain completely safe and unaffected.\n'
+              '• Type "I confirm" to proceed.',
+          requiredText: 'I confirm',
+        );
+
+        if (confirm == true) {
+          await studentRepo.permanentlyDeleteStudent(s.id, subjectOfferingId);
+          await _loadData(forceRefresh: true);
+          if (mounted) {
+            AppTopToast.success(
+              context,
+              '${s.fullName} has been removed from this class.',
+            );
+          }
+        }
+      } else {
+        // Tier 3: Full orphan account purge if zero records anywhere and no other class enrollments
+        final confirm = await AppModals.showTypeToConfirmDeleteDialog(
+          context: context,
+          title: 'Permanently Delete Student',
+          message:
+              'Are you sure you want to permanently delete ${s.fullName}?\n\n'
+              '• This student has NO attendance, grades, or classwork records in the school system.\n'
+              '• This student is NOT enrolled in any other teacher\'s class.\n'
+              '• This action is permanent and IRREVERSIBLE.\n'
+              '• Their student profile and credentials will be completely erased from the school database.\n'
+              '• Type "I confirm" to proceed.',
+          requiredText: 'I confirm',
+        );
+
+        if (confirm == true) {
+          await studentRepo.permanentlyDeleteStudent(s.id, subjectOfferingId);
+          await _loadData(forceRefresh: true);
+          if (mounted) {
+            AppTopToast.success(
+              context,
+              '${s.fullName} has been permanently deleted.',
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error permanently deleting student: $e');
+      if (mounted) {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Delete Failed',
+          message:
+              'An unexpected error occurred while attempting to delete the student. Please try again.',
+        );
+      }
+    }
   }
 
   @override
@@ -666,7 +764,6 @@ class _TeacherStudentManagementTabState
                       ),
                       onPressed: () => setState(() {
                         _showArchivedStudents = !_showArchivedStudents;
-                        _selectedStudentIds.clear();
                       }),
                     ),
                   );
@@ -1013,11 +1110,6 @@ class _TeacherStudentManagementTabState
                                                         itemBuilder: (ctx, i) {
                                                           final s =
                                                               paginatedList[i];
-                                                          final isSelected =
-                                                              _selectedStudentIds
-                                                                  .contains(
-                                                                    s.id,
-                                                                  );
                                                           final lastName =
                                                               s.lastName ??
                                                               (s.fullName
@@ -1060,22 +1152,14 @@ class _TeacherStudentManagementTabState
                                                           return Container(
                                                             height: 52,
                                                             decoration: BoxDecoration(
-                                                              color: isSelected
+                                                              color: (i % 2 == 1
                                                                   ? theme
-                                                                        .colorScheme
-                                                                        .primary
-                                                                        .withValues(
-                                                                          alpha:
-                                                                              0.12,
-                                                                        )
-                                                                  : (i % 2 == 1
-                                                                        ? theme
-                                                                              .colorScheme
-                                                                              .primary
-                                                                              .withValues(alpha: 0.03) // 60/30 subtle row alternate
-                                                                        : theme
-                                                                              .colorScheme
-                                                                              .surface), // 60% base surface
+                                                                      .colorScheme
+                                                                      .primary
+                                                                      .withValues(alpha: 0.03) // 60/30 subtle row alternate
+                                                                  : theme
+                                                                      .colorScheme
+                                                                      .surface), // 60% base surface
                                                               border: Border(
                                                                 bottom: BorderSide(
                                                                   color:
@@ -1268,11 +1352,6 @@ class _TeacherStudentManagementTabState
                                                             itemBuilder: (ctx, i) {
                                                               final s =
                                                                   paginatedList[i];
-                                                              final isSelected =
-                                                                  _selectedStudentIds
-                                                                      .contains(
-                                                                        s.id,
-                                                                      );
                                                               final lrn =
                                                                   s.lrn ??
                                                                   s.studentId ??
@@ -1289,18 +1368,9 @@ class _TeacherStudentManagementTabState
                                                               return Container(
                                                                 height: 52,
                                                                 decoration: BoxDecoration(
-                                                                  color:
-                                                                      isSelected
-                                                                      ? theme
-                                                                            .colorScheme
-                                                                            .primary
-                                                                            .withValues(
-                                                                              alpha: 0.12,
-                                                                            )
-                                                                      : (i % 2 ==
-                                                                                1
-                                                                            ? theme.colorScheme.primary.withValues(alpha: 0.03) // 60/30 subtle row alternate
-                                                                            : theme.colorScheme.surface),
+                                                                  color: (i % 2 == 1
+                                                                      ? theme.colorScheme.primary.withValues(alpha: 0.03) // 60/30 subtle row alternate
+                                                                      : theme.colorScheme.surface),
                                                                   border: Border(
                                                                     bottom: BorderSide(
                                                                       color:
@@ -1445,7 +1515,7 @@ class _TeacherStudentManagementTabState
                                                                                   );
                                                                                   _loadData();
                                                                                   if (context.mounted) {
-                                                                                    AppModals.showSuccessDialog(context: context, title: 'Student Archived', message: '${s.fullName} has been moved to archives.');
+                                                                                    AppTopToast.success(context, '${s.fullName} moved to archives.');
                                                                                   }
                                                                                 }
                                                                               },
@@ -1471,14 +1541,20 @@ class _TeacherStudentManagementTabState
                                                                                   await SupabaseStudentRepository().restoreStudent(s.id);
                                                                                   _loadData();
                                                                                   if (context.mounted) {
-                                                                                    AppModals.showSuccessDialog(
-                                                                                      context: context,
-                                                                                      title: 'Restored',
-                                                                                      message: '${s.fullName} has been restored to active enrollment.',
-                                                                                    );
+                                                                                    AppTopToast.success(context, '${s.fullName} restored to active enrollment.');
                                                                                   }
                                                                                 }
                                                                               },
+                                                                            ),
+                                                                            IconButton(
+                                                                              tooltip: 'Permanently Delete',
+                                                                              icon: const Icon(
+                                                                                Icons.delete_outline,
+                                                                                color: Color(0xFFEF4444),
+                                                                                size: 18,
+                                                                              ),
+                                                                              splashRadius: 18,
+                                                                              onPressed: () => _handlePermanentlyDeleteStudent(s),
                                                                             ),
                                                                           ],
                                                                         ],
@@ -1586,210 +1662,6 @@ class _TeacherStudentManagementTabState
                               ),
                             ),
                           ),
-                          if (_selectedStudentIds.isNotEmpty)
-                            Positioned(
-                              bottom: 24,
-                              left: 0,
-                              right: 0,
-                              child: Center(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.inverseSurface,
-                                    borderRadius: BorderRadius.circular(30),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Colors.black26,
-                                        blurRadius: 10,
-                                        offset: Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        '${_selectedStudentIds.length} selected',
-                                        style: TextStyle(
-                                          color: theme
-                                              .colorScheme
-                                              .onInverseSurface,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      if (_showArchivedStudents) ...[
-                                        ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppTheme.catGreen,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 8,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                          ),
-                                          icon: Icon(Icons.restore, size: 16),
-                                          label: Text(
-                                            'Restore',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                          onPressed: () async {
-                                            final selectedCount =
-                                                _selectedStudentIds.length;
-                                            final confirm =
-                                                await AppModals.showConfirmDialog(
-                                                  context: context,
-                                                  title: 'Restore Selected Students',
-                                                  message:
-                                                      'Are you sure you want to restore $selectedCount selected student(s) to active enrollment?',
-                                                  confirmLabel:
-                                                      'Restore Selected',
-                                                  confirmColor: Colors.green,
-                                                );
-                                            if (confirm == true) {
-                                              for (final id
-                                                  in _selectedStudentIds) {
-                                                await SupabaseStudentRepository()
-                                                    .restoreStudent(id);
-                                              }
-                                              setState(() {
-                                                _selectedStudentIds.clear();
-                                                _loadData();
-                                              });
-                                              if (context.mounted) {
-                                                AppModals.showSuccessDialog(
-                                                  context: context,
-                                                  title: 'Students Restored',
-                                                  message:
-                                                      '$selectedCount student(s) restored to active enrollment.',
-                                                );
-                                              }
-                                            }
-                                          },
-                                        ),
-                                        const SizedBox(width: 8),
-                                        TextButton(
-                                          style: TextButton.styleFrom(
-                                            foregroundColor: theme
-                                                .colorScheme
-                                                .onInverseSurface
-                                                .withValues(alpha: 0.7),
-                                          ),
-                                          onPressed: () => setState(
-                                            () => _selectedStudentIds.clear(),
-                                          ),
-                                          child: Text(
-                                            'Cancel',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ] else ...[
-                                        TextButton(
-                                          style: TextButton.styleFrom(
-                                            foregroundColor: theme
-                                                .colorScheme
-                                                .onInverseSurface
-                                                .withValues(alpha: 0.7),
-                                          ),
-                                          onPressed: () => setState(
-                                            () => _selectedStudentIds.clear(),
-                                          ),
-                                          child: Text(
-                                            'Cancel',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppTheme.catRed,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 8,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                          ),
-                                          icon: Icon(
-                                            Icons.archive_outlined,
-                                            size: 16,
-                                          ),
-                                          label: Text(
-                                            'Archive selected',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                          onPressed: () async {
-                                            final selectedCount =
-                                                _selectedStudentIds.length;
-                                            final confirm =
-                                                await AppModals.showConfirmDialog(
-                                                  context: context,
-                                                  title: 'Archive Selected Students',
-                                                  message:
-                                                      'Are you sure you want to archive $selectedCount selected student(s)? Their enrollment will be moved to archives, and all class records remain preserved.',
-                                                  confirmLabel:
-                                                      'Archive Selected',
-                                                  confirmColor:
-                                                      AppTheme.catOrange,
-                                                );
-                                            if (confirm == true) {
-                                              for (final id
-                                                  in _selectedStudentIds) {
-                                                final student = displayList
-                                                    .firstWhere(
-                                                      (st) => st.id == id,
-                                                    );
-                                                await SupabaseStudentRepository()
-                                                    .archiveStudent(
-                                                      id,
-                                                      student.enrolledSubjectId,
-                                                      (student.status ==
-                                                              AccountStatus
-                                                                  .pendingFirstLogin)
-                                                          ? 'pending_first_login'
-                                                          : 'active',
-                                                    );
-                                              }
-                                              _selectedStudentIds.clear();
-                                              _loadData();
-                                              if (context.mounted) {
-                                                AppModals.showSuccessDialog(
-                                                  context: context,
-                                                  title: 'Students Archived',
-                                                  message:
-                                                      '$selectedCount student(s) moved to archives.',
-                                                );
-                                              }
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
                         ],
                       ),
               ),

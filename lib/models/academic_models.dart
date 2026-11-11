@@ -1018,6 +1018,7 @@ class ScheduleModel {
   final double? wwWeight;
   final double? ptWeight;
   final double? exWeight;
+  final String? teacherName;
 
   ScheduleModel({
     required this.id,
@@ -1034,6 +1035,7 @@ class ScheduleModel {
     this.wwWeight,
     this.ptWeight,
     this.exWeight,
+    this.teacherName,
   });
 
   String get subjectName => subject;
@@ -1137,6 +1139,7 @@ class ScheduleModel {
     double? wwWeight,
     double? ptWeight,
     double? exWeight,
+    String? teacherName,
   }) {
     return ScheduleModel(
       id: id ?? this.id,
@@ -1153,6 +1156,7 @@ class ScheduleModel {
       wwWeight: wwWeight ?? this.wwWeight,
       ptWeight: ptWeight ?? this.ptWeight,
       exWeight: exWeight ?? this.exWeight,
+      teacherName: teacherName ?? this.teacherName,
     );
   }
 
@@ -1172,6 +1176,7 @@ class ScheduleModel {
       'wwWeight': wwWeight,
       'ptWeight': ptWeight,
       'exWeight': exWeight,
+      'teacherName': teacherName,
     };
   }
 
@@ -1191,6 +1196,7 @@ class ScheduleModel {
       wwWeight: (map['wwWeight'] as num?)?.toDouble(),
       ptWeight: (map['ptWeight'] as num?)?.toDouble(),
       exWeight: (map['exWeight'] as num?)?.toDouble(),
+      teacherName: map['teacherName']?.toString(),
     );
   }
 }

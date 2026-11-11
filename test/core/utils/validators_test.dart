@@ -65,21 +65,25 @@ void main() {
       test('allows blank and normalizes valid initials', () {
         expect(AppValidators.validateMiddleInitial(null), isNull);
         expect(AppValidators.validateMiddleInitial(''), isNull);
+        expect(AppValidators.validateMiddleInitial('   '), isNull);
         expect(AppValidators.validateMiddleInitial('H.'), isNull);
+        expect(AppValidators.validateMiddleInitial('H'), isNull);
+        expect(AppValidators.validateMiddleInitial('d'), isNull);
+        expect(AppValidators.validateMiddleInitial('d.'), isNull);
         expect(AppValidators.normalizeMiddleInitial(' h. '), 'H.');
+        expect(AppValidators.normalizeMiddleInitial('d'), 'D.');
+        expect(AppValidators.normalizeMiddleInitial('d.'), 'D.');
         expect(AppValidators.normalizeMiddleInitial('ñ.'), 'Ñ.');
+        expect(AppValidators.normalizeMiddleInitial(''), isNull);
+        expect(AppValidators.normalizeMiddleInitial('   '), isNull);
       });
 
-      test('rejects whitespace-only and non-canonical initials', () {
+      test('rejects non-canonical initials', () {
         const error =
             'Invalid format. Use 1 letter and 1 period only (e.g: H.)';
-        for (final value in ['   ', 'H', 'HH.', 'H..', 'H. H', '1.', '.']) {
+        for (final value in ['HH.', 'H..', 'H. H', '1.', '.', '1', 'AB']) {
           expect(AppValidators.validateMiddleInitial(value), error);
         }
-        expect(
-          () => AppValidators.normalizeMiddleInitial('   '),
-          throwsFormatException,
-        );
       });
     });
 
@@ -158,7 +162,7 @@ void main() {
       );
       expect(
         AppValidators.validateClassworkHps('-5'),
-        'HPS cannot be 0. Must be 1 to 100.',
+        'Must be 1 to 100.',
       );
       expect(
         AppValidators.validateClassworkHps('101'),

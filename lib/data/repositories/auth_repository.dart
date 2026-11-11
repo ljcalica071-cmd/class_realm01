@@ -2239,40 +2239,68 @@ class AuthRepository {
     );
   }
 
-  // Admin: Get teacher accounts created by an administrator.
+  // Admin: Get teacher accounts created by an administrator (Fast Parallel Fetch).
   Future<List<custom.UserModel>> getTeachers() async {
     try {
-      final List<dynamic> infoResp = await _supabaseClient
+      final usersFuture = _supabaseClient
+          .from('users')
+          .select()
+          .eq('role', 'teacher');
+      final profilesFuture = _supabaseClient
+          .from('teacher_profiles')
+          .select();
+      final settingsFuture = _supabaseClient
           .from('teacher_settings')
           .select();
 
-      List<custom.UserModel> teachers = [];
-      for (var info in infoResp) {
-        final u = await _supabaseClient
-            .from('users')
-            .select()
-            .eq('id', info['teacher_id'])
-            .single();
+      final results = await Future.wait([
+        usersFuture,
+        profilesFuture,
+        settingsFuture,
+      ]);
 
-        final profile = await _supabaseClient
-            .from('teacher_profiles')
-            .select()
-            .eq('teacher_id', info['teacher_id'])
-            .single();
+      final userRows = results[0] as List<dynamic>;
+      final profileRows = results[1] as List<dynamic>;
+      final settingsRows = results[2] as List<dynamic>;
+
+      final Map<String, dynamic> profileMap = {};
+      for (final p in profileRows) {
+        if (p is Map && p['teacher_id'] != null) {
+          profileMap[p['teacher_id'].toString()] = p;
+        }
+      }
+
+      final Map<String, dynamic> settingsMap = {};
+      for (final s in settingsRows) {
+        if (s is Map && s['teacher_id'] != null) {
+          settingsMap[s['teacher_id'].toString()] = s;
+        }
+      }
+
+      List<custom.UserModel> teachers = [];
+      for (var u in userRows) {
+        if (u is! Map) continue;
+        final teacherId = u['id']?.toString() ?? '';
+        final profile = profileMap[teacherId] ?? {};
+        final info = settingsMap[teacherId] ?? {};
+
+        final firstName = profile['first_name']?.toString() ?? '';
+        final lastName = profile['last_name']?.toString() ?? '';
+        final email = u['email']?.toString() ?? '';
 
         teachers.add(
           custom.UserModel(
-            id: u['id'],
-            username: u['email'],
-            fullName: '${profile['first_name']} ${profile['last_name']}',
-            email: u['email'],
+            id: teacherId,
+            username: email,
+            fullName: '$firstName $lastName'.trim(),
+            email: email,
             role: custom.UserRole.teacher,
-            firstName: profile['first_name'],
-            lastName: profile['last_name'],
-            middleName: profile['middle_name'],
-            gender: profile['gender'],
+            firstName: firstName,
+            lastName: lastName,
+            middleName: profile['middle_name']?.toString(),
+            gender: profile['gender']?.toString(),
             birthday: profile['birthday'] != null
-                ? DateTime.parse(profile['birthday'].toString())
+                ? DateTime.tryParse(profile['birthday'].toString())
                 : null,
             isSetupComplete: info['is_setup_complete'] ?? false,
             status: _parseStatus(info['status'] ?? 'pending_first_login'),
@@ -2283,7 +2311,67 @@ class AuthRepository {
       }
       return teachers;
     } catch (e) {
+      debugPrint('getTeachers error: $e');
       return [];
+    }
+  }
+
+  /// Checks whether a teacher has associated enrolled students or academic records.
+  /// If true, permanent deletion is prohibited to safeguard academic records.
+  Future<bool> hasTeacherAcademicRecords(String teacherId) async {
+    try {
+      final offerings = await _supabaseClient
+          .from('subject_offerings')
+          .select('id')
+          .eq('teacher_id', teacherId);
+
+      if (offerings.isEmpty) return false;
+
+      final offeringIds = offerings
+          .map((o) => o['id']?.toString())
+          .whereType<String>()
+          .toList();
+
+      if (offeringIds.isEmpty) return false;
+
+      // 1. Check for enrolled students
+      final enrollments = await _supabaseClient
+          .from('student_enrollments')
+          .select('id')
+          .inFilter('subject_offering_id', offeringIds)
+          .limit(1);
+
+      if (enrollments.isNotEmpty) return true;
+
+      // 2. Check for attendance, classwork, or grades
+      final attendance = await _supabaseClient
+          .from('attendance_records')
+          .select('id')
+          .inFilter('subject_offering_id', offeringIds)
+          .limit(1);
+
+      if (attendance.isNotEmpty) return true;
+
+      final classworks = await _supabaseClient
+          .from('classwork_items')
+          .select('id')
+          .inFilter('subject_offering_id', offeringIds)
+          .limit(1);
+
+      if (classworks.isNotEmpty) return true;
+
+      final termGrades = await _supabaseClient
+          .from('term_grades')
+          .select('id')
+          .inFilter('subject_offering_id', offeringIds)
+          .limit(1);
+
+      if (termGrades.isNotEmpty) return true;
+
+      return false;
+    } catch (e) {
+      debugPrint('hasTeacherAcademicRecords error: $e');
+      return false;
     }
   }
 
@@ -2399,6 +2487,14 @@ class AuthRepository {
   // Admin: Delete Teacher Record Permanently
   Future<bool> deleteTeacherRecord(String teacherId) async {
     try {
+      // 0. Deletion Protection Guard: Prohibit deletion if teacher has enrolled students or academic records
+      final hasRecords = await hasTeacherAcademicRecords(teacherId);
+      if (hasRecords) {
+        throw Exception(
+          'This teacher cannot be permanently deleted because they have associated enrolled students or academic records.',
+        );
+      }
+
       // 1. Find all subject offerings taught by this teacher
       final offerings = await _supabaseClient
           .from('subject_offerings')

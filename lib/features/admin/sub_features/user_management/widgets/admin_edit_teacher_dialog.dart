@@ -76,12 +76,18 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
 
   bool get _isDirty {
     final t = widget.teacher;
-    if (_firstNameCtrl.text.trim() != (t.firstName?.trim() ?? '')) return true;
-    if (_middleNameCtrl.text.trim() != (t.middleName?.trim() ?? ''))
+    if (_firstNameCtrl.text.trim() != (t.firstName?.trim() ?? '')) {
       return true;
-    if (_lastNameCtrl.text.trim() != (t.lastName?.trim() ?? '')) return true;
-    if (_emailCtrl.text.trim().toLowerCase() != t.email.trim().toLowerCase())
+    }
+    if (_middleNameCtrl.text.trim() != (t.middleName?.trim() ?? '')) {
       return true;
+    }
+    if (_lastNameCtrl.text.trim() != (t.lastName?.trim() ?? '')) {
+      return true;
+    }
+    if (_emailCtrl.text.trim().toLowerCase() != t.email.trim().toLowerCase()) {
+      return true;
+    }
     final origGender = (t.gender == 'Male' || t.gender == 'Female')
         ? t.gender
         : 'Male';
@@ -245,6 +251,9 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                           textCapitalization: TextCapitalization.characters,
                           inputFormatters:
                               AppValidators.middleInitialFormatters,
+                          autovalidateMode:
+                              AutovalidateMode.onUserInteraction,
+                          validator: AppValidators.validateMiddleInitial,
                         ),
                       ),
                       const SizedBox(width: 10),

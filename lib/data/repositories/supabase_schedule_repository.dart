@@ -160,23 +160,64 @@ class SupabaseScheduleRepository implements ScheduleRepository {
   Future<List<ScheduleModel>> getSchedules({
     String? teacherId,
     String? section,
+    int? gradeLevel,
   }) async {
     try {
       var query = _client.from('teacher_schedule').select('''
         id, day_of_week, start_time, end_time, room, is_active,
         subject_offerings!inner (
           id, teacher_id, ww_weight, pt_weight, ex_weight,
-          subjects ( id, subject_name, grade_level ),
-          sections ( id, section_name, grade_level )
+          subjects!inner ( id, subject_name, grade_level ),
+          sections!inner ( id, section_name, grade_level )
         )
       ''');
 
       if (teacherId != null && teacherId.isNotEmpty) {
         query = query.eq('subject_offerings.teacher_id', teacherId);
       }
+      if (gradeLevel != null) {
+        query = query.eq('subject_offerings.subjects.grade_level', gradeLevel);
+      }
 
       final response = await query.order('day_of_week').order('start_time');
       final list = <ScheduleModel>[];
+
+      // Extract unique teacher IDs to batch-fetch teacher names
+      final teacherIds = (response as List)
+          .map(
+            (r) =>
+                ((r['subject_offerings'] as Map?)?['teacher_id'])?.toString(),
+          )
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList();
+
+      final teacherNameMap = <String, String>{};
+      if (teacherIds.isNotEmpty) {
+        try {
+          final profilesRes = await _client
+              .from('teacher_profiles')
+              .select('teacher_id, first_name, last_name, gender')
+              .inFilter('teacher_id', teacherIds);
+
+          for (final tp in profilesRes as List) {
+            final tId = tp['teacher_id']?.toString() ?? '';
+            final fn = tp['first_name']?.toString().trim() ?? '';
+            final ln = tp['last_name']?.toString().trim() ?? '';
+            final full = '$fn $ln'.trim();
+            final g = tp['gender']?.toString().trim().toLowerCase();
+            final prefix = (g == 'female' || g == 'f')
+                ? "Ma'am "
+                : (g == 'male' || g == 'm')
+                ? "Sir "
+                : "";
+            if (tId.isNotEmpty && full.isNotEmpty) {
+              teacherNameMap[tId] = '$prefix$full';
+            }
+          }
+        } catch (_) {}
+      }
 
       for (final row in response) {
         final offering =
@@ -195,6 +236,9 @@ class SupabaseScheduleRepository implements ScheduleRepository {
             ? row['day_of_week'] as int
             : int.tryParse(row['day_of_week']?.toString() ?? '1') ?? 1;
 
+        final tId = offering['teacher_id']?.toString();
+        final teacherName = tId != null ? teacherNameMap[tId] : null;
+
         list.add(
           ScheduleModel(
             id: row['id'].toString(),
@@ -210,13 +254,14 @@ class SupabaseScheduleRepository implements ScheduleRepository {
             ),
             sectionId: sec['id']?.toString() ?? secName,
             subjectId: sub['id']?.toString(),
-            teacherId: offering['teacher_id']?.toString(),
+            teacherId: tId,
             gradeLevel: sub['grade_level'] is int
                 ? sub['grade_level'] as int
                 : null,
             wwWeight: (offering['ww_weight'] as num?)?.toDouble() ?? 20.0,
             ptWeight: (offering['pt_weight'] as num?)?.toDouble() ?? 50.0,
             exWeight: (offering['ex_weight'] as num?)?.toDouble() ?? 30.0,
+            teacherName: teacherName,
           ),
         );
       }
@@ -236,6 +281,7 @@ class SupabaseScheduleRepository implements ScheduleRepository {
     required String endTime24,
     String? excludeScheduleId,
     String? offeringId,
+    String? room,
   }) async {
     try {
       // 1. Check Teacher Clash
@@ -312,6 +358,67 @@ class SupabaseScheduleRepository implements ScheduleRepository {
             final et = ScheduleModel.formatTime24to12(clash['end_time']);
             return 'Section Conflict: The selected section already has a class ($subName) at $st - $et.';
           }
+        }
+      }
+
+      // 3. Check Room / Venue Clash if room is provided
+      final cleanRoom = room?.trim() ?? '';
+      if (cleanRoom.isNotEmpty) {
+        var roomQuery = _client
+            .from('teacher_schedule')
+            .select('''
+              id, start_time, end_time, room,
+              subject_offerings!inner (
+                id, teacher_id,
+                subjects ( subject_name ),
+                sections ( section_name )
+              )
+            ''')
+            .eq('day_of_week', dayOfWeek)
+            .ilike('room', cleanRoom)
+            .lt('start_time', endTime24)
+            .gt('end_time', startTime24);
+
+        if (excludeScheduleId != null && excludeScheduleId.isNotEmpty) {
+          roomQuery = roomQuery.neq('id', excludeScheduleId);
+        }
+
+        final roomClashes = await roomQuery;
+        for (final clash in roomClashes) {
+          final offering =
+              clash['subject_offerings'] as Map<String, dynamic>? ?? {};
+          final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
+          final sec = offering['sections'] as Map<String, dynamic>? ?? {};
+          final otherTeacherId = offering['teacher_id']?.toString() ?? '';
+          final subName = sub['subject_name'] ?? 'Class';
+          final secName = sec['section_name'] ?? 'Section';
+
+          String teacherLabel = '';
+          if (otherTeacherId.isNotEmpty) {
+            try {
+              final tp = await _client
+                  .from('teacher_profiles')
+                  .select('first_name, last_name, gender')
+                  .eq('teacher_id', otherTeacherId)
+                  .maybeSingle();
+              if (tp != null) {
+                final fn = tp['first_name']?.toString().trim() ?? '';
+                final ln = tp['last_name']?.toString().trim() ?? '';
+                final full = '$fn $ln'.trim();
+                final g = tp['gender']?.toString().trim().toLowerCase();
+                final prefix = (g == 'female' || g == 'f')
+                    ? "Ma'am "
+                    : (g == 'male' || g == 'm')
+                    ? "Sir "
+                    : "";
+                if (full.isNotEmpty) teacherLabel = ' by $prefix$full';
+              }
+            } catch (_) {}
+          }
+
+          final st = ScheduleModel.formatTime24to12(clash['start_time']);
+          final et = ScheduleModel.formatTime24to12(clash['end_time']);
+          return 'Room Conflict: "$cleanRoom" is already reserved for $subName ($secName)$teacherLabel at $st - $et.';
         }
       }
 
