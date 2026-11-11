@@ -610,175 +610,189 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              // Invisible input field that catches keyboard text and system paste
-              Positioned.fill(
-                child: Opacity(
-                  opacity: 0.0,
-                  child: TextField(
-                    controller: _otpController,
-                    focusNode: _focusNode,
-                    autofocus: true,
-                    enabled: !_isLockedOut && !_isCodeExpired,
-                    readOnly: _isLockedOut || _isCodeExpired,
-                    onTapOutside: (_) {},
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      TextInputFormatter.withFunction(
-                        (oldValue, newValue) =>
-                            (_isLockedOut ||
-                                _isCodeExpired ||
-                                _isResending ||
-                                _isVerifying)
-                            ? oldValue
-                            : newValue,
-                      ),
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(6),
-                    ],
-                    onChanged: (val) {
-                      setState(() {
-                        if (!_isLockedOut && !_isCodeExpired) _error = null;
-                        _selectedIndex = val.length.clamp(0, 5);
-                      });
-                      if (val.length == 6 && !_isLockedOut && !_isVerifying) {
-                        _verify();
-                      }
-                    },
+          SizedBox(
+            width: double.infinity,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Invisible input field that catches keyboard text and system paste
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: 0.0,
+                    child: TextField(
+                      controller: _otpController,
+                      focusNode: _focusNode,
+                      autofocus: true,
+                      enabled: !_isLockedOut && !_isCodeExpired,
+                      readOnly: _isLockedOut || _isCodeExpired,
+                      onTapOutside: (_) {},
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        TextInputFormatter.withFunction(
+                          (oldValue, newValue) =>
+                              (_isLockedOut ||
+                                  _isCodeExpired ||
+                                  _isResending ||
+                                  _isVerifying)
+                              ? oldValue
+                              : newValue,
+                        ),
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(6),
+                      ],
+                      onChanged: (val) {
+                        setState(() {
+                          if (!_isLockedOut && !_isCodeExpired) _error = null;
+                          _selectedIndex = val.length.clamp(0, 5);
+                        });
+                        if (val.length == 6 && !_isLockedOut && !_isVerifying) {
+                          _verify();
+                        }
+                      },
+                    ),
                   ),
                 ),
-              ),
 
-              // Visual 6 separated digit boxes with proper focus, cursor & selection indicator
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(6, (index) {
-                  final isFilled = index < currentLength;
-                  final digit = isFilled ? _otpController.text[index] : '';
+                // Visual 6 separated digit boxes with proper focus, cursor & selection indicator
+                SizedBox(
+                  height: 54,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(6, (index) {
+                      final isFilled = index < currentLength;
+                      final digit = isFilled ? _otpController.text[index] : '';
 
-                  final isSelected = isFocused && (_selectedIndex == index);
-                  final isNextEmpty =
-                      isFocused &&
-                      (index == currentLength && currentLength < 6) &&
-                      (_selectedIndex >= currentLength);
-                  final isActive = (isSelected || isNextEmpty) && !_isLockedOut;
+                      final isSelected = isFocused && (_selectedIndex == index);
+                      final isNextEmpty =
+                          isFocused &&
+                          (index == currentLength && currentLength < 6) &&
+                          (_selectedIndex >= currentLength);
+                      final isActive = (isSelected || isNextEmpty) && !_isLockedOut;
 
-                  Color borderColor;
-                  double borderWidth = 1.0;
-                  Color boxBg;
-                  List<BoxShadow>? shadows;
+                      Color borderColor;
+                      double borderWidth = 1.0;
+                      Color boxBg;
+                      List<BoxShadow>? shadows;
 
-                  if (hasError) {
-                    borderColor = Colors.red.shade500;
-                    borderWidth = isActive ? 2.0 : 1.6;
-                    boxBg = Colors.red.withValues(alpha: 0.04);
-                    if (isActive) {
-                      shadows = [
-                        BoxShadow(
-                          color: Colors.red.withValues(alpha: 0.18),
-                          blurRadius: 6,
-                          spreadRadius: 0,
-                        ),
-                      ];
-                    }
-                  } else if (isActive) {
-                    borderColor = const Color(0xFF2563EB);
-                    borderWidth = 2.2;
-                    boxBg = const Color(0xFF2563EB).withValues(alpha: 0.06);
-                    shadows = [
-                      BoxShadow(
-                        color: const Color(0xFF2563EB).withValues(alpha: 0.25),
-                        blurRadius: 8,
-                        spreadRadius: 1,
-                      ),
-                    ];
-                  } else if (isFilled) {
-                    borderColor = const Color(0xFF94A3B8);
-                    borderWidth = 1.4;
-                    boxBg = Colors.white;
-                  } else {
-                    borderColor = const Color(0xFFCBD5E1);
-                    borderWidth = 1.0;
-                    boxBg = const Color(0xFFF8FAFC);
-                  }
+                      if (hasError) {
+                        borderColor = Colors.red.shade500;
+                        borderWidth = isActive ? 2.0 : 1.6;
+                        boxBg = Colors.red.withValues(alpha: 0.04);
+                        if (isActive) {
+                          shadows = [
+                            BoxShadow(
+                              color: Colors.red.withValues(alpha: 0.18),
+                              blurRadius: 6,
+                              spreadRadius: 0,
+                            ),
+                          ];
+                        }
+                      } else if (isActive) {
+                        borderColor = const Color(0xFF2563EB);
+                        borderWidth = 2.2;
+                        boxBg = const Color(0xFF2563EB).withValues(alpha: 0.06);
+                        shadows = [
+                          BoxShadow(
+                            color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ];
+                      } else if (isFilled) {
+                        borderColor = const Color(0xFF94A3B8);
+                        borderWidth = 1.4;
+                        boxBg = Colors.white;
+                      } else {
+                        borderColor = const Color(0xFFCBD5E1);
+                        borderWidth = 1.0;
+                        boxBg = const Color(0xFFF8FAFC);
+                      }
 
-                  return GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _onDigitBoxTapped(index),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      width: 48,
-                      height: 58,
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(
-                        color: boxBg,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: borderColor,
-                          width: borderWidth,
-                        ),
-                        boxShadow: shadows,
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          if (digit.isNotEmpty)
-                            Text(
-                              digit,
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: hasError
-                                    ? Colors.red.shade600
-                                    : const Color(0xFF0F172A),
-                              ),
-                            )
-                          else if (isActive && _cursorBlinkController != null)
-                            FadeTransition(
-                              opacity: _cursorBlinkController!,
-                              child: Container(
-                                width: 2.2,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  color: hasError
-                                      ? Colors.red.shade600
-                                      : const Color(0xFF2563EB),
-                                  borderRadius: BorderRadius.circular(1),
-                                ),
-                              ),
-                            )
-                          else
-                            Container(
-                              width: 6,
-                              height: 6,
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _onDigitBoxTapped(index),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOut,
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade400,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-
-                          if (isFilled && isActive && !hasError)
-                            Positioned(
-                              bottom: 6,
-                              child: Container(
-                                width: 18,
-                                height: 3,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2563EB),
-                                  borderRadius: BorderRadius.circular(2),
+                                color: boxBg,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: borderColor,
+                                  width: borderWidth,
                                 ),
+                                boxShadow: shadows,
+                              ),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  if (digit.isNotEmpty)
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4),
+                                        child: Text(
+                                          digit,
+                                          style: TextStyle(
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.bold,
+                                            color: hasError
+                                                ? Colors.red.shade600
+                                                : const Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  else if (isActive && _cursorBlinkController != null)
+                                    FadeTransition(
+                                      opacity: _cursorBlinkController!,
+                                      child: Container(
+                                        width: 2.2,
+                                        height: 22,
+                                        decoration: BoxDecoration(
+                                          color: hasError
+                                              ? Colors.red.shade600
+                                              : const Color(0xFF2563EB),
+                                          borderRadius: BorderRadius.circular(1),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade400,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+
+                                  if (isFilled && isActive && !hasError)
+                                    Positioned(
+                                      bottom: 6,
+                                      child: Container(
+                                        width: 16,
+                                        height: 3,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF2563EB),
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-              ),
-            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ],
+            ),
           ),
 
           // Clear code action button
@@ -817,20 +831,24 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
           borderRadius: BorderRadius.circular(24),
           side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 28,
+        insetPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
           vertical: 24,
         ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 22,
+        ),
         title: null,
-        content: SizedBox(
-          width: 380,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               // Top-right Close ('X') button replacing bottom Cancel button
               Positioned(
-                top: -12,
-                right: -12,
+                top: -10,
+                right: -10,
                 child: IconButton(
                   icon: const Icon(
                     LucideIcons.x,
@@ -846,8 +864,9 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
               ),
 
               // Modal Content
-              Column(
-                mainAxisSize: MainAxisSize.min,
+              SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(height: 4),
 
@@ -1003,17 +1022,17 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                   const SizedBox(height: 16),
 
                   // 5. Resend Code Section
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
                     children: [
-                      const Flexible(
-                        child: Text(
-                          "Didn't receive the code? ",
-                          textAlign: TextAlign.end,
-                          style: TextStyle(
-                            color: Color(0xFF64748B),
-                            fontSize: 13,
-                          ),
+                      const Text(
+                        "Didn't receive the code?",
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 13,
                         ),
                       ),
                       _isResending
@@ -1062,10 +1081,11 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

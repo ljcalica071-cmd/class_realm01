@@ -1,10 +1,34 @@
-// ignore: avoid_web_libraries_in_flutter
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+import 'dart:async';
 import 'dart:html' as html;
 import 'dart:typed_data';
 
-void updateBrowserUrlPath(String path) {
+void updateBrowserUrlPath(String path, {bool replace = false}) {
   try {
-    html.window.history.replaceState(null, '', path);
+    if (replace) {
+      html.window.history.replaceState(null, '', path);
+    } else {
+      final currentPath = html.window.location.pathname ?? '';
+      final currentSearch = html.window.location.search ?? '';
+      final currentFull = '$currentPath$currentSearch';
+      if (currentFull != path) {
+        html.window.history.pushState(null, '', path);
+      } else {
+        html.window.history.replaceState(null, '', path);
+      }
+    }
+  } catch (_) {}
+}
+
+StreamSubscription<html.PopStateEvent>? _popStateSub;
+
+void registerWebPopStateListener(void Function(String path) onPopState) {
+  try {
+    _popStateSub?.cancel();
+    _popStateSub = html.window.onPopState.listen((event) {
+      final path = html.window.location.pathname ?? '/';
+      onPopState(path);
+    });
   } catch (_) {}
 }
 

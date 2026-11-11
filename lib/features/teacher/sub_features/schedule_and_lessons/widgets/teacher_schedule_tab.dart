@@ -1933,7 +1933,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         if (durationMins > 180) {
                           setModalState(() {
                             clashErrorMessage =
-                                'Error: A single continuous class session cannot exceed 3 hours (Maximum 3 hours / 180 mins). A subject plot like 7:00 AM - 11:00 AM (4 hrs) is not permitted. Please split into separate sessions.';
+                                'Error: A single continuous class session cannot exceed 3 hours. A subject plot like 7:00 AM - 11:00 AM (4 hrs) is not permitted. Please split into separate sessions.';
                           });
                           return;
                         }

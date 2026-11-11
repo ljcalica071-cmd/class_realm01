@@ -2,14 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/features/auth/screens/first_login_screen.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
 class AuthGuard extends StatefulWidget {
   final Widget child;
   final List<UserRole> allowedRoles;
+  final bool isFirstLogin;
 
-  const AuthGuard({super.key, required this.child, required this.allowedRoles});
+  const AuthGuard({
+    super.key,
+    required this.child,
+    required this.allowedRoles,
+    this.isFirstLogin = false,
+  });
 
   @override
   State<AuthGuard> createState() => _AuthGuardState();
@@ -28,6 +35,11 @@ class _AuthGuardState extends State<AuthGuard> {
     _checkAuth();
   }
 
+  bool get _isFirstLoginScreen =>
+      widget.isFirstLogin ||
+      widget.child is FirstLoginScreen ||
+      widget.child.runtimeType.toString() == 'FirstLoginScreen';
+
   bool get _isAuthorized {
     final user = AuthRepository.instance.currentUser;
     if (user == null) return false;
@@ -41,7 +53,7 @@ class _AuthGuardState extends State<AuthGuard> {
     }
     if ((user.status == AccountStatus.pendingFirstLogin ||
             user.status == AccountStatus.pending) &&
-        widget.child.runtimeType.toString() != 'FirstLoginScreen') {
+        !_isFirstLoginScreen) {
       return false;
     }
     return true;
@@ -81,8 +93,7 @@ class _AuthGuardState extends State<AuthGuard> {
       }
 
       // 3. Status checks
-      if (isFirstLoginPending &&
-          widget.child.runtimeType.toString() != 'FirstLoginScreen') {
+      if (isFirstLoginPending && !_isFirstLoginScreen) {
         _redirect(AppRoutes.getFirstLoginRouteForRole(user.role));
         return;
       }

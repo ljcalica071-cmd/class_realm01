@@ -46,14 +46,16 @@ class PasswordRequirementsChecklist extends StatelessWidget {
             color: isValid ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
           ),
           const SizedBox(width: 8),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 12,
-              color: isValid
-                  ? const Color(0xFF15803D)
-                  : const Color(0xFF475569),
-              fontWeight: isValid ? FontWeight.w500 : FontWeight.normal,
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 12,
+                color: isValid
+                    ? const Color(0xFF15803D)
+                    : const Color(0xFF475569),
+                fontWeight: isValid ? FontWeight.w500 : FontWeight.normal,
+              ),
             ),
           ),
         ],

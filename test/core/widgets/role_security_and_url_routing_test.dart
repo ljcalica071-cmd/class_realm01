@@ -224,5 +224,72 @@ void main() {
       expect(find.text('LOGIN_SCREEN'), findsOneWidget);
       expect(find.text('PROTECTED_STUDENT_CONTENT'), findsNothing);
     });
+
+    testWidgets(
+      'Pending first login user on dashboard route is redirected to first-login',
+      (tester) async {
+        final pendingStudent = UserModel(
+          id: 'student-pending',
+          username: 'pending.user',
+          fullName: 'Pending Student',
+          email: 'pending@example.com',
+          role: UserRole.student,
+          status: AccountStatus.pendingFirstLogin,
+        );
+        AuthRepository.instance.setCurrentUser(pendingStudent);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            routes: {
+              AppRoutes.studentFirstLogin: (ctx) =>
+                  const Text('STUDENT_FIRST_LOGIN_SCREEN'),
+            },
+            home: const AuthGuard(
+              allowedRoles: [UserRole.student],
+              child: Text('PROTECTED_DASHBOARD_CONTENT'),
+            ),
+          ),
+        );
+
+        // Frame 1: Child is not visible
+        expect(find.text('PROTECTED_DASHBOARD_CONTENT'), findsNothing);
+
+        await tester.pumpAndSettle();
+        // Redirected to first login route
+        expect(find.text('STUDENT_FIRST_LOGIN_SCREEN'), findsOneWidget);
+        expect(find.text('PROTECTED_DASHBOARD_CONTENT'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Pending first login user on first-login route renders content (web minification resilient)',
+      (tester) async {
+        final pendingStudent = UserModel(
+          id: 'student-pending',
+          username: 'pending.user',
+          fullName: 'Pending Student',
+          email: 'pending@example.com',
+          role: UserRole.student,
+          status: AccountStatus.pendingFirstLogin,
+        );
+        AuthRepository.instance.setCurrentUser(pendingStudent);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: AuthGuard(
+              allowedRoles: [UserRole.student],
+              isFirstLogin: true,
+              child: Text('FIRST_LOGIN_PASSWORD_SETUP_FORM'),
+            ),
+          ),
+        );
+
+        // Frame 1: Child renders immediately because isFirstLogin: true is authorized
+        expect(find.text('FIRST_LOGIN_PASSWORD_SETUP_FORM'), findsOneWidget);
+
+        await tester.pumpAndSettle();
+        expect(find.text('FIRST_LOGIN_PASSWORD_SETUP_FORM'), findsOneWidget);
+      },
+    );
   });
 }

@@ -322,6 +322,9 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.studentMaterials,
       AppRoutes.studentGrades,
       AppRoutes.studentPerformance,
+      AppRoutes.studentFirstLogin,
+      AppRoutes.teacherFirstLogin,
+      AppRoutes.parentFirstLogin,
       AppRoutes.parentHome,
       AppRoutes.parentAttendance,
       AppRoutes.parentSchedule,
@@ -490,14 +493,32 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
       AppRoutes.studentFirstLogin: (context) => const AuthGuard(
         allowedRoles: [UserRole.student],
+        isFirstLogin: true,
+        child: FirstLoginScreen(),
+      ),
+      '/student/first_login': (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        isFirstLogin: true,
         child: FirstLoginScreen(),
       ),
       AppRoutes.parentFirstLogin: (context) => const AuthGuard(
         allowedRoles: [UserRole.parent],
+        isFirstLogin: true,
+        child: FirstLoginScreen(),
+      ),
+      '/parent/first_login': (context) => const AuthGuard(
+        allowedRoles: [UserRole.parent],
+        isFirstLogin: true,
         child: FirstLoginScreen(),
       ),
       AppRoutes.teacherFirstLogin: (context) => const AuthGuard(
         allowedRoles: [UserRole.teacher],
+        isFirstLogin: true,
+        child: FirstLoginScreen(),
+      ),
+      '/teacher/first_login': (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        isFirstLogin: true,
         child: FirstLoginScreen(),
       ),
       AppRoutes.academicSetup: (context) => const AuthGuard(

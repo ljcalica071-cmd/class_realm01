@@ -95,6 +95,42 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     }
   }
 
+  int? _indexForRoute(String route) {
+    final cleanRoute = route.split('?').first.trim();
+    switch (cleanRoute) {
+      case AppRoutes.teacherDashboard:
+        return 0;
+      case AppRoutes.teacherClassroomSetup:
+        return 17;
+      case AppRoutes.teacherGradebook:
+        return 18;
+      case AppRoutes.teacherManageStudents:
+        return 12;
+      case AppRoutes.teacherManageParents:
+        return 19;
+      case AppRoutes.teacherClasswork:
+        return 1;
+      case AppRoutes.teacherLessonPlanning:
+        return 3;
+      case AppRoutes.teacherLearningMaterials:
+        return 4;
+      case AppRoutes.teacherAttendance:
+        return 5;
+      case AppRoutes.teacherGrades:
+        return 9;
+      case AppRoutes.teacherSchedule:
+        return 14;
+      case AppRoutes.teacherNotifications:
+        return 15;
+      case AppRoutes.teacherProfile:
+        return 16;
+      case AppRoutes.teacherSettings:
+        return 10;
+      default:
+        return null;
+    }
+  }
+
   void _onSelectTab(int index) {
     if (index == 18) {
       TeacherGradebookTab.gradebookRefreshNotifier.value++;
@@ -115,14 +151,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final assessId = nav['activeAssessmentId']?.toString();
       final actId = nav['activeActivityId']?.toString();
       if (assessId != null && assessId.isNotEmpty) {
-        updateBrowserUrl('$route?tab=$tabParam&assessment=$assessId');
+        updateBrowserUrl('$route?tab=$tabParam&assessment=$assessId', replace: false);
       } else if (actId != null && actId.isNotEmpty) {
-        updateBrowserUrl('$route?tab=$tabParam&activity=$actId');
+        updateBrowserUrl('$route?tab=$tabParam&activity=$actId', replace: false);
       } else {
-        updateBrowserUrl('$route?tab=$tabParam');
+        updateBrowserUrl('$route?tab=$tabParam', replace: false);
       }
     } else {
-      updateBrowserUrl(route);
+      updateBrowserUrl(route, replace: false);
     }
   }
 
@@ -166,11 +202,29 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _loadData();
     _loadActivities();
     _checkGradebookLockStatus();
+    registerPopStateListener((path) {
+      if (!mounted) return;
+      final targetIndex = _indexForRoute(path);
+      if (targetIndex != null && targetIndex != _selectedIndex) {
+        if (targetIndex == 18) {
+          TeacherGradebookTab.gradebookRefreshNotifier.value++;
+        } else if (targetIndex == 1) {
+          unawaited(_loadActivities(forceRefresh: true));
+        }
+        setState(() {
+          _selectedIndex = targetIndex;
+          _loadedTabIndices.add(targetIndex);
+        });
+        LocalStorageService.saveActiveDashboardTab('teacher', targetIndex);
+        LocalStorageService.saveLastActiveRoute(path);
+      }
+    });
     InAppNotificationService.subscribeToAnnouncements(role: 'teacher');
   }
 
   @override
   void dispose() {
+    registerPopStateListener((_) {});
     InAppNotificationService.unsubscribeFromAnnouncements();
     TeacherGradebookTab.classworkSyncNotifier.removeListener(
       _onClassworkSyncTriggered,

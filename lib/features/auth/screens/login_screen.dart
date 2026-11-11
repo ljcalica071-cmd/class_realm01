@@ -177,6 +177,26 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _restorePasswordFocusAfterDialog() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _passwordFocusNode.requestFocus();
+      final len = _passwordController.text.length;
+      _passwordController.selection = TextSelection.collapsed(offset: len);
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _passwordFocusNode.hasFocus) {
+          final curLen = _passwordController.text.length;
+          final sel = _passwordController.selection;
+          if (sel.isValid && sel.start != sel.end) {
+            _passwordController.selection =
+                TextSelection.collapsed(offset: curLen);
+          }
+        }
+      });
+    });
+  }
+
   void _handlePasswordFieldTap() {
     _healPasswordSelection();
     if (!_passwordFocusNode.hasFocus) {
@@ -299,19 +319,8 @@ class _LoginScreenState extends State<LoginScreen> {
           context: context,
           title: 'Authentication Failed',
           message: 'Invalid email or password. Please check your credentials.',
-          onConfirm: () {
-            // Focus back to password without clearing it (User Friendly)
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-              final len = _passwordController.text.length;
-              _passwordController.selection = TextSelection.collapsed(
-                offset: len,
-              );
-              _passwordFocusNode.requestFocus();
-              SystemChannels.textInput.invokeMethod<void>('TextInput.show');
-            });
-          },
-        );
+          onConfirm: _restorePasswordFocusAfterDialog,
+        ).whenComplete(_restorePasswordFocusAfterDialog);
         return;
       }
 
@@ -354,18 +363,8 @@ class _LoginScreenState extends State<LoginScreen> {
             context: context,
             title: 'Authentication Failed',
             message: e.message,
-            onConfirm: () {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                final len = _passwordController.text.length;
-                _passwordController.selection = TextSelection.collapsed(
-                  offset: len,
-                );
-                _passwordFocusNode.requestFocus();
-                SystemChannels.textInput.invokeMethod<void>('TextInput.show');
-              });
-            },
-          );
+            onConfirm: _restorePasswordFocusAfterDialog,
+          ).whenComplete(_restorePasswordFocusAfterDialog);
           return;
         }
       }
@@ -373,16 +372,8 @@ class _LoginScreenState extends State<LoginScreen> {
         context: context,
         title: 'Login Error',
         message: e.toString().replaceAll('Exception: ', ''),
-        onConfirm: () {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            final len = _passwordController.text.length;
-            _passwordController.selection = TextSelection.collapsed(offset: len);
-            _passwordFocusNode.requestFocus();
-            SystemChannels.textInput.invokeMethod<void>('TextInput.show');
-          });
-        },
-      );
+        onConfirm: _restorePasswordFocusAfterDialog,
+      ).whenComplete(_restorePasswordFocusAfterDialog);
     }
   }
 
@@ -690,38 +681,144 @@ class _LoginScreenState extends State<LoginScreen> {
                     canRequestFocus: false,
                     skipTraversal: true,
                     onKeyEvent: (node, event) {
-                      if (event is KeyDownEvent) {
-                        final text = _passwordController.text;
-                        final sel = _passwordController.selection;
-                        // Edge-case recovery for browser password managers freezing selection at -1:
-                        if (!sel.isValid || sel.start == -1) {
-                          if (event.logicalKey == LogicalKeyboardKey.backspace) {
-                            if (text.isNotEmpty) {
-                              final newText =
-                                  text.substring(0, text.length - 1);
-                              _passwordController.value = TextEditingValue(
-                                text: newText,
-                                selection: TextSelection.collapsed(
-                                  offset: newText.length,
-                                ),
-                              );
-                              return KeyEventResult.handled;
-                            }
-                          } else if (event.character != null &&
-                              event.character!.isNotEmpty &&
-                              event.logicalKey != LogicalKeyboardKey.enter &&
-                              event.logicalKey != LogicalKeyboardKey.tab) {
-                            final newText = text + event.character!;
-                            _passwordController.value = TextEditingValue(
-                              text: newText,
-                              selection: TextSelection.collapsed(
-                                offset: newText.length,
-                              ),
-                            );
-                            return KeyEventResult.handled;
-                          }
-                        }
+                      if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+                        return KeyEventResult.ignored;
                       }
+                      final text = _passwordController.text;
+                      final sel = _passwordController.selection;
+                      final bool hasRange = sel.isValid &&
+                          sel.start >= 0 &&
+                          sel.end <= text.length &&
+                          sel.start != sel.end;
+                      final int offset =
+                          (sel.isValid && sel.end >= 0 && sel.end <= text.length)
+                              ? sel.end
+                              : text.length;
+
+                      // Support Ctrl+A / Cmd+A to highlight all text
+                      if ((HardwareKeyboard.instance.isControlPressed ||
+                              HardwareKeyboard.instance.isMetaPressed) &&
+                          event.logicalKey == LogicalKeyboardKey.keyA) {
+                        _passwordController.selection = TextSelection(
+                          baseOffset: 0,
+                          extentOffset: text.length,
+                        );
+                        return KeyEventResult.handled;
+                      }
+
+                      if (event.logicalKey == LogicalKeyboardKey.backspace) {
+                        if (hasRange) {
+                          final newText = text.substring(0, sel.start) +
+                              text.substring(sel.end);
+                          _passwordController.value = TextEditingValue(
+                            text: newText,
+                            selection: TextSelection.collapsed(
+                              offset: sel.start,
+                            ),
+                          );
+                        } else if (text.isNotEmpty && offset > 0) {
+                          final newText = text.substring(0, offset - 1) +
+                              text.substring(offset);
+                          final newOffset = offset - 1;
+                          _passwordController.value = TextEditingValue(
+                            text: newText,
+                            selection: TextSelection.collapsed(
+                              offset: newOffset,
+                            ),
+                          );
+                        }
+                        return KeyEventResult.handled;
+                      }
+
+                      if (event.logicalKey == LogicalKeyboardKey.delete) {
+                        if (hasRange) {
+                          final newText = text.substring(0, sel.start) +
+                              text.substring(sel.end);
+                          _passwordController.value = TextEditingValue(
+                            text: newText,
+                            selection: TextSelection.collapsed(
+                              offset: sel.start,
+                            ),
+                          );
+                        } else if (text.isNotEmpty && offset < text.length) {
+                          final newText = text.substring(0, offset) +
+                              text.substring(offset + 1);
+                          _passwordController.value = TextEditingValue(
+                            text: newText,
+                            selection: TextSelection.collapsed(
+                              offset: offset,
+                            ),
+                          );
+                        }
+                        return KeyEventResult.handled;
+                      }
+
+                      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                        final newOffset = hasRange
+                            ? sel.start
+                            : (offset - 1).clamp(0, text.length);
+                        _passwordController.selection =
+                            TextSelection.collapsed(offset: newOffset);
+                        return KeyEventResult.handled;
+                      }
+
+                      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                        final newOffset = hasRange
+                            ? sel.end
+                            : (offset + 1).clamp(0, text.length);
+                        _passwordController.selection =
+                            TextSelection.collapsed(offset: newOffset);
+                        return KeyEventResult.handled;
+                      }
+
+                      if (event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+                        if (event is KeyDownEvent &&
+                            !_isLoading &&
+                            !_isRateLimited) {
+                          _handleLogin();
+                        }
+                        return KeyEventResult.handled;
+                      }
+
+                      final isModifierPressed =
+                          HardwareKeyboard.instance.isControlPressed ||
+                          HardwareKeyboard.instance.isMetaPressed ||
+                          HardwareKeyboard.instance.isAltPressed;
+                      final char = event.character;
+                      if (!isModifierPressed &&
+                          char != null &&
+                          char.isNotEmpty &&
+                          event.logicalKey != LogicalKeyboardKey.tab &&
+                          event.logicalKey != LogicalKeyboardKey.escape &&
+                          char.codeUnitAt(0) >= 32 &&
+                          char.codeUnitAt(0) != 127) {
+                        if (hasRange) {
+                          final newText = text.substring(0, sel.start) +
+                              char +
+                              text.substring(sel.end);
+                          final newOffset = sel.start + char.length;
+                          _passwordController.value = TextEditingValue(
+                            text: newText,
+                            selection: TextSelection.collapsed(
+                              offset: newOffset,
+                            ),
+                          );
+                        } else if (text.length < 100) {
+                          final newText = text.substring(0, offset) +
+                              char +
+                              text.substring(offset);
+                          final newOffset = offset + char.length;
+                          _passwordController.value = TextEditingValue(
+                            text: newText,
+                            selection: TextSelection.collapsed(
+                              offset: newOffset,
+                            ),
+                          );
+                        }
+                        return KeyEventResult.handled;
+                      }
+
                       return KeyEventResult.ignored;
                     },
                     child: TextFormField(
@@ -771,12 +868,21 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: const Color(0xFF64748B),
                             size: 20,
                           ),
-                          onPressed: () => setState(() {
-                            _obscurePassword = !_obscurePassword;
-                            final text = _passwordController.text;
-                            _passwordController.selection =
-                                TextSelection.collapsed(offset: text.length);
-                          }),
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted) return;
+                              _passwordFocusNode.requestFocus();
+                              final len = _passwordController.text.length;
+                              _passwordController.selection =
+                                  TextSelection.collapsed(offset: len);
+                              SystemChannels.textInput.invokeMethod<void>(
+                                'TextInput.show',
+                              );
+                            });
+                          },
                         ),
                       ),
                     ),

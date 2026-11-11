@@ -2,8 +2,13 @@ import 'browser_url_stub.dart' if (dart.library.html) 'browser_url_web.dart';
 
 /// Dynamically updates the browser URL path without triggering a page reload or state reset.
 /// Safely falls back to a no-op on non-web platforms.
-void updateBrowserUrl(String path) {
-  updateBrowserUrlPath(path);
+void updateBrowserUrl(String path, {bool replace = false}) {
+  updateBrowserUrlPath(path, replace: replace);
+}
+
+/// Registers a listener for browser Back/Forward (popstate) navigation.
+void registerPopStateListener(void Function(String path) onPopState) {
+  registerWebPopStateListener(onPopState);
 }
 
 /// Retrieves the current browser URL path (e.g. '/teacher/dashboard' or '/login')

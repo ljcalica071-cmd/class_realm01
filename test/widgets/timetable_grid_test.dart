@@ -69,4 +69,41 @@ void main() {
     await tester.tap(find.text('Oral Communication'));
     expect(tappedSchedule?.id, 'sched-2');
   });
+
+  testWidgets('TimetableGridWidget renders 30-minute short schedule block without overflow', (tester) async {
+    final s30 = ScheduleModel(
+      id: 'sched-short',
+      subject: 'Art Criticism and Creative Markets',
+      section: 'Section 1',
+      room: 'Room 101',
+      dayOfWeek: 'Thursday',
+      startTime: '06:30 PM',
+      endTime: '07:00 PM', // 30 minutes
+      teacherId: 'teacher-me',
+      teacherName: 'Sir Juan Dela Cruz',
+      gradeLevel: 11,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1200,
+            height: 800,
+            child: TimetableGridWidget(
+              schedules: [s30],
+              currentTeacherId: 'teacher-me',
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    // Verify subject and section are rendered and no exception thrown
+    expect(find.text('Art Criticism and Creative Markets'), findsOneWidget);
+    expect(find.text('Section 1 • Room 101'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

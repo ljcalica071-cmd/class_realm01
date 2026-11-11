@@ -1,6 +1,10 @@
 import 'dart:typed_data';
 
-void updateBrowserUrlPath(String path) {
+void updateBrowserUrlPath(String path, {bool replace = false}) {
+  // No-op on mobile and desktop platforms.
+}
+
+void registerWebPopStateListener(void Function(String path) onPopState) {
   // No-op on mobile and desktop platforms.
 }
 

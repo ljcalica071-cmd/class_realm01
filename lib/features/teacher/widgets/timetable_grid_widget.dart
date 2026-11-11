@@ -387,6 +387,7 @@ class TimetableGridWidget extends StatelessWidget {
     final bool isOtherTeacher = currentTeacherId != null &&
         s.teacherId != null &&
         s.teacherId != currentTeacherId;
+    final bool isShort = s.durationMinutes <= 35;
 
     final double availableWidth = dayWidth - 8;
     final double subWidth = availableWidth / pos.totalColumns;
@@ -426,66 +427,75 @@ class TimetableGridWidget extends StatelessWidget {
               onTap: () => onEdit?.call(s),
               child: Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: pos.totalColumns > 1 ? 6.0 : 10.0,
-                  vertical: 6.0,
+                  horizontal: pos.totalColumns > 1 ? 6.0 : (isShort ? 8.0 : 10.0),
+                  vertical: isShort ? 3.0 : 6.0,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.subject,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: pos.totalColumns > 1 ? 12 : 14,
-                        color: textColor,
-                        height: 1.15,
+                child: SingleChildScrollView(
+                  physics: const NeverScrollableScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        s.subject,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: isShort
+                              ? (pos.totalColumns > 1 ? 10.5 : 12.0)
+                              : (pos.totalColumns > 1 ? 12.0 : 14.0),
+                          color: textColor,
+                          height: 1.15,
+                        ),
+                        maxLines: isShort ? 1 : 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      s.room.trim().isEmpty
-                          ? s.section
-                          : '${s.section} • ${s.room.trim()}',
-                      style: TextStyle(
-                        fontSize: pos.totalColumns > 1 ? 10 : 11,
-                        color: textColor.withValues(alpha: 0.85),
-                        fontWeight: FontWeight.w600,
+                      SizedBox(height: isShort ? 2 : 3),
+                      Text(
+                        s.room.trim().isEmpty
+                            ? s.section
+                            : '${s.section} • ${s.room.trim()}',
+                        style: TextStyle(
+                          fontSize: isShort
+                              ? (pos.totalColumns > 1 ? 9.5 : 10.0)
+                              : (pos.totalColumns > 1 ? 10.0 : 11.0),
+                          color: textColor.withValues(alpha: 0.85),
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (s.teacherName != null &&
-                        s.teacherName!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.person_outline,
-                            size: 11,
-                            color: textColor.withValues(alpha: 0.75),
-                          ),
-                          const SizedBox(width: 2),
-                          Expanded(
-                            child: Text(
-                              isOtherTeacher
-                                  ? s.teacherName!.trim()
-                                  : '${s.teacherName!.trim()} (You)',
-                              style: TextStyle(
-                                fontSize: pos.totalColumns > 1 ? 9 : 10,
-                                fontWeight: FontWeight.w600,
-                                color: textColor.withValues(alpha: 0.9),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                      if (!isShort &&
+                          s.teacherName != null &&
+                          s.teacherName!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.person_outline,
+                              size: 11,
+                              color: textColor.withValues(alpha: 0.75),
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 2),
+                            Expanded(
+                              child: Text(
+                                isOtherTeacher
+                                    ? s.teacherName!.trim()
+                                    : '${s.teacherName!.trim()} (You)',
+                                style: TextStyle(
+                                  fontSize: pos.totalColumns > 1 ? 9 : 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: textColor.withValues(alpha: 0.9),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
