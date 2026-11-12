@@ -653,145 +653,156 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                   ),
                 ),
 
-                // Visual 6 separated digit boxes with proper focus, cursor & selection indicator
-                SizedBox(
-                  height: 56,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: List.generate(6, (index) {
-                      final isFilled = index < currentLength;
-                      final digit = isFilled ? _otpController.text[index] : '';
+                // Visual 6 separated digit boxes — responsive fixed-width, wide style
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Responsive: fit 6 boxes with 8px gap each within available width
+                    // On web (dialog maxWidth 380, padding 36): ~344px available → 48px/box
+                    // On mobile 320px: (320-32-24)/6 ≈ 44px/box
+                    final double totalGap = 5 * 8.0; // 5 gaps × 8px
+                    final double boxWidth =
+                        ((constraints.maxWidth - totalGap) / 6).clamp(38.0, 56.0);
+                    final double boxHeight = (boxWidth * 1.21).clamp(46.0, 68.0);
 
-                      final isSelected = isFocused && (_selectedIndex == index);
-                      final isNextEmpty =
-                          isFocused &&
-                          (index == currentLength && currentLength < 6) &&
-                          (_selectedIndex >= currentLength);
-                      final isActive = (isSelected || isNextEmpty) && !_isLockedOut;
+                    return Center(
+                      child: SizedBox(
+                        height: boxHeight,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: List.generate(6, (index) {
+                            final isFilled = index < currentLength;
+                            final digit = isFilled ? _otpController.text[index] : '';
 
-                      Color borderColor;
-                      double borderWidth = 1.0;
-                      Color boxBg;
-                      List<BoxShadow>? shadows;
+                            final isSelected = isFocused && (_selectedIndex == index);
+                            final isNextEmpty =
+                                isFocused &&
+                                (index == currentLength && currentLength < 6) &&
+                                (_selectedIndex >= currentLength);
+                            final isActive = (isSelected || isNextEmpty) && !_isLockedOut;
 
-                      if (hasError) {
-                        borderColor = Colors.red.shade500;
-                        borderWidth = isActive ? 2.0 : 1.6;
-                        boxBg = Colors.red.withValues(alpha: 0.04);
-                        if (isActive) {
-                          shadows = [
-                            BoxShadow(
-                              color: Colors.red.withValues(alpha: 0.18),
-                              blurRadius: 6,
-                              spreadRadius: 0,
-                            ),
-                          ];
-                        }
-                      } else if (isActive) {
-                        borderColor = const Color(0xFF2563EB);
-                        borderWidth = 2.2;
-                        boxBg = const Color(0xFF2563EB).withValues(alpha: 0.06);
-                        shadows = [
-                          BoxShadow(
-                            color: const Color(0xFF2563EB).withValues(alpha: 0.25),
-                            blurRadius: 8,
-                            spreadRadius: 1,
-                          ),
-                        ];
-                      } else if (isFilled) {
-                        borderColor = const Color(0xFF94A3B8);
-                        borderWidth = 1.4;
-                        boxBg = Colors.white;
-                      } else {
-                        borderColor = const Color(0xFFCBD5E1);
-                        borderWidth = 1.0;
-                        boxBg = const Color(0xFFF8FAFC);
-                      }
+                            Color borderColor;
+                            double borderWidth = 1.0;
+                            Color boxBg;
+                            List<BoxShadow>? shadows;
 
-                      return Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 3.5),
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => _onDigitBoxTapped(index),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              curve: Curves.easeOut,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                color: boxBg,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: borderColor,
-                                  width: borderWidth,
+                            if (hasError) {
+                              borderColor = Colors.red.shade500;
+                              borderWidth = isActive ? 2.0 : 1.6;
+                              boxBg = Colors.red.withValues(alpha: 0.04);
+                              if (isActive) {
+                                shadows = [
+                                  BoxShadow(
+                                    color: Colors.red.withValues(alpha: 0.18),
+                                    blurRadius: 6,
+                                    spreadRadius: 0,
+                                  ),
+                                ];
+                              }
+                            } else if (isActive) {
+                              borderColor = const Color(0xFF2563EB);
+                              borderWidth = 2.2;
+                              boxBg = const Color(0xFF2563EB).withValues(alpha: 0.06);
+                              shadows = [
+                                BoxShadow(
+                                  color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
                                 ),
-                                boxShadow: shadows,
-                              ),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  if (digit.isNotEmpty)
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(4),
-                                        child: Text(
-                                          digit,
-                                          style: TextStyle(
-                                            fontSize: 22,
-                                            fontWeight: FontWeight.bold,
+                              ];
+                            } else if (isFilled) {
+                              borderColor = const Color(0xFF94A3B8);
+                              borderWidth = 1.4;
+                              boxBg = Colors.white;
+                            } else {
+                              borderColor = const Color(0xFFCBD5E1);
+                              borderWidth = 1.0;
+                              boxBg = const Color(0xFFF8FAFC);
+                            }
+
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => _onDigitBoxTapped(index),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOut,
+                                width: boxWidth,
+                                height: boxHeight,
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                decoration: BoxDecoration(
+                                  color: boxBg,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: borderColor,
+                                    width: borderWidth,
+                                  ),
+                                  boxShadow: shadows,
+                                ),
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    if (digit.isNotEmpty)
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(4),
+                                          child: Text(
+                                            digit,
+                                            style: TextStyle(
+                                              fontSize: 24,
+                                              fontWeight: FontWeight.bold,
+                                              color: hasError
+                                                  ? Colors.red.shade600
+                                                  : const Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    else if (isActive && _cursorBlinkController != null)
+                                      FadeTransition(
+                                        opacity: _cursorBlinkController!,
+                                        child: Container(
+                                          width: 2.2,
+                                          height: (boxHeight * 0.42).clamp(20.0, 28.0),
+                                          decoration: BoxDecoration(
                                             color: hasError
                                                 ? Colors.red.shade600
-                                                : const Color(0xFF0F172A),
+                                                : const Color(0xFF2563EB),
+                                            borderRadius: BorderRadius.circular(1),
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      Container(
+                                        width: 7,
+                                        height: 7,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade400,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+
+                                    if (isFilled && isActive && !hasError)
+                                      Positioned(
+                                        bottom: 6,
+                                        child: Container(
+                                          width: 16,
+                                          height: 3,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF2563EB),
+                                            borderRadius: BorderRadius.circular(2),
                                           ),
                                         ),
                                       ),
-                                    )
-                                  else if (isActive && _cursorBlinkController != null)
-                                    FadeTransition(
-                                      opacity: _cursorBlinkController!,
-                                      child: Container(
-                                        width: 2.2,
-                                        height: 24,
-                                        decoration: BoxDecoration(
-                                          color: hasError
-                                              ? Colors.red.shade600
-                                              : const Color(0xFF2563EB),
-                                          borderRadius: BorderRadius.circular(1),
-                                        ),
-                                      ),
-                                    )
-                                  else
-                                    Container(
-                                      width: 7,
-                                      height: 7,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade400,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-
-                                  if (isFilled && isActive && !hasError)
-                                    Positioned(
-                                      bottom: 6,
-                                      child: Container(
-                                        width: 16,
-                                        height: 3,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF2563EB),
-                                          borderRadius: BorderRadius.circular(2),
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ),
+                            );
+                          }),
                         ),
-                      );
-                    }),
-                  ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

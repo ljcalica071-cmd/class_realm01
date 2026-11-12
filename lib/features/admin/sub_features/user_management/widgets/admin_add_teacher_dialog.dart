@@ -648,27 +648,23 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                 ),
               ),
 
-              // Visual 6 separated digit boxes with proper focus, cursor & selection indicator
+              // Visual 6 separated digit boxes — responsive fixed-width, wide style
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final double maxOtpRowWidth = constraints.maxWidth > 500
-                      ? 480.0
-                      : constraints.maxWidth.clamp(280.0, 500.0);
-                  final double spacing = (maxOtpRowWidth > 400)
-                      ? 10.0
-                      : (maxOtpRowWidth > 300 ? 6.0 : 4.0);
-                  final double totalSpacing = spacing * 5;
+                  // On wide admin dialog (620px maxWidth, ~36px padding): ~584px avail → cap at 56px/box
+                  // On mobile (360px screen): ~300px avail → 44px/box
+                  final double totalGap = 5 * 8.0; // 5 gaps × 8px
                   final double boxWidth =
-                      ((maxOtpRowWidth - totalSpacing) / 6).clamp(38.0, 68.0);
-                  final double boxHeight = (boxWidth * 1.08).clamp(56.0, 68.0);
-                  final double fontSize = (boxWidth * 0.42).clamp(18.0, 26.0);
+                      ((constraints.maxWidth - totalGap) / 6).clamp(40.0, 56.0);
+                  final double boxHeight = (boxWidth * 1.21).clamp(48.0, 68.0);
+                  final double fontSize = (boxWidth * 0.44).clamp(18.0, 26.0);
 
                   return Center(
                     child: SizedBox(
-                      width: (boxWidth * 6) + totalSpacing,
                       height: boxHeight,
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: List.generate(6, (index) {
                           final isFilled = index < currentLength;
                           final digit =
@@ -745,6 +741,7 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                               curve: Curves.easeOut,
                               width: boxWidth,
                               height: boxHeight,
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
                               decoration: BoxDecoration(
                                 color: boxBg,
                                 borderRadius: BorderRadius.circular(14),
