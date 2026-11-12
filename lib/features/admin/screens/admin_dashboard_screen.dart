@@ -6,7 +6,6 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/utils/logout_helper.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:class_realm/core/services/session_activity_tracker.dart';
 
 import 'dart:async';
 
@@ -48,22 +47,46 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
+  int? _indexForRoute(String path) {
+    final cleanPath = path.split('?').first.trim();
+    if (cleanPath == AppRoutes.adminDashboard ||
+        cleanPath == '/admin' ||
+        cleanPath == '/admin/') {
+      return 0;
+    } else if (cleanPath == AppRoutes.adminBroadcasts) {
+      return 1;
+    } else if (cleanPath == AppRoutes.adminTeacherManagement) {
+      return 2;
+    } else if (cleanPath == AppRoutes.adminActivityAnalytics) {
+      return 3;
+    } else if (cleanPath == AppRoutes.adminProfile) {
+      return 4;
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
+    final currentPath = getBrowserUrlPath();
+    final urlIndex = _indexForRoute(currentPath);
     final savedTab = LocalStorageService.getActiveDashboardTab('admin');
-    _selectedIndex = (widget.initialIndex != 0)
-        ? widget.initialIndex
-        : (savedTab > 0 ? savedTab : 0);
+    _selectedIndex = urlIndex ??
+        ((widget.initialIndex != 0)
+            ? widget.initialIndex
+            : (savedTab > 0 ? savedTab : 0));
 
     // Direct URL entry security guard: only authenticated Admins allowed
     final user = AuthRepository.instance.currentUser;
     if (user == null || user.role != UserRole.admin) {
+      final redirectRoute = user != null
+          ? AppRoutes.resolveSafeRouteForUser(user)
+          : AppRoutes.login;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
-            AppRoutes.login,
+            redirectRoute,
             (route) => false,
           );
         }
@@ -77,6 +100,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     LocalStorageService.saveActiveDashboardTab('admin', _selectedIndex);
     _loadData();
     _subscribeToRealtimeChanges();
+
+    // Listen to browser Back/Forward (undo/redo) popstate navigation
+    registerPopStateListener((path) {
+      if (!mounted) return;
+      final targetIndex = _indexForRoute(path);
+      if (targetIndex != null && targetIndex != _selectedIndex) {
+        setState(() {
+          _selectedIndex = targetIndex;
+        });
+        LocalStorageService.saveActiveDashboardTab('admin', targetIndex);
+        LocalStorageService.saveLastActiveRoute(path);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant AdminDashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialIndex != widget.initialIndex &&
+        widget.initialIndex != _selectedIndex) {
+      setState(() {
+        _selectedIndex = widget.initialIndex;
+      });
+      final route = _routeForIndex(widget.initialIndex);
+      updateBrowserUrl(route);
+      LocalStorageService.saveLastActiveRoute(route);
+      LocalStorageService.saveActiveDashboardTab('admin', widget.initialIndex);
+    }
   }
 
   void _navigateToTab(int index) {
@@ -114,6 +165,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   void dispose() {
+    registerPopStateListener((_) {});
     if (_realtimeChannel != null) {
       Supabase.instance.client.removeChannel(_realtimeChannel!);
     }
@@ -262,18 +314,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     return PopScope(
       canPop: false,
-      child: SessionActivityTracker(
-        child: Scaffold(
-          drawer: isMobile ? sidebar : null,
-          body: isMobile
-              ? mainContent
-              : Row(
-                  children: [
-                    sidebar,
-                    Expanded(child: mainContent),
-                  ],
-                ),
-        ),
+      child: Scaffold(
+        drawer: isMobile ? sidebar : null,
+        body: isMobile
+            ? mainContent
+            : Row(
+                children: [
+                  sidebar,
+                  Expanded(child: mainContent),
+                ],
+              ),
       ),
     );
   }

@@ -890,12 +890,36 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       final today = DateTime(now.year, now.month, now.day);
       final targetDay = DateTime(date.year, date.month, date.day);
       final isPastDay = targetDay.isBefore(today);
+      final isToday = targetDay.isAtSameMomentAs(today);
+
+      bool isClassEndedToday = false;
+      if (isToday &&
+          scheduleStatus.hasPlottedScheduleAnyDay &&
+          scheduleStatus.isScheduledOnDate &&
+          scheduleStatus.endTime != null) {
+        final currentMins = now.hour * 60 + now.minute;
+        final endMins = SupabaseAttendanceRepository.parseTimeToMinutes(
+          scheduleStatus.endTime,
+        );
+        final startMins = SupabaseAttendanceRepository.parseTimeToMinutes(
+          scheduleStatus.startTime,
+        );
+        final absentCutoffMins = startMins != null
+            ? startMins + scheduleStatus.cutoffConfig.absentCutoffMins
+            : null;
+
+        if (endMins != null && currentMins >= endMins) {
+          isClassEndedToday = true;
+        } else if (absentCutoffMins != null && currentMins >= absentCutoffMins) {
+          isClassEndedToday = true;
+        }
+      }
 
       var effectiveRecords = List<AttendanceWorkspaceRecord>.from(
         rosterResult.records,
       );
 
-      if (isPastDay &&
+      if ((isPastDay || isClassEndedToday) &&
           !scheduleStatus.isHoliday &&
           (!scheduleStatus.isLockedByDefault || effectiveRecords.isNotEmpty)) {
         final recordedIds = effectiveRecords.map((r) => r.studentId).toSet();
@@ -1246,7 +1270,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
     if (_hasEditableFocus()) return false;
 
-    if (event is KeyDownEvent) {
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
       final now = DateTime.now();
 
       if (_lastScannerKeyTime != null &&
@@ -1278,7 +1302,13 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
           return true;
         }
       } else {
-        final char = event.character;
+        String? char = event.character;
+        if (char == null || char.isEmpty) {
+          final label = event.logicalKey.keyLabel;
+          if (label.length == 1) {
+            char = label;
+          }
+        }
 
         if (char != null && char.trim().isNotEmpty) {
           _rfidBuffer += char.trim().toUpperCase();

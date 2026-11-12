@@ -17,19 +17,12 @@ class LogoutHelper {
     LocalStorageService.saveActiveDashboardTab('parent', 0);
     LocalStorageService.saveActiveDashboardTab('admin', 0);
 
-    if (context.mounted) {
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        AppRoutes.login,
-        (route) => false,
-        arguments: reason != null ? {'logout_reason': reason} : null,
-      );
-    } else {
-      AppRoutes.navigatorKey.currentState?.pushNamedAndRemoveUntil(
-        AppRoutes.login,
-        (route) => false,
-        arguments: reason != null ? {'logout_reason': reason} : null,
-      );
-    }
+    final nav = (context.mounted ? Navigator.maybeOf(context) : null) ??
+        AppRoutes.navigatorKey.currentState;
+    nav?.pushNamedAndRemoveUntil(
+      AppRoutes.login,
+      (route) => false,
+      arguments: reason != null ? {'logout_reason': reason} : null,
+    );
   }
 }

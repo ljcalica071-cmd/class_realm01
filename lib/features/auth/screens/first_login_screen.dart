@@ -315,6 +315,10 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
       return;
     }
 
+    final activeUser = AuthRepository.instance.currentUser ?? user;
+    final updatedActiveUser = activeUser.copyWith(status: AccountStatus.active);
+    await LocalStorageService.saveUser(updatedActiveUser);
+
     if (!mounted) return;
     TextInput.finishAutofillContext(shouldSave: true);
     final isUserDark = LocalStorageService.isUserDarkMode(

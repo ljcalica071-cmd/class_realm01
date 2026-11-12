@@ -122,6 +122,20 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      if (argReason == 'inactivity') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            AppTopToast.show(
+              context,
+              message:
+                  'You were automatically logged out due to 30 minutes of inactivity.',
+              type: AppToastType.warning,
+              duration: const Duration(seconds: 4),
+            );
+          }
+        });
+      }
+
       // 2. Sync latest maintenance state into local cache on LoginScreen mount
       bool isMaintenance = LocalStorageService.isMaintenanceMode;
       try {

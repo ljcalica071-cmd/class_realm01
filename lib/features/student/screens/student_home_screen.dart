@@ -17,7 +17,6 @@ import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/features/student/sub_features/profile/widgets/student_notifications_tab.dart';
-import 'package:class_realm/core/services/session_activity_tracker.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/routes/app_routes.dart';
@@ -66,6 +65,20 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   @override
   void initState() {
     super.initState();
+    final currentUser = AuthRepository.instance.currentUser;
+    if (currentUser != null && currentUser.role != UserRole.student) {
+      final redirectRoute = AppRoutes.resolveSafeRouteForUser(currentUser);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            redirectRoute,
+            (route) => false,
+          );
+        }
+      });
+      return;
+    }
     final savedTab = LocalStorageService.getActiveDashboardTab('student');
     _currentIndex = (widget.initialTabIndex > 0)
         ? widget.initialTabIndex
@@ -147,6 +160,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = AuthRepository.instance.currentUser;
+    if (currentUser != null && currentUser.role != UserRole.student) {
+      return const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
     if (_isLoading && _dashboard == null) {
       return Scaffold(
@@ -223,8 +240,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       _ => _buildProfileTab(context, student),
     };
 
-    return SessionActivityTracker(
-      child: Scaffold(
+    return Scaffold(
         key: _scaffoldKey,
         appBar: AppBar(
           title: const Text(
@@ -313,8 +329,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _mobileFrame(BuildContext context, Widget child) {
@@ -569,6 +584,17 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             if (b.deadline == null) return -1;
             return a.deadline!.compareTo(b.deadline!);
           });
+
+    final submittedItems = classwork
+        .where((item) =>
+            item.status == 'submitted' ||
+            item.status == 'graded')
+        .toList()
+      ..sort((a, b) {
+        if (a.submittedAt == null) return 1;
+        if (b.submittedAt == null) return -1;
+        return b.submittedAt!.compareTo(a.submittedAt!);
+      });
     final enrollmentLabel = [
       if (student.gradeLevel?.isNotEmpty == true) 'Grade ${student.gradeLevel}',
       if (student.departmentOrSection?.isNotEmpty == true)
@@ -874,6 +900,26 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 ),
               ),
             ),
+          if (submittedItems.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            _buildSectionHeader(
+              theme: theme,
+              title: 'Submitted Work & Tasks',
+              badgeText: '${submittedItems.length} turned in',
+              subtitle:
+                  'Activities and performance tasks you have already submitted.',
+            ),
+            const SizedBox(height: 14),
+            ...submittedItems.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: StudentClassworkCard(
+                  classwork: item,
+                  onRefresh: () => _loadDashboard(forceRefresh: true),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

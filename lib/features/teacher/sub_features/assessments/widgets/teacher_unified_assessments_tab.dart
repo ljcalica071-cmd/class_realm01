@@ -1022,7 +1022,7 @@ class _TeacherUnifiedAssessmentsTabState
                 activeAssessmentId: item.id,
               );
               updateBrowserUrl(
-                '${AppRoutes.teacherClasswork}?tab=$tabParam&assessment=${item.id}',
+                '${AppRoutes.teacherClasswork}?tab=$tabParam&view=proctoring',
               );
               setState(() => _monitoringAssessment = item);
             },

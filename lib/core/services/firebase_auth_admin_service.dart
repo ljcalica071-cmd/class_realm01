@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:class_realm/core/config/env_config.dart';
@@ -360,6 +361,34 @@ class FirebaseAuthAdminService {
           );
         }
       }
+
+      // Fallback via Identity Toolkit update using Web API Key and idToken
+      try {
+        final effectiveIdToken =
+            await fb.FirebaseAuth.instance.currentUser?.getIdToken(true);
+        final apiKey = EnvConfig.firebaseWebApiKey;
+        if (apiKey.isNotEmpty && effectiveIdToken != null) {
+          final res = await http.post(
+            Uri.parse(
+              'https://identitytoolkit.googleapis.com/v1/accounts:update?key=$apiKey',
+            ),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'idToken': effectiveIdToken,
+              'password': newPassword,
+              'returnSecureToken': true,
+            }),
+          );
+          if (res.statusCode == 200) {
+            debugPrint(
+              'FirebaseAuthAdminService: Successfully updated password via Identity Toolkit Web API Key.',
+            );
+            return true;
+          }
+        }
+      } catch (e) {
+        debugPrint('Identity Toolkit update password notice: $e');
+      }
     } catch (e) {
       debugPrint('FirebaseAuthAdminService updateUserPassword error: $e');
     }
@@ -478,8 +507,9 @@ class FirebaseAuthAdminService {
     // 3. Construct PKCS#1 v1.5 padded block (256 bytes for 2048-bit key)
     final keyBytes = (n.bitLength + 7) ~/ 8;
     final padLen = keyBytes - 3 - digestInfo.length;
-    if (padLen < 8)
+    if (padLen < 8) {
       throw Exception('RSA key too short for PKCS#1 v1.5 padding');
+    }
 
     final em = Uint8List(keyBytes);
     em[0] = 0x00;
@@ -703,18 +733,21 @@ class FirebaseAuthAdminService {
       offset += algLen;
 
       // Octet string containing PKCS#1 RSAPrivateKey
-      if (der[offset++] != 0x04)
+      if (der[offset++] != 0x04) {
         throw Exception('Expected OCTET STRING in PKCS#8');
+      }
       readLength();
 
       // Inside PKCS#1: SEQUENCE
-      if (der[offset++] != 0x30)
+      if (der[offset++] != 0x30) {
         throw Exception('Expected SEQUENCE inside OCTET STRING');
+      }
       readLength();
 
       // Version inside PKCS#1
-      if (der[offset++] != 0x02)
+      if (der[offset++] != 0x02) {
         throw Exception('Expected version inside PKCS#1');
+      }
       final v1Len = readLength();
       offset += v1Len;
     }
@@ -727,14 +760,16 @@ class FirebaseAuthAdminService {
     final modulus = _bytesToBigInt(modBytes);
 
     // Public exponent (e)
-    if (der[offset++] != 0x02)
+    if (der[offset++] != 0x02) {
       throw Exception('Expected INTEGER for public exponent');
+    }
     int pubLen = readLength();
     offset += pubLen;
 
     // Private exponent (d)
-    if (der[offset++] != 0x02)
+    if (der[offset++] != 0x02) {
       throw Exception('Expected INTEGER for private exponent');
+    }
     int privLen = readLength();
     final privBytes = der.sublist(offset, offset + privLen);
     final privateExponent = _bytesToBigInt(privBytes);

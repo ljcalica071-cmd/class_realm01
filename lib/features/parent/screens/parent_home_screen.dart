@@ -9,7 +9,6 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/features/parent/widgets/widgets.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
-import 'package:class_realm/core/services/session_activity_tracker.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/shared/services/in_app_notification_service.dart';
@@ -60,6 +59,20 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   @override
   void initState() {
     super.initState();
+    final currentUser = AuthRepository.instance.currentUser;
+    if (currentUser != null && currentUser.role != UserRole.parent) {
+      final redirectRoute = AppRoutes.resolveSafeRouteForUser(currentUser);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            redirectRoute,
+            (route) => false,
+          );
+        }
+      });
+      return;
+    }
     final savedTab = LocalStorageService.getActiveDashboardTab('parent');
     _currentIndex = (widget.initialTabIndex > 0)
         ? widget.initialTabIndex
@@ -520,6 +533,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = AuthRepository.instance.currentUser;
+    if (currentUser != null && currentUser.role != UserRole.parent) {
+      return const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
     final parent =
         _parentProfile ??
@@ -589,8 +606,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
 
     final appBarTitle = _tabTitles[_currentIndex.clamp(0, 4)];
 
-    return SessionActivityTracker(
-      child: Scaffold(
+    return Scaffold(
         key: _scaffoldKey,
         appBar: AppBar(
           titleSpacing: 4,
@@ -743,8 +759,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildNoChildEmptyState(ThemeData theme) {

@@ -47,13 +47,19 @@ class _AuthGuardState extends State<AuthGuard> {
       return false;
     }
     if (!widget.allowedRoles.contains(user.role)) return false;
-    if (user.status == AccountStatus.deactivated ||
+    if (user.isArchived ||
+        user.status == AccountStatus.archived ||
+        user.status == AccountStatus.deactivated ||
         user.status == AccountStatus.rejected) {
       return false;
     }
-    if ((user.status == AccountStatus.pendingFirstLogin ||
-            user.status == AccountStatus.pending) &&
-        !_isFirstLoginScreen) {
+    final isFirstLoginPending =
+        user.status == AccountStatus.pendingFirstLogin ||
+        user.status == AccountStatus.pending;
+    if (isFirstLoginPending && !_isFirstLoginScreen) {
+      return false;
+    }
+    if (!isFirstLoginPending && _isFirstLoginScreen) {
       return false;
     }
     return true;
@@ -79,11 +85,21 @@ class _AuthGuardState extends State<AuthGuard> {
         return;
       }
 
+      // 2. Archived / Deactivated / Rejected status check
+      if (user.isArchived ||
+          user.status == AccountStatus.archived ||
+          user.status == AccountStatus.deactivated ||
+          user.status == AccountStatus.rejected) {
+        AuthRepository.instance.logout();
+        _redirect(AppRoutes.login);
+        return;
+      }
+
       final isFirstLoginPending =
           user.status == AccountStatus.pendingFirstLogin ||
           user.status == AccountStatus.pending;
 
-      // 2. Role not allowed for this route (e.g., URL tampering or wrong role first-login URL)
+      // 3. Role not allowed for this route (e.g., URL tampering or wrong role first-login URL)
       if (!widget.allowedRoles.contains(user.role)) {
         final targetRoute = isFirstLoginPending
             ? AppRoutes.getFirstLoginRouteForRole(user.role)
@@ -92,16 +108,13 @@ class _AuthGuardState extends State<AuthGuard> {
         return;
       }
 
-      // 3. Status checks
+      // 4. First-login vs Active status checks
       if (isFirstLoginPending && !_isFirstLoginScreen) {
         _redirect(AppRoutes.getFirstLoginRouteForRole(user.role));
         return;
       }
-
-      if (user.status == AccountStatus.deactivated ||
-          user.status == AccountStatus.rejected) {
-        AuthRepository.instance.logout();
-        _redirect(AppRoutes.login);
+      if (!isFirstLoginPending && _isFirstLoginScreen) {
+        _redirect(AppRoutes.getDashboardRouteForRole(user.role));
         return;
       }
     });

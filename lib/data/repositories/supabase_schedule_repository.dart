@@ -53,9 +53,10 @@ class SupabaseScheduleRepository implements ScheduleRepository {
 
     try {
       var query = _client.from('subject_offerings').select('''
-        id, teacher_id,
+        id, teacher_id, is_archived,
+        subjects!inner ( id, is_archived ),
         sections!inner ( id, section_name, grade_level )
-      ''');
+      ''').eq('is_archived', false).eq('subjects.is_archived', false);
       if (teacherId != null) {
         query = query.eq('teacher_id', teacherId);
       }
@@ -66,6 +67,9 @@ class SupabaseScheduleRepository implements ScheduleRepository {
       final response = await query;
       final Map<String, Map<String, dynamic>> distinctSections = {};
       for (final row in response) {
+        if (row['is_archived'] == true) continue;
+        final sub = row['subjects'] as Map<String, dynamic>? ?? {};
+        if (sub['is_archived'] == true) continue;
         final sec = row['sections'] as Map<String, dynamic>? ?? {};
         final name = sec['section_name']?.toString() ?? '';
         final grade = sec['grade_level'] ?? 11;
@@ -124,10 +128,10 @@ class SupabaseScheduleRepository implements ScheduleRepository {
 
     try {
       var query = _client.from('subject_offerings').select('''
-        id, teacher_id, ww_weight, pt_weight, ex_weight,
-        subjects!inner ( id, subject_name, grade_level ),
+        id, teacher_id, ww_weight, pt_weight, ex_weight, is_archived,
+        subjects!inner ( id, subject_name, grade_level, is_archived ),
         sections!inner ( id, section_name, grade_level )
-      ''');
+      ''').eq('is_archived', false).eq('subjects.is_archived', false);
       if (teacherId != null) {
         query = query.eq('teacher_id', teacherId);
       }
@@ -135,7 +139,14 @@ class SupabaseScheduleRepository implements ScheduleRepository {
         query = query.eq('subjects.grade_level', gradeLevel);
       }
       final response = await query;
-      return (response as List).map<Map<String, dynamic>>((row) {
+      return (response as List)
+          .where((row) {
+            if (row['is_archived'] == true) return false;
+            final sub = row['subjects'] as Map<String, dynamic>? ?? {};
+            if (sub['is_archived'] == true) return false;
+            return true;
+          })
+          .map<Map<String, dynamic>>((row) {
         final sub = row['subjects'] as Map<String, dynamic>? ?? {};
         final sec = row['sections'] as Map<String, dynamic>? ?? {};
         return {
@@ -170,7 +181,9 @@ class SupabaseScheduleRepository implements ScheduleRepository {
           subjects!inner ( id, subject_name, grade_level, is_archived ),
           sections!inner ( id, section_name, grade_level )
         )
-      ''').eq('subject_offerings.is_archived', false);
+      ''').eq('is_active', true)
+          .eq('subject_offerings.is_archived', false)
+          .eq('subject_offerings.subjects.is_archived', false);
 
       if (teacherId != null && teacherId.isNotEmpty) {
         query = query.eq('subject_offerings.teacher_id', teacherId);
@@ -224,6 +237,13 @@ class SupabaseScheduleRepository implements ScheduleRepository {
             row['subject_offerings'] as Map<String, dynamic>? ?? {};
         final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
         final sec = offering['sections'] as Map<String, dynamic>? ?? {};
+
+        // Strictly ignore any schedules belonging to archived offerings or subjects
+        if (row['is_active'] == false ||
+            offering['is_archived'] == true ||
+            sub['is_archived'] == true) {
+          continue;
+        }
 
         final subName = sub['subject_name']?.toString() ?? 'Subject';
         final secName = sec['section_name']?.toString() ?? 'Section';

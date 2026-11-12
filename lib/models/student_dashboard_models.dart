@@ -202,6 +202,14 @@ class StudentClassworkModel {
           Map<String, dynamic>.from(first),
         );
       }
+    } else if (json['classwork_attachments'] is List &&
+        (json['classwork_attachments'] as List).isNotEmpty) {
+      final first = (json['classwork_attachments'] as List).first;
+      if (first is Map) {
+        parsedAttachment = StudentAttachmentModel.fromJson(
+          Map<String, dynamic>.from(first),
+        );
+      }
     } else if (json['attachment'] is Map) {
       parsedAttachment = StudentAttachmentModel.fromJson(
         Map<String, dynamic>.from(json['attachment'] as Map),
@@ -223,7 +231,8 @@ class StudentClassworkModel {
         Map<String, dynamic>.from(json['student_submission'] as Map),
       );
     } else if (submission['file_name'] != null ||
-        submission['storage_path'] != null) {
+        submission['storage_path'] != null ||
+        submission['signed_url'] != null) {
       parsedStudentSubmission = StudentAttachmentModel.fromJson(
         Map<String, dynamic>.from(submission),
       );

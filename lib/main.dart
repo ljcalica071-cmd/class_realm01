@@ -20,6 +20,7 @@ import 'package:class_realm/shared/widgets/in_app_notification_banner.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/widgets/auth_guard.dart';
+import 'core/services/session_activity_tracker.dart';
 import 'models/user_model.dart';
 import 'routes/app_routes.dart';
 import 'features/auth/screens/login_screen.dart';
@@ -359,22 +360,11 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
   String _determineInitialDestination() {
     final user = _bootstrappedUser ?? AuthRepository.instance.currentUser;
     if (user != null) {
-      if (user.status == AccountStatus.pendingFirstLogin ||
-          user.status == AccountStatus.pending) {
-        return AppRoutes.getFirstLoginRouteForRole(user.role);
-      }
-      if (_targetRoute != null && _targetRoute!.isNotEmpty) {
-        return _targetRoute!;
-      }
-      final lastRoute = LocalStorageService.getLastActiveRoute();
-      if (lastRoute != null &&
-          lastRoute.isNotEmpty &&
-          lastRoute != AppRoutes.login &&
-          lastRoute != AppRoutes.splash &&
-          lastRoute != '/') {
-        return lastRoute;
-      }
-      return AppRoutes.getDashboardRouteForRole(user.role);
+      return AppRoutes.resolveSafeRouteForUser(
+        user,
+        candidateRoute: _targetRoute,
+        fallbackSavedRoute: LocalStorageService.getLastActiveRoute(),
+      );
     }
     return AppRoutes.login;
   }
@@ -386,24 +376,14 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         LocalStorageService.getCachedUser();
     _applySavedUserTheme(activeUser);
     if (activeUser != null) {
-      final String dest;
-      final savedRoute = LocalStorageService.getLastActiveRoute();
-      if (activeUser.status == AccountStatus.pendingFirstLogin ||
-          activeUser.status == AccountStatus.pending) {
-        dest = AppRoutes.getFirstLoginRouteForRole(activeUser.role);
-      } else if (_targetRoute != null &&
-          _targetRoute!.isNotEmpty &&
-          _targetRoute != '/') {
-        dest = _targetRoute!;
-      } else if (savedRoute != null &&
-          savedRoute.isNotEmpty &&
-          savedRoute != '/') {
-        dest = savedRoute;
-      } else {
-        dest = AppRoutes.getDashboardRouteForRole(activeUser.role);
-      }
+      final dest = AppRoutes.resolveSafeRouteForUser(
+        activeUser,
+        candidateRoute: _targetRoute,
+        fallbackSavedRoute: LocalStorageService.getLastActiveRoute(),
+      );
 
       updateBrowserUrl(dest);
+      LocalStorageService.saveLastActiveRoute(dest);
       if (dest.isNotEmpty &&
           dest != AppRoutes.login &&
           dest != AppRoutes.splash &&
@@ -697,7 +677,22 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
           initialRoute: initialDestination,
           onGenerateInitialRoutes: (String initialRouteName) {
             final normalizedRoute = _normalizeRoutePath(initialRouteName);
-            final validBuilder = appRoutes[normalizedRoute];
+            final activeUser =
+                _bootstrappedUser ?? AuthRepository.instance.currentUser;
+            final bool isAllowedForUser = activeUser == null
+                ? (normalizedRoute == AppRoutes.login ||
+                      normalizedRoute == AppRoutes.forgotPassword ||
+                      normalizedRoute == '/')
+                : AppRoutes.isRouteAllowedForRole(
+                    normalizedRoute,
+                    activeUser.role,
+                    status: activeUser.status,
+                    isArchived: activeUser.isArchived,
+                  );
+
+            final validBuilder = isAllowedForUser
+                ? appRoutes[normalizedRoute]
+                : null;
             final actualRouteName = validBuilder != null
                 ? normalizedRoute
                 : initialDestination;
@@ -707,6 +702,9 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
                 appRoutes[AppRoutes.login]!;
             if (validBuilder == null) {
               updateBrowserUrl(actualRouteName);
+              if (activeUser != null && actualRouteName != AppRoutes.login) {
+                LocalStorageService.saveLastActiveRoute(actualRouteName);
+              }
             }
             return [
               MaterialPageRoute(
@@ -731,25 +729,27 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
           },
           builder: (context, child) {
             return InAppNotificationBannerOverlay(
-              child: Stack(
-                children: [
-                  ?child,
-                  if (!_isBootstrapped && !widget.isWarmBoot)
-                    Positioned.fill(
-                      child: AppLifecycleLoadingScreen(
-                        initializationTask: _bootstrapClassRealmServices,
-                        onComplete: (screenContext, user) {
-                          if (mounted) {
-                            setState(() {
-                              _bootstrappedUser = user;
-                              _isBootstrapped = true;
-                            });
-                            _onBootstrapComplete(user);
-                          }
-                        },
+              child: SessionActivityTracker(
+                child: Stack(
+                  children: [
+                    ?child,
+                    if (!_isBootstrapped && !widget.isWarmBoot)
+                      Positioned.fill(
+                        child: AppLifecycleLoadingScreen(
+                          initializationTask: _bootstrapClassRealmServices,
+                          onComplete: (screenContext, user) {
+                            if (mounted) {
+                              setState(() {
+                                _bootstrappedUser = user;
+                                _isBootstrapped = true;
+                              });
+                              _onBootstrapComplete(user);
+                            }
+                          },
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             );
           },

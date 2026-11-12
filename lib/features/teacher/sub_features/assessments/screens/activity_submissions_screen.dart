@@ -240,6 +240,57 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
         }
       }
 
+      // Storage scan fallback & auto-healing:
+      // If any submitted student is missing storage_path / file_name, check cloud storage directly!
+      try {
+        final storageFiles = await _client.storage
+            .from('classwork-materials')
+            .list(path: 'submissions/${_activity.id}');
+        if (storageFiles.isNotEmpty) {
+          for (final f in storageFiles) {
+            final fname = f.name;
+            final underscoreIndex = fname.indexOf('_');
+            if (underscoreIndex > 0) {
+              final studentId = fname.substring(0, underscoreIndex);
+              final cur = subMap[studentId];
+              if (cur != null) {
+                final hasStoragePath = cur['storage_path'] != null &&
+                    cur['storage_path'].toString().trim().isNotEmpty;
+                if (!hasStoragePath) {
+                  final fullPath = 'submissions/${_activity.id}/$fname';
+                  String cleanName = fname;
+                  final secondUnderscore =
+                      fname.indexOf('_', underscoreIndex + 1);
+                  if (secondUnderscore > 0 &&
+                      secondUnderscore + 1 < fname.length) {
+                    cleanName = fname.substring(secondUnderscore + 1);
+                  }
+                  cur['storage_path'] = fullPath;
+                  cur['file_name'] = cleanName;
+
+                  // Auto-heal DB record in background
+                  final subId = cur['id']?.toString();
+                  if (subId != null) {
+                    final ext = cleanName.split('.').last.toLowerCase();
+                    final mType = (ext == 'doc' || ext == 'docx')
+                        ? 'application/msword'
+                        : 'application/pdf';
+                    _client.from('submission_attachments').insert({
+                      'submission_id': subId,
+                      'file_name': cleanName,
+                      'storage_url': fullPath,
+                      'mime_type': mType,
+                    }).catchError((_) {});
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (storageScanErr) {
+        debugPrint('Notice scanning storage fallback: $storageScanErr');
+      }
+
       // 3. Check Gradebook Term Sheet fallback for two-way sync
       if (_activity.subjectOfferingId != null &&
           _activity.gradebookColumnIndex != null) {
@@ -328,6 +379,10 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
         return cleanPath;
       }
     }
+    final bucket = (cleanPath.contains('learning_materials') ||
+            cleanPath.contains('learning-materials'))
+        ? 'learning_materials'
+        : 'classwork-materials';
     if (cleanPath.contains('/classwork-materials/')) {
       cleanPath = cleanPath.split('/classwork-materials/').last;
     } else if (cleanPath.contains('/classwork%20materials/')) {
@@ -341,12 +396,12 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     cleanPath = Uri.decodeComponent(cleanPath);
     try {
       return await SupabaseService().adminClient.storage
-          .from('classwork-materials')
+          .from(bucket)
           .createSignedUrl(cleanPath, 60 * 60);
     } catch (_) {
-      // Bucket classwork-materials is public, fallback to public URL
+      // Bucket is public, fallback to public URL
       return Supabase.instance.client.storage
-          .from('classwork-materials')
+          .from(bucket)
           .getPublicUrl(cleanPath);
     }
   }

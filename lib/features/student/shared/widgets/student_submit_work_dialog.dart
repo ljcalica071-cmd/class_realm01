@@ -242,7 +242,7 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
                 .uploadBinary(
                   storagePath,
                   _fileBytes!,
-                  fileOptions: const FileOptions(upsert: true),
+                  fileOptions: const FileOptions(upsert: false),
                 )
                 .timeout(const Duration(seconds: 45));
           } catch (clientErr) {
@@ -284,21 +284,38 @@ class _StudentSubmitWorkDialogState extends State<StudentSubmitWorkDialog> {
           mimeType = 'application/msword';
         }
 
+        final attPayload = <String, dynamic>{
+          'submission_id': submissionId,
+          'file_name': _fileName!,
+          'storage_url': storagePath,
+          'mime_type': mimeType,
+          if (_fileSizeBytes != null) 'file_size_bytes': _fileSizeBytes,
+        };
+
+        bool attSaved = false;
         try {
-          final adminClient = SupabaseService().adminClient;
-          await adminClient
+          await client
               .from('submission_attachments')
               .delete()
               .eq('submission_id', submissionId);
-          await adminClient.from('submission_attachments').insert({
-            'submission_id': submissionId,
-            'file_name': _fileName!,
-            'storage_url': storagePath,
-            'mime_type': mimeType,
-            if (_fileSizeBytes != null) 'file_size_bytes': _fileSizeBytes,
-          });
-        } catch (attErr) {
-          debugPrint('Notice on submission attachment record: $attErr');
+          await client.from('submission_attachments').insert(attPayload);
+          attSaved = true;
+        } catch (clientAttErr) {
+          debugPrint('Notice inserting submission attachment with client: $clientAttErr');
+        }
+
+        if (!attSaved) {
+          try {
+            final adminClient = SupabaseService().adminClient;
+            await adminClient
+                .from('submission_attachments')
+                .delete()
+                .eq('submission_id', submissionId);
+            await adminClient.from('submission_attachments').insert(attPayload);
+            attSaved = true;
+          } catch (adminAttErr) {
+            debugPrint('Notice inserting submission attachment with adminClient: $adminAttErr');
+          }
         }
       }
 

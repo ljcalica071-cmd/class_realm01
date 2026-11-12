@@ -11,6 +11,7 @@ class LocalStorageService {
   static const String _savedEmailKey = '${_authPrefix}saved_email';
   static const String _savedPasswordKey = '${_authPrefix}saved_password';
   static const String _cachedUserKey = '${_authPrefix}cached_user';
+  static const String _cachedUserSigKey = '${_authPrefix}cached_user_sig';
   static const String _darkModeKey = '${_settingsPrefix}is_dark_mode';
   static const String _deviceIdKey = 'classrealm_device_id';
 
@@ -19,6 +20,7 @@ class LocalStorageService {
   static const String keySavedEmail = _savedEmailKey;
   static const String keySavedPassword = _savedPasswordKey;
   static const String keyCachedUser = _cachedUserKey;
+  static const String keyCachedUserSig = _cachedUserSigKey;
   static const String keyIsDarkMode = _darkModeKey;
   static const String keyDeviceId = _deviceIdKey;
   static const String keyAssessmentCreationCooldown =
@@ -123,18 +125,80 @@ class LocalStorageService {
     );
   }
 
+  /// Computes a deterministic tamper-detection signature bound to the user's critical
+  /// authorization fields (`id`, `email`, `role`, `status`, `isArchived`, `linkedStudentId`)
+  /// and the device ID so manual DevTools `localStorage` role escalation is rejected.
+  static String _computeUserIntegritySignature(UserModel user, String deviceId) {
+    final canonical = [
+      'v1',
+      deviceId.trim(),
+      user.id.trim(),
+      user.email.trim().toLowerCase(),
+      user.role.name,
+      user.status.name,
+      user.isArchived ? '1' : '0',
+      (user.linkedStudentId ?? '').trim(),
+      (user.studentId ?? '').trim(),
+    ].join('|');
+
+    // Dual-lane 64-bit FNV-1a mix with internal salt for deterministic cross-platform integrity verification
+    const String salt = 'ClassRealm::RBAC::IntegrityGuard::2026';
+    final bytes = utf8.encode('$salt|$canonical|$salt');
+    int h1 = 0x811c9dc5;
+    int h2 = 0xcbf29ce4;
+    for (int i = 0; i < bytes.length; i++) {
+      final b = bytes[i];
+      h1 ^= b;
+      h1 = (h1 * 0x01000193) & 0x7fffffff;
+      h2 ^= (b ^ (i & 0xff));
+      h2 = (h2 * 0x1000193) & 0x7fffffff;
+    }
+    return '${h1.toRadixString(16).padLeft(8, '0')}${h2.toRadixString(16).padLeft(8, '0')}';
+  }
+
   static Future<void> saveUser(UserModel user) async {
     final prefs = await _prefs;
+    final deviceId = await getDeviceId();
     final userJson = jsonEncode(user.toJson());
+    final sig = _computeUserIntegritySignature(user, deviceId);
     await _ensureSaved(await prefs.setString(keyCachedUser, userJson));
+    await _ensureSaved(await prefs.setString(keyCachedUserSig, sig));
   }
 
   static UserModel? getCachedUser() {
     final userStr = _preferences?.getString(keyCachedUser);
     if (userStr == null) return null;
     try {
-      return UserModel.fromJson(jsonDecode(userStr));
+      final decoded = jsonDecode(userStr);
+      if (decoded is! Map<String, dynamic>) {
+        _preferences?.remove(keyCachedUser);
+        _preferences?.remove(keyCachedUserSig);
+        return null;
+      }
+      final rawRole = decoded['role']?.toString();
+      final validRole = UserRole.values.any((e) => e.name == rawRole);
+      if (!validRole) {
+        _preferences?.remove(keyCachedUser);
+        _preferences?.remove(keyCachedUserSig);
+        return null;
+      }
+
+      final user = UserModel.fromJson(decoded);
+      final storedSig = _preferences?.getString(keyCachedUserSig);
+      final deviceId = getSyncDeviceId();
+      final expectedSig = _computeUserIntegritySignature(user, deviceId);
+
+      // Reject any cached user whose signature is missing or does not match
+      // (e.g., if a user edited `role` or `id` in browser DevTools localStorage).
+      if (storedSig == null || storedSig != expectedSig) {
+        _preferences?.remove(keyCachedUser);
+        _preferences?.remove(keyCachedUserSig);
+        return null;
+      }
+      return user;
     } catch (e) {
+      _preferences?.remove(keyCachedUser);
+      _preferences?.remove(keyCachedUserSig);
       return null;
     }
   }
@@ -148,11 +212,13 @@ class LocalStorageService {
   static Future<void> clearCachedUser() async {
     final prefs = await _prefs;
     await _ensureSaved(await prefs.remove(keyCachedUser));
+    await _ensureSaved(await prefs.remove(keyCachedUserSig));
   }
 
   static Future<void> clearAuth() async {
     final prefs = await _prefs;
     await prefs.remove(keyCachedUser);
+    await prefs.remove(keyCachedUserSig);
     await prefs.remove('session.active_id');
     await prefs.remove('session.last_interaction');
     await prefs.remove('session.last_active_route');

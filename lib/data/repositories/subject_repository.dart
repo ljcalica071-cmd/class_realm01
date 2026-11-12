@@ -364,11 +364,12 @@ class SubjectRepository {
             st1_weight,
             st2_weight,
             te_weight,
-            subjects ( id, subject_name, grade_level ),
-            sections ( id, section_name, grade_level )
+            subjects!inner ( id, subject_name, grade_level, is_archived ),
+            sections!inner ( id, section_name, grade_level )
           ''')
             .eq('teacher_id', teacherId)
-            .eq('is_archived', false);
+            .eq('is_archived', false)
+            .eq('subjects.is_archived', false);
       } on PostgrestException catch (error) {
         if (!_isMissingTermMetadata(error)) rethrow;
         debugPrint(
@@ -381,11 +382,12 @@ class SubjectRepository {
               ww_weight,
               pt_weight,
               ex_weight,
-              subjects ( id, subject_name, grade_level ),
-              sections ( id, section_name, grade_level )
+              subjects!inner ( id, subject_name, grade_level, is_archived ),
+              sections!inner ( id, section_name, grade_level )
             ''')
             .eq('teacher_id', teacherId)
-            .eq('is_archived', false);
+            .eq('is_archived', false)
+            .eq('subjects.is_archived', false);
       }
 
       final rows = response as List;
@@ -403,7 +405,10 @@ class SubjectRepository {
         return [];
       }
 
-      final mapped = rows.map<Map<String, dynamic>>((row) {
+      final mapped = rows.where((row) {
+        final sub = row['subjects'] as Map<String, dynamic>? ?? {};
+        return row['is_archived'] != true && sub['is_archived'] != true;
+      }).map<Map<String, dynamic>>((row) {
         final sub = row['subjects'] as Map<String, dynamic>? ?? {};
         final sec = row['sections'] as Map<String, dynamic>? ?? {};
         return {
@@ -1209,6 +1214,15 @@ class SubjectRepository {
       debugPrint('Drift archive single offering notice: $e');
     }
 
+    try {
+      await _client
+          .from('teacher_schedule')
+          .update({'is_active': false})
+          .eq('subject_offering_id', offeringId);
+    } catch (e) {
+      debugPrint('Notice deactivating schedules for single offering: $e');
+    }
+
     final teacherId = offRow?['teacher_id']?.toString();
     if (teacherId != null) {
       final currentCached = LocalStorageService.getTeacherSubjects(teacherId);
@@ -1256,6 +1270,15 @@ class SubjectRepository {
       );
     } catch (e) {
       debugPrint('Drift restore single offering notice: $e');
+    }
+
+    try {
+      await _client
+          .from('teacher_schedule')
+          .update({'is_active': true})
+          .eq('subject_offering_id', offeringId);
+    } catch (e) {
+      debugPrint('Notice activating schedules for single offering: $e');
     }
 
     final teacherId = offRow?['teacher_id']?.toString();
@@ -1307,6 +1330,27 @@ class SubjectRepository {
       debugPrint('Drift archive update notice: $e');
     }
 
+    // Deactivate schedules linked to the archived subject offerings
+    try {
+      final offerings = await _client
+          .from('subject_offerings')
+          .select('id')
+          .eq('teacher_id', teacherId)
+          .eq('subject_id', subjectId);
+      final offeringIds = (offerings as List)
+          .map((o) => o['id']?.toString())
+          .whereType<String>()
+          .toList();
+      if (offeringIds.isNotEmpty) {
+        await _client
+            .from('teacher_schedule')
+            .update({'is_active': false})
+            .inFilter('subject_offering_id', offeringIds);
+      }
+    } catch (e) {
+      debugPrint('Notice deactivating schedules for archived offering: $e');
+    }
+
     // Update LocalStorageService cache
     final currentCached = LocalStorageService.getTeacherSubjects(teacherId);
     final updated = currentCached
@@ -1348,6 +1392,27 @@ class SubjectRepository {
       );
     } catch (e) {
       debugPrint('Drift restore update notice: $e');
+    }
+
+    // Reactivate schedules linked to the restored subject offerings
+    try {
+      final offerings = await _client
+          .from('subject_offerings')
+          .select('id')
+          .eq('teacher_id', teacherId)
+          .eq('subject_id', subjectId);
+      final offeringIds = (offerings as List)
+          .map((o) => o['id']?.toString())
+          .whereType<String>()
+          .toList();
+      if (offeringIds.isNotEmpty) {
+        await _client
+            .from('teacher_schedule')
+            .update({'is_active': true})
+            .inFilter('subject_offering_id', offeringIds);
+      }
+    } catch (e) {
+      debugPrint('Notice reactivating schedules for restored offering: $e');
     }
 
     AppDataCache.instance.invalidatePrefix('teacher_subjects_$teacherId');

@@ -1707,6 +1707,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                                 'Thursday',
                                 'Friday',
                                 'Saturday',
+                                'Sunday',
                               ]
                               .map(
                                 (d) =>

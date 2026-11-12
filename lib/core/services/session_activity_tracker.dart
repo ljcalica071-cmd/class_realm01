@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
@@ -8,6 +9,7 @@ import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/sync_coordinator.dart';
 import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/routes/app_routes.dart';
 
 /// Global Session Activity Tracker Widget (Edge Cases #1, #4, #15, #16, #18)
 /// Handles:
@@ -21,8 +23,16 @@ class SessionActivityTracker extends StatefulWidget {
 
   static _SessionActivityTrackerState? _state;
 
+  /// Custom clock provider (defaults to DateTime.now, overrideable for automated tests)
+  static DateTime Function() nowProvider = DateTime.now;
+
   /// External keep-alive hook for video/lecture viewers
   static void keepAlive() {
+    _state?._recordInteraction();
+  }
+
+  /// Records a user interaction manually from external callers.
+  static void recordInteraction() {
     _state?._recordInteraction();
   }
 
@@ -33,6 +43,7 @@ class SessionActivityTracker extends StatefulWidget {
 class _SessionActivityTrackerState extends State<SessionActivityTracker>
     with WidgetsBindingObserver {
   DateTime _lastInteractionAt = DateTime.now();
+  DateTime? _lastDiskSaveAt;
   Timer? _tickerTimer;
   Timer? _heartbeatTimer;
   RealtimeChannel? _maintenanceChannel;
@@ -46,9 +57,11 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     super.initState();
     SessionActivityTracker._state = this;
     WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
 
     _lastInteractionAt =
-        LocalStorageService.getLastInteraction() ?? DateTime.now();
+        LocalStorageService.getLastInteraction() ??
+        SessionActivityTracker.nowProvider();
     LocalStorageService.saveLastInteraction(_lastInteractionAt);
 
     _initSessionLog();
@@ -60,18 +73,32 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     SessionActivityTracker._state = null;
     _tickerTimer?.cancel();
     _heartbeatTimer?.cancel();
     if (_maintenanceChannel != null) {
-      Supabase.instance.client.removeChannel(_maintenanceChannel!);
+      try {
+        Supabase.instance.client.removeChannel(_maintenanceChannel!);
+      } catch (_) {}
     }
     super.dispose();
   }
 
+  bool _handleKeyEvent(KeyEvent event) {
+    _recordInteraction();
+    return false;
+  }
+
   void _recordInteraction() {
-    _lastInteractionAt = DateTime.now();
-    LocalStorageService.saveLastInteraction(_lastInteractionAt);
+    final now = SessionActivityTracker.nowProvider();
+    _lastInteractionAt = now;
+    // Throttle disk persistence to at most once every 5 seconds
+    if (_lastDiskSaveAt == null ||
+        now.difference(_lastDiskSaveAt!).inSeconds >= 5) {
+      _lastDiskSaveAt = now;
+      LocalStorageService.saveLastInteraction(now);
+    }
   }
 
   // =========================================================================
@@ -152,9 +179,19 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
 
   void _checkInactivity() {
     final user = AuthRepository.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = null;
+      _activeSessionLogId = null;
+      return;
+    }
 
-    final now = DateTime.now();
+    if (_heartbeatTimer == null) {
+      _startHeartbeat();
+      _initSessionLog();
+    }
+
+    final now = SessionActivityTracker.nowProvider();
     final inactiveDuration = now.difference(_lastInteractionAt);
 
     // Strict 30-Minute Inactivity Limit
@@ -170,10 +207,11 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
 
   void _showInactivityWarningModal() {
     if (!mounted || _isWarningDialogShowing) return;
+    final navContext = AppRoutes.navigatorKey.currentContext ?? context;
     _isWarningDialogShowing = true;
 
     showDialog(
-      context: context,
+      context: navContext,
       barrierDismissible: false,
       builder: (dialogContext) {
         final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
@@ -339,15 +377,23 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
   }
 
   Future<void> _triggerAutoLogout(String reason) async {
-    _tickerTimer?.cancel();
     _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
 
-    if (_isWarningDialogShowing && mounted) {
-      Navigator.of(context, rootNavigator: true).pop();
+    if (_isWarningDialogShowing) {
       _isWarningDialogShowing = false;
+      try {
+        AppRoutes.navigatorKey.currentState?.maybePop();
+      } catch (_) {}
     }
 
-    if (mounted) {
+    _lastInteractionAt = SessionActivityTracker.nowProvider();
+    LocalStorageService.saveLastInteraction(_lastInteractionAt);
+
+    final navContext = AppRoutes.navigatorKey.currentContext;
+    if (navContext != null && navContext.mounted) {
+      await LogoutHelper.logout(navContext, reason);
+    } else {
       await LogoutHelper.logout(context, reason);
     }
   }
@@ -378,22 +424,24 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     }());
 
     // 2. Realtime subscription for live toggle changes
-    _maintenanceChannel = Supabase.instance.client
-        .channel('system_settings_listener')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'system_settings',
-          callback: (payload) async {
-            final newRow = payload.newRecord;
-            final isMaintenance = newRow['is_maintenance_mode'] == true;
-            await LocalStorageService.saveMaintenanceMode(isMaintenance);
-            if (isMaintenance) {
-              await _enforceMaintenanceLockdownIfNeeded();
-            }
-          },
-        )
-        .subscribe();
+    try {
+      _maintenanceChannel = Supabase.instance.client
+          .channel('system_settings_listener')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'system_settings',
+            callback: (payload) async {
+              final newRow = payload.newRecord;
+              final isMaintenance = newRow['is_maintenance_mode'] == true;
+              await LocalStorageService.saveMaintenanceMode(isMaintenance);
+              if (isMaintenance) {
+                await _enforceMaintenanceLockdownIfNeeded();
+              }
+            },
+          )
+          .subscribe();
+    } catch (_) {}
   }
 
   @override
@@ -402,14 +450,9 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
       onPointerDown: (_) => _recordInteraction(),
       onPointerMove: (_) => _recordInteraction(),
       onPointerHover: (_) => _recordInteraction(),
+      onPointerSignal: (_) => _recordInteraction(),
       behavior: HitTestBehavior.translucent,
-      child: Focus(
-        onKeyEvent: (node, event) {
-          _recordInteraction();
-          return KeyEventResult.ignored;
-        },
-        child: widget.child,
-      ),
+      child: widget.child,
     );
   }
 }

@@ -18,7 +18,6 @@ import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/data/repositories/supabase_teacher_classwork_repository.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
-import 'package:class_realm/core/services/session_activity_tracker.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/routes/app_routes.dart';
@@ -151,9 +150,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final assessId = nav['activeAssessmentId']?.toString();
       final actId = nav['activeActivityId']?.toString();
       if (assessId != null && assessId.isNotEmpty) {
-        updateBrowserUrl('$route?tab=$tabParam&assessment=$assessId', replace: false);
+        updateBrowserUrl('$route?tab=$tabParam&view=proctoring', replace: false);
       } else if (actId != null && actId.isNotEmpty) {
-        updateBrowserUrl('$route?tab=$tabParam&activity=$actId', replace: false);
+        updateBrowserUrl('$route?tab=$tabParam&view=submissions', replace: false);
       } else {
         updateBrowserUrl('$route?tab=$tabParam', replace: false);
       }
@@ -170,6 +169,20 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    final effectiveUser = widget.teacher ?? AuthRepository.instance.currentUser;
+    if (effectiveUser != null && effectiveUser.role != UserRole.teacher) {
+      final redirectRoute = AppRoutes.resolveSafeRouteForUser(effectiveUser);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            redirectRoute,
+            (route) => false,
+          );
+        }
+      });
+      return;
+    }
     TeacherGradebookTab.classworkSyncNotifier.addListener(
       _onClassworkSyncTriggered,
     );
@@ -190,9 +203,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final assessId = nav['activeAssessmentId']?.toString();
       final actId = nav['activeActivityId']?.toString();
       if (assessId != null && assessId.isNotEmpty) {
-        updateBrowserUrl('$currentRoute?tab=$tabParam&assessment=$assessId');
+        updateBrowserUrl('$currentRoute?tab=$tabParam&view=proctoring');
       } else if (actId != null && actId.isNotEmpty) {
-        updateBrowserUrl('$currentRoute?tab=$tabParam&activity=$actId');
+        updateBrowserUrl('$currentRoute?tab=$tabParam&view=submissions');
       } else {
         updateBrowserUrl('$currentRoute?tab=$tabParam');
       }
@@ -217,6 +230,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         });
         LocalStorageService.saveActiveDashboardTab('teacher', targetIndex);
         LocalStorageService.saveLastActiveRoute(path);
+      } else if (targetIndex == 1 && _selectedIndex == 1) {
+        final uri = Uri.tryParse(path);
+        final view = uri?.queryParameters['view'];
+        if (view != 'submissions' && _viewingSubmissionsFor != null) {
+          setState(() {
+            _viewingSubmissionsFor = null;
+          });
+          LocalStorageService.saveTeacherClassworkNavState(
+            clearActiveActivity: true,
+          );
+        }
       }
     });
     InAppNotificationService.subscribeToAnnouncements(role: 'teacher');
@@ -347,6 +371,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveUser = widget.teacher ?? AuthRepository.instance.currentUser;
+    if (effectiveUser != null && effectiveUser.role != UserRole.teacher) {
+      return const SizedBox.shrink();
+    }
     if (_isLoading) {
       return Scaffold(
         body: Center(
@@ -800,19 +828,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
     return PopScope(
       canPop: false,
-      child: SessionActivityTracker(
-        child: Scaffold(
-          backgroundColor: theme.scaffoldBackgroundColor,
-          drawer: isMobile ? sidebar : null,
-          body: isMobile
-              ? mainContent
-              : Row(
-                  children: [
-                    sidebar,
-                    Expanded(child: mainContent),
-                  ],
-                ),
-        ),
+      child: Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        drawer: isMobile ? sidebar : null,
+        body: isMobile
+            ? mainContent
+            : Row(
+                children: [
+                  sidebar,
+                  Expanded(child: mainContent),
+                ],
+              ),
       ),
     );
   }
@@ -1032,7 +1058,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       ? 'pt'
                       : (act.gradingCategory == 'ex' ? 'ex' : 'ww');
                   updateBrowserUrl(
-                    '${AppRoutes.teacherClasswork}?tab=$catParam&activity=${act.id}',
+                    '${AppRoutes.teacherClasswork}?tab=$catParam&view=submissions',
                   );
                   setState(() => _viewingSubmissionsFor = act);
                 },

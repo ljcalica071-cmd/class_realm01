@@ -85,12 +85,14 @@ class _TeacherDashboardOverviewTabState
       );
 
       if (cachedSubjects != null) {
-        totalSubjects = cachedSubjects
+        final activeCached =
+            cachedSubjects.where((e) => e['is_archived'] != true).toList();
+        totalSubjects = activeCached
             .map((e) => e['subject_name']?.toString() ?? '')
             .where((name) => name.isNotEmpty)
             .toSet()
             .length;
-        totalSections = cachedSubjects
+        totalSections = activeCached
             .map((e) => '${e['subject_name'] ?? ''}-${e['section_name'] ?? ''}')
             .toSet()
             .length;
@@ -179,12 +181,13 @@ class _TeacherDashboardOverviewTabState
       final subjects = await SubjectRepository.instance.getTeacherSubjects(
         currentUser.id,
       );
-      final uniqueSubjects = subjects
+      final activeSubjects = subjects.where((e) => e['is_archived'] != true).toList();
+      final uniqueSubjects = activeSubjects
           .map((e) => e['subject_name']?.toString() ?? '')
           .where((name) => name.isNotEmpty)
           .toSet()
           .length;
-      final uniqueSections = subjects
+      final uniqueSections = activeSubjects
           .map((e) => '${e['subject_name'] ?? ''}-${e['section_name'] ?? ''}')
           .toSet()
           .length;

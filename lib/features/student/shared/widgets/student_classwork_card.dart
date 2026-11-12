@@ -39,6 +39,10 @@ class StudentClassworkCard extends StatelessWidget {
         cleanUrl.contains('token=') || cleanUrl.contains('Signature=');
 
     String cleanPath = cleanUrl;
+    final bucket = (cleanUrl.contains('learning_materials') ||
+            cleanUrl.contains('learning-materials'))
+        ? 'learning_materials'
+        : 'classwork-materials';
     if (!isFullHttpUrl || !alreadySigned) {
       if (cleanPath.contains('/classwork-materials/')) {
         cleanPath = cleanPath.split('/classwork-materials/').last;
@@ -54,7 +58,7 @@ class StudentClassworkCard extends StatelessWidget {
 
       try {
         return await SupabaseService().adminClient.storage
-            .from('classwork-materials')
+            .from(bucket)
             .createSignedUrl(cleanPath, 60 * 60);
       } catch (storageErr) {
         debugPrint('Storage createSignedUrl notice: $storageErr');
@@ -62,7 +66,7 @@ class StudentClassworkCard extends StatelessWidget {
           return cleanUrl;
         } else {
           return SupabaseService().client.storage
-              .from('classwork-materials')
+              .from(bucket)
               .getPublicUrl(cleanPath);
         }
       }
@@ -407,34 +411,55 @@ class StudentClassworkCard extends StatelessWidget {
             ],
 
             // 1. TEACHER'S ATTACHED REFERENCE MATERIAL (PDF or DOC)
+            // Stays permanently visible even after the student submits!
             if (classwork.attachment != null &&
-                classwork.attachment!.fileName.trim().isNotEmpty &&
-                (classwork.attachment!.signedUrl?.trim().isNotEmpty ?? false)) ...[
+                classwork.attachment!.fileName.trim().isNotEmpty) ...[
               const SizedBox(height: 12),
               _buildDocumentCard(
                 context: context,
                 theme: theme,
                 title: 'Teacher Attached Material',
+                subtitle: classwork.attachment!.fileSizeBytes != null
+                    ? '${_formatFileSize(classwork.attachment!.fileSizeBytes!)} • Tap to view or download'
+                    : 'Attached with instructions • Tap to view or download',
                 fileName: classwork.attachment!.fileName,
                 fileSizeBytes: classwork.attachment!.fileSizeBytes,
                 signedUrl: classwork.attachment!.signedUrl,
+                buttonLabel: 'View Attached File',
                 isTeacherAttachment: true,
               ),
             ],
 
-            // 2. STUDENT'S SUBMITTED WORK (PDF or DOC)
-            if (classwork.studentSubmission != null) ...[
+            // 2. STUDENT'S SUBMITTED WORK (PDF or DOC) - "YOUR WORK"
+            if (classwork.studentSubmission != null &&
+                (classwork.studentSubmission!.fileName.trim().isNotEmpty ||
+                    classwork.studentSubmission!.signedUrl?.trim().isNotEmpty == true)) ...[
               const SizedBox(height: 12),
               _buildDocumentCard(
                 context: context,
                 theme: theme,
-                title: 'Your Submitted Work',
+                title: 'Your Work (Submitted File)',
                 subtitle: classwork.submittedAt != null
                     ? 'Turned in on ${_formatDate(classwork.submittedAt!)}'
                     : 'Turned in online',
-                fileName: classwork.studentSubmission!.fileName,
+                fileName: classwork.studentSubmission!.fileName.isNotEmpty
+                    ? classwork.studentSubmission!.fileName
+                    : 'Submitted Output Document',
                 fileSizeBytes: classwork.studentSubmission!.fileSizeBytes,
                 signedUrl: classwork.studentSubmission!.signedUrl,
+                buttonLabel: 'View Your Work',
+                isSubmittedWork: true,
+              ),
+            ] else if (isSubmitted && classwork.completionMode != 'in_person') ...[
+              const SizedBox(height: 12),
+              _buildDocumentCard(
+                context: context,
+                theme: theme,
+                title: 'Your Work (Submitted)',
+                subtitle: classwork.submittedAt != null
+                    ? 'Turned in on ${_formatDate(classwork.submittedAt!)}'
+                    : 'Turned in online',
+                fileName: 'Online Submission Received',
                 buttonLabel: 'View Your Work',
                 isSubmittedWork: true,
               ),
@@ -883,10 +908,14 @@ class StudentClassworkCard extends StatelessWidget {
     bool isTeacherAttachment = false,
   }) {
     final isPdf = fileName.toLowerCase().endsWith('.pdf');
-    final accentColor = isPdf
-        ? const Color(0xFFDC2626) // PDF Red
-        : const Color(0xFF2563EB); // Word Blue
-    final iconData = isPdf ? Icons.picture_as_pdf : Icons.description;
+    final accentColor = isSubmittedWork
+        ? const Color(0xFF0F8A48) // Green for Your Work
+        : (isPdf
+            ? const Color(0xFFDC2626) // PDF Red
+            : const Color(0xFF2563EB)); // Word Blue
+    final iconData = isSubmittedWork
+        ? Icons.task_alt
+        : (isPdf ? Icons.picture_as_pdf : Icons.description);
 
     return InkWell(
       onTap: () => _openAttachment(context, signedUrl),
@@ -902,7 +931,7 @@ class StudentClassworkCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSubmittedWork
-                ? const Color(0xFF0F8A48).withValues(alpha: 0.3)
+                ? const Color(0xFF0F8A48).withValues(alpha: 0.35)
                 : theme.colorScheme.onSurface.withValues(alpha: 0.12),
           ),
         ),
@@ -997,7 +1026,44 @@ class StudentClassworkCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (isTeacherAttachment)
+                if (isTeacherAttachment) ...[
+                  if (!isNarrow && (actionLabel != null || buttonLabel != null)) ...[
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: actionLabel != null ? 8 : 6,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (actionLabel != null) ...[
+                            Text(
+                              actionLabel,
+                              style: TextStyle(
+                                fontSize: isNarrow ? 11 : 12,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          Icon(
+                            Icons.open_in_new,
+                            size: 13,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
@@ -1005,7 +1071,7 @@ class StudentClassworkCard extends StatelessWidget {
                       onTap: () =>
                           _downloadAttachment(context, signedUrl, fileName),
                       child: Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color:
                               theme.colorScheme.primary.withValues(alpha: 0.08),
@@ -1019,24 +1085,28 @@ class StudentClassworkCard extends StatelessWidget {
                           message: 'Download file',
                           child: Icon(
                             Icons.download_rounded,
-                            size: 20,
+                            size: 18,
                             color: theme.colorScheme.primary,
                           ),
                         ),
                       ),
                     ),
-                  )
-                else if (actionLabel != null || buttonLabel != null)
+                  ),
+                ] else if (actionLabel != null || buttonLabel != null)
                   Container(
                     padding: EdgeInsets.symmetric(
                       horizontal: actionLabel != null ? 8 : 6,
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                      color: isSubmittedWork
+                          ? const Color(0xFF0F8A48).withValues(alpha: 0.12)
+                          : theme.colorScheme.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                        color: isSubmittedWork
+                            ? const Color(0xFF0F8A48).withValues(alpha: 0.35)
+                            : theme.colorScheme.primary.withValues(alpha: 0.2),
                       ),
                     ),
                     child: Row(
@@ -1048,7 +1118,9 @@ class StudentClassworkCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: isNarrow ? 11 : 12,
                               fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.primary,
+                              color: isSubmittedWork
+                                  ? const Color(0xFF0F8A48)
+                                  : theme.colorScheme.primary,
                             ),
                           ),
                           const SizedBox(width: 4),
@@ -1056,7 +1128,9 @@ class StudentClassworkCard extends StatelessWidget {
                         Icon(
                           Icons.open_in_new,
                           size: 13,
-                          color: theme.colorScheme.primary,
+                          color: isSubmittedWork
+                              ? const Color(0xFF0F8A48)
+                              : theme.colorScheme.primary,
                         ),
                       ],
                     ),

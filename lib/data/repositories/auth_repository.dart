@@ -19,6 +19,7 @@ import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
+import 'package:class_realm/core/services/supabase_service.dart';
 
 class FirstLoginOtpVerification {
   const FirstLoginOtpVerification({
@@ -378,14 +379,29 @@ class AuthRepository {
         try {
           final updatedUser = await _getUserFromSupabase(firebaseUser.uid);
           if (updatedUser != null) {
+            if (updatedUser.role != cachedUser.role) {
+              // Role tampering or server-side role change detected: invalidate session immediately
+              await _firebaseAuth.signOut();
+              await LocalStorageService.clearAuth();
+              _currentUser = null;
+              return null;
+            }
             _currentUser = updatedUser;
             await LocalStorageService.saveUser(updatedUser);
+          } else {
+            // User no longer exists in Supabase `users` table
+            await _firebaseAuth.signOut();
+            await LocalStorageService.clearAuth();
+            _currentUser = null;
+            return null;
           }
         } catch (_) {}
 
         if (_currentUser != null &&
             (_currentUser!.isArchived ||
                 _currentUser!.status == custom.AccountStatus.archived ||
+                _currentUser!.status == custom.AccountStatus.deactivated ||
+                _currentUser!.status == custom.AccountStatus.rejected ||
                 (isMaintenance &&
                     _currentUser!.role != custom.UserRole.admin))) {
           await _firebaseAuth.signOut();
@@ -398,12 +414,19 @@ class AuthRepository {
         return _currentUser;
       }
 
+      // If cachedUser belongs to a different UID than firebaseUser.uid, purge stale cache
+      if (cachedUser != null && cachedUser.id != firebaseUser.uid) {
+        await LocalStorageService.clearCachedUser();
+      }
+
       // If no cache, perform standard fetch
       try {
         _currentUser = await _getUserFromSupabase(firebaseUser.uid);
         if (_currentUser != null) {
           if (_currentUser!.isArchived ||
               _currentUser!.status == custom.AccountStatus.archived ||
+              _currentUser!.status == custom.AccountStatus.deactivated ||
+              _currentUser!.status == custom.AccountStatus.rejected ||
               (isMaintenance && _currentUser!.role != custom.UserRole.admin)) {
             await _firebaseAuth.signOut();
             await LocalStorageService.clearAuth();
@@ -416,7 +439,7 @@ class AuthRepository {
         }
       } catch (e) {
         debugPrint('Failed to restore session from Supabase: $e');
-        if (cachedUser != null) {
+        if (cachedUser != null && cachedUser.id == firebaseUser.uid) {
           if (isMaintenance && cachedUser.role != custom.UserRole.admin) {
             await _firebaseAuth.signOut();
             await LocalStorageService.clearAuth();
@@ -428,7 +451,11 @@ class AuthRepository {
         }
       }
     } else if (cached != null) {
-      if (isMaintenance && cached.role != custom.UserRole.admin) {
+      if (cached.isArchived ||
+          cached.status == custom.AccountStatus.archived ||
+          cached.status == custom.AccountStatus.deactivated ||
+          cached.status == custom.AccountStatus.rejected ||
+          (isMaintenance && cached.role != custom.UserRole.admin)) {
         await LocalStorageService.clearAuth();
         _currentUser = null;
         return null;
@@ -521,7 +548,7 @@ class AuthRepository {
                 '*, student_profiles!inner(student_id, lrn, first_name, middle_name, last_name, birthday, gender)',
               )
               .eq('student_id', uid)
-              .single(),
+              .maybeSingle(),
           _supabaseClient
               .from('student_enrollments')
               .select('subject_offerings(sections(section_name, grade_level))')
@@ -531,12 +558,28 @@ class AuthRepository {
               .maybeSingle(),
         ]);
         final infoResp = results[0] as Map<String, dynamic>?;
-        final profileRaw = infoResp?['student_profiles'];
-        final Map<String, dynamic> profile = profileRaw is List
-            ? (profileRaw.isNotEmpty
-                  ? Map<String, dynamic>.from(profileRaw.first as Map)
-                  : <String, dynamic>{})
-            : Map<String, dynamic>.from(profileRaw as Map? ?? {});
+        Map<String, dynamic> profile = {};
+        if (infoResp != null && infoResp['student_profiles'] != null) {
+          final profileRaw = infoResp['student_profiles'];
+          profile = profileRaw is List
+              ? (profileRaw.isNotEmpty
+                    ? Map<String, dynamic>.from(profileRaw.first as Map)
+                    : <String, dynamic>{})
+              : Map<String, dynamic>.from(profileRaw as Map? ?? {});
+        } else {
+          try {
+            final directProfile = await _supabaseClient
+                .from('student_profiles')
+                .select(
+                  'student_id, lrn, first_name, middle_name, last_name, birthday, gender',
+                )
+                .eq('student_id', uid)
+                .maybeSingle();
+            if (directProfile != null) {
+              profile = Map<String, dynamic>.from(directProfile);
+            }
+          } catch (_) {}
+        }
         final enrollment = results[1] as Map<String, dynamic>?;
         final offeringRaw = enrollment?['subject_offerings'];
         final offering = offeringRaw is List
@@ -1355,24 +1398,43 @@ class AuthRepository {
           .select('status')
           .eq(idColumn, userId)
           .maybeSingle();
-      if (statusRow == null) {
-        return 'Your account password was changed, but its status record could not be found. Please contact your administrator.';
-      }
 
-      final currentStatus = statusRow['status']?.toString();
-      if (currentStatus == 'archived') {
-        return 'Your password was changed, but this account is archived. Please contact your administrator.';
-      }
-      if (currentStatus != 'active') {
-        final activatedRow = await _supabaseClient
-            .from(settingsTable)
-            .update({'status': 'active'})
-            .eq(idColumn, userId)
-            .eq('status', 'pending_first_login')
-            .select(idColumn)
-            .maybeSingle();
-        if (activatedRow == null) {
-          return 'Your password was changed, but your account could not be activated. Please try again or contact your administrator.';
+      if (statusRow == null) {
+        // Auto-heal missing settings record instead of failing
+        try {
+          await _supabaseClient.from(settingsTable).upsert({
+            idColumn: userId,
+            'status': 'active',
+          });
+        } catch (e) {
+          debugPrint('Notice upserting missing $settingsTable: $e');
+          try {
+            await SupabaseService().adminClient.from(settingsTable).upsert({
+              idColumn: userId,
+              'status': 'active',
+            });
+          } catch (_) {}
+        }
+      } else {
+        final currentStatus = statusRow['status']?.toString();
+        if (currentStatus == 'archived') {
+          return 'Your password was changed, but this account is archived. Please contact your administrator.';
+        }
+        if (currentStatus != 'active') {
+          try {
+            await _supabaseClient
+                .from(settingsTable)
+                .update({'status': 'active'})
+                .eq(idColumn, userId);
+          } catch (updateErr) {
+            debugPrint('Notice updating $settingsTable status: $updateErr');
+            try {
+              await SupabaseService().adminClient
+                  .from(settingsTable)
+                  .update({'status': 'active'})
+                  .eq(idColumn, userId);
+            } catch (_) {}
+          }
         }
       }
 
@@ -1387,6 +1449,19 @@ class AuthRepository {
       final current = _currentUser;
       if (current != null && current.id == userId) {
         _currentUser = current.copyWith(status: custom.AccountStatus.active);
+      } else {
+        _currentUser = (currentAppUser ??
+            custom.UserModel(
+              id: userId,
+              username: user?.email ?? '',
+              fullName: user?.displayName ?? 'User',
+              email: user?.email ?? '',
+              role: role,
+              status: custom.AccountStatus.active,
+            )).copyWith(status: custom.AccountStatus.active);
+      }
+      if (_currentUser != null) {
+        await LocalStorageService.saveUser(_currentUser!);
       }
       await LocalStorageService.updateSavedPasswordIfRemembered(newPassword);
       return null;

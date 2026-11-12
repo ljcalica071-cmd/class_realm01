@@ -79,4 +79,152 @@ class AppRoutes {
         return parentHome;
     }
   }
+
+  /// Normalizes a route path by stripping query parameters, hash fragments, and trailing slashes.
+  static String normalizeRoutePath(String rawPath) {
+    var clean = rawPath.split('?').first.split('#').first.trim();
+    if (clean.length > 1 && clean.endsWith('/')) {
+      clean = clean.substring(0, clean.length - 1);
+    }
+    return clean.isEmpty ? '/' : clean;
+  }
+
+  /// Strictly validates whether [route] is permitted for a user with [role] and [status].
+  /// Enforces horizontal & vertical role isolation:
+  /// - Admin can ONLY access `/admin/*` routes.
+  /// - Teacher can ONLY access `/teacher/*` routes.
+  /// - Student can ONLY access `/student/*` routes.
+  /// - Parent can ONLY access `/parent/*` routes.
+  /// - Accounts in `pendingFirstLogin` or `pending` status can ONLY access their role's first-login route.
+  static bool isRouteAllowedForRole(
+    String route,
+    UserRole role, {
+    AccountStatus status = AccountStatus.active,
+    bool isArchived = false,
+  }) {
+    if (isArchived ||
+        status == AccountStatus.archived ||
+        status == AccountStatus.deactivated ||
+        status == AccountStatus.rejected) {
+      return false;
+    }
+
+    final clean = normalizeRoutePath(route);
+    if (clean.isEmpty ||
+        clean == '/' ||
+        clean == login ||
+        clean == splash ||
+        clean == forgotPassword) {
+      return false;
+    }
+
+    final isFirstLoginPending =
+        status == AccountStatus.pendingFirstLogin ||
+        status == AccountStatus.pending;
+
+    if (isFirstLoginPending) {
+      return switch (role) {
+        UserRole.admin => false,
+        UserRole.teacher =>
+          clean == teacherFirstLogin || clean == '/teacher/first_login',
+        UserRole.student =>
+          clean == studentFirstLogin || clean == '/student/first_login',
+        UserRole.parent =>
+          clean == parentFirstLogin || clean == '/parent/first_login',
+      };
+    }
+
+    // Active users cannot visit first-login setup screens or other roles' routes
+    return switch (role) {
+      UserRole.admin => const {
+        adminDashboard,
+        adminBroadcasts,
+        adminTeacherManagement,
+        adminAddTeacher,
+        adminActivityAnalytics,
+        adminProfile,
+      }.contains(clean),
+      UserRole.teacher => const {
+        academicSetup,
+        teacherDashboard,
+        teacherClassroomSetup,
+        teacherGradebook,
+        teacherManageStudents,
+        teacherManageParents,
+        teacherClasswork,
+        teacherLessonPlanning,
+        teacherLearningMaterials,
+        teacherAttendance,
+        teacherGrades,
+        teacherSchedule,
+        teacherNotifications,
+        teacherProfile,
+        teacherSettings,
+      }.contains(clean),
+      UserRole.student => const {
+        studentHome,
+        studentClasswork,
+        studentAlerts,
+        studentProfile,
+        studentAttendance,
+        studentSchedule,
+        studentMaterials,
+        studentGrades,
+        studentPerformance,
+      }.contains(clean),
+      UserRole.parent => const {
+        parentHome,
+        parentAttendance,
+        parentSchedule,
+        parentAlerts,
+        parentProfile,
+        parentGrades,
+      }.contains(clean),
+    };
+  }
+
+  /// Resolves a safe, role-isolated route for [user]. If [candidateRoute] belongs to
+  /// another role or is invalid for the user's current status, returns the user's
+  /// legitimate dashboard (or first-login route).
+  static String resolveSafeRouteForUser(
+    UserModel user, {
+    String? candidateRoute,
+    String? fallbackSavedRoute,
+  }) {
+    if (user.isArchived ||
+        user.status == AccountStatus.archived ||
+        user.status == AccountStatus.deactivated ||
+        user.status == AccountStatus.rejected) {
+      return login;
+    }
+
+    if (user.status == AccountStatus.pendingFirstLogin ||
+        user.status == AccountStatus.pending) {
+      return getFirstLoginRouteForRole(user.role);
+    }
+
+    if (candidateRoute != null &&
+        candidateRoute.isNotEmpty &&
+        isRouteAllowedForRole(
+          candidateRoute,
+          user.role,
+          status: user.status,
+          isArchived: user.isArchived,
+        )) {
+      return normalizeRoutePath(candidateRoute);
+    }
+
+    if (fallbackSavedRoute != null &&
+        fallbackSavedRoute.isNotEmpty &&
+        isRouteAllowedForRole(
+          fallbackSavedRoute,
+          user.role,
+          status: user.status,
+          isArchived: user.isArchived,
+        )) {
+      return normalizeRoutePath(fallbackSavedRoute);
+    }
+
+    return getDashboardRouteForRole(user.role);
+  }
 }

@@ -155,8 +155,49 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
               ),
             );
       } catch (e) {
-        debugPrint('Direct storage upload error: $e');
-        throw Exception('Failed to upload file attachment: $e');
+        debugPrint('Direct storage upload error to classwork-materials (upsert: true): $e');
+        bool uploaded = false;
+
+        // Fallback 1: Try insert without upsert in case UPDATE policy lacks WITH CHECK
+        try {
+          await SupabaseService().adminClient.storage
+              .from('classwork-materials')
+              .uploadBinary(
+                storagePath,
+                fileBytes,
+                fileOptions: FileOptions(
+                  contentType: mimeType ?? 'application/octet-stream',
+                  upsert: false,
+                ),
+              );
+          uploaded = true;
+        } catch (eInsert) {
+          debugPrint('Insert without upsert fallback error: $eInsert');
+        }
+
+        // Fallback 2: Resilient upload to learning_materials bucket
+        if (!uploaded) {
+          try {
+            await SupabaseService().adminClient.storage
+                .from('learning_materials')
+                .uploadBinary(
+                  storagePath,
+                  fileBytes,
+                  fileOptions: FileOptions(
+                    contentType: mimeType ?? 'application/octet-stream',
+                    upsert: true,
+                  ),
+                );
+            storagePath = 'learning_materials/$storagePath';
+            uploaded = true;
+          } catch (eFallback) {
+            debugPrint('Secondary fallback to learning_materials error: $eFallback');
+          }
+        }
+
+        if (!uploaded) {
+          throw Exception('Failed to upload file attachment: $e');
+        }
       }
     }
 
@@ -291,10 +332,15 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
       // 3. Clean up storage attachment if any
       final storagePath = itemRow?['storage_path']?.toString();
       if (storagePath != null && storagePath.isNotEmpty) {
+        final bucket = storagePath.contains('learning_materials')
+            ? 'learning_materials'
+            : 'classwork-materials';
+        final cleanStoragePath =
+            storagePath.replaceAll('learning_materials/', '');
         try {
           await SupabaseService().adminClient.storage
-              .from('classwork-materials')
-              .remove([storagePath]);
+              .from(bucket)
+              .remove([cleanStoragePath]);
         } catch (_) {}
       }
 

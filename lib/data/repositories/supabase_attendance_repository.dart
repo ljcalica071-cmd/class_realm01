@@ -141,6 +141,10 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     return h * 60 + m;
   }
 
+  /// Converts 'HH:mm:ss' or 'HH:mm' string to total minutes since midnight.
+  static int? parseTimeToMinutes(String? raw) =>
+      _parseTimeToMinutesSinceMidnight(raw);
+
   static int? _parseTimeToSecondsSinceMidnight(String? raw) {
     final normalized = _normalizeDbTime(raw);
     if (normalized == null) return null;
@@ -150,17 +154,6 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     final m = int.tryParse(parts[1]) ?? 0;
     final s = parts.length >= 3 ? (int.tryParse(parts[2]) ?? 0) : 0;
     return h * 3600 + m * 60 + s;
-  }
-
-  static String _formatMinutesAs12h(int totalMinutes) {
-    int clamped = totalMinutes % (24 * 60);
-    if (clamped < 0) clamped += 24 * 60;
-    final h = clamped ~/ 60;
-    final m = clamped % 60;
-    final period = h >= 12 ? 'PM' : 'AM';
-    int dispH = h % 12;
-    if (dispH == 0) dispH = 12;
-    return '${dispH.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} $period';
   }
 
   static AttendanceSource _safeParseSource(Object? raw) {
@@ -1101,15 +1094,62 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       final list = (schedRows as List).cast<Map<String, dynamic>>();
       hasPlottedScheduleAnyDay = list.isNotEmpty;
 
+      final matchingRows = <Map<String, dynamic>>[];
       for (final row in list) {
         final dow = (row['day_of_week'] as num?)?.toInt();
         if (dow == targetDow) {
-          isScheduledOnDate = true;
-          startTime = row['start_time']?.toString();
-          endTime = row['end_time']?.toString();
-          room = row['room']?.toString();
-          break;
+          matchingRows.add(row);
         }
+      }
+
+      if (matchingRows.isNotEmpty) {
+        isScheduledOnDate = true;
+        Map<String, dynamic> selectedRow = matchingRows.first;
+        if (matchingRows.length > 1) {
+          final now = DateTime.now();
+          final isToday =
+              date.year == now.year &&
+              date.month == now.month &&
+              date.day == now.day;
+          final refMins = isToday
+              ? (now.hour * 60 + now.minute)
+              : (date.hour * 60 + date.minute);
+
+          selectedRow = matchingRows.reduce((curr, next) {
+            final currStart =
+                _parseTimeToMinutesSinceMidnight(
+                  curr['start_time']?.toString(),
+                ) ??
+                0;
+            final currEnd =
+                _parseTimeToMinutesSinceMidnight(
+                  curr['end_time']?.toString(),
+                ) ??
+                (currStart + 60);
+            final nextStart =
+                _parseTimeToMinutesSinceMidnight(
+                  next['start_time']?.toString(),
+                ) ??
+                0;
+            final nextEnd =
+                _parseTimeToMinutesSinceMidnight(
+                  next['end_time']?.toString(),
+                ) ??
+                (nextStart + 60);
+
+            final currInside = refMins >= currStart && refMins <= currEnd;
+            final nextInside = refMins >= nextStart && refMins <= nextEnd;
+            if (currInside && !nextInside) return curr;
+            if (nextInside && !currInside) return next;
+
+            final currDiff = (currStart - refMins).abs();
+            final nextDiff = (nextStart - refMins).abs();
+            return currDiff <= nextDiff ? curr : next;
+          });
+        }
+        startTime = selectedRow['start_time']?.toString();
+        endTime = selectedRow['end_time']?.toString();
+        room = selectedRow['room']?.toString();
       }
 
       await LocalStorageService.saveJson(
@@ -1625,6 +1665,23 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
           ? Map<String, dynamic>.from(rpcResult)
           : <String, dynamic>{};
       final outcome = RfidScanOutcome.fromJson(map);
+
+      // If remote cloud RPC rejected due to schedule window (e.g. legacy RPC deployed in cloud),
+      // seamlessly auto-recover via schedule-connected auto-mark.
+      if (!outcome.success &&
+          (outcome.code == 'AFTER_CLASS_ENDS' ||
+              outcome.code == 'SCANS_CLOSED' ||
+              outcome.code == 'BEFORE_WINDOW_OPENS')) {
+        debugPrint(
+          'Cloud RPC returned schedule cutoff rejection [${outcome.code}]. Auto-recovering via schedule auto-mark...',
+        );
+        return await _recordRfidScanDartOnline(
+          cleanUid: cleanUid,
+          subjectOfferingId: subjectOfferingId,
+          scanTimestamp: effectiveTimestamp,
+          deviceId: deviceId,
+        );
+      }
 
       if (outcome.success &&
           outcome.studentId != null &&
@@ -2268,59 +2325,18 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
   }) {
     final scanMins = _parseTimeToMinutesSinceMidnight(scanTime24);
     final startMins = _parseTimeToMinutesSinceMidnight(startTime);
-    final endMins = _parseTimeToMinutesSinceMidnight(endTime);
 
     if (scanMins == null || startMins == null) {
       return (status: AttendanceStatus.present, rejection: null);
     }
 
-    final openMins = startMins - cutoff.presentStartMinsBefore;
     final graceMins = startMins + cutoff.presentGraceMins;
     final lateMins = startMins + cutoff.lateCutoffMins;
-    final absentMins = startMins + cutoff.absentCutoffMins;
 
-    if (scanMins < openMins) {
-      return (
-        status: null,
-        rejection: RfidScanOutcome(
-          success: false,
-          code: 'BEFORE_WINDOW_OPENS',
-          studentId: studentId,
-          studentName: studentName,
-          message:
-              'Too early to scan. Attendance window opens at ${_formatMinutesAs12h(openMins)}.',
-        ),
-      );
-    }
-
-    if (endMins != null && scanMins > endMins) {
-      return (
-        status: null,
-        rejection: RfidScanOutcome(
-          success: false,
-          code: 'AFTER_CLASS_ENDS',
-          studentId: studentId,
-          studentName: studentName,
-          message:
-              'Class ended at ${_formatMinutesAs12h(endMins)}. Scans are closed.',
-        ),
-      );
-    }
-
-    if (scanMins > absentMins) {
-      return (
-        status: null,
-        rejection: RfidScanOutcome(
-          success: false,
-          code: 'SCANS_CLOSED',
-          studentId: studentId,
-          studentName: studentName,
-          message:
-              'Attendance cutoff window closed at ${_formatMinutesAs12h(absentMins)}.',
-        ),
-      );
-    }
-
+    // Connected to schedule auto-mark:
+    // 1. On-time / early arrival / within grace period -> Present
+    // 2. After grace period but before or at late cutoff -> Late
+    // 3. After late cutoff or after class ends -> Absent (tap recorded with timestamp)
     if (scanMins <= graceMins) {
       return (status: AttendanceStatus.present, rejection: null);
     }

@@ -23,60 +23,84 @@ class LegalDocumentsModal {
     LegalDocumentSection(
       title: '1. Acceptance of Terms',
       body:
-          'By accessing, downloading, installing, or using the ClassRealm mobile application or web portal ("System"), you acknowledge that you have read, understood, and agree to be bound by these Terms of Service and our Privacy Policy. ClassRealm is an Integrated Senior High School Academic Management System developed for Eduardo Barretto Senior Integrated School. If you do not agree to these terms, please discontinue use of the System immediately.',
+          'By accessing, downloading, installing, registering an account on, or interacting with the ClassRealm mobile application, Progressive Web Application (PWA), or associated school web portals (collectively referred to as the "System"), you explicitly acknowledge that you have read, understood, and agreed to be legally bound by these Terms of Service in conjunction with the ClassRealm Privacy Policy.\n\n'
+          'ClassRealm is an Integrated Senior High School Academic Management, Attendance Tracking, and Learning Portal engineered specifically for Eduardo Barretto Senior Integrated School. These Terms constitute a binding institutional agreement between all active end-users (Administrators, Teachers, Students, and Parents/Legal Guardians) and the educational administration. If you do not consent to, understand, or agree with any stipulation set forth in these Terms, you must immediately discontinue use of the System, uninstall the application from your devices, and notify your Class Adviser or School ICT Coordinator.',
     ),
     LegalDocumentSection(
-      title: '2. Purpose and Scope of the System',
+      title: '2. Purpose, Institutional Scope, and Intended Use',
       body:
-          'ClassRealm is provided exclusively for official educational, classroom management, attendance tracking, academic assessment, and parent-school communication purposes at Eduardo Barretto Senior Integrated School. The System supports four (4) authorized user portals: Administrator, Teacher, Student, and Parent/Guardian.',
+          'ClassRealm is deployed strictly and exclusively for legitimate educational, classroom administration, academic performance evaluation, institutional communication, and campus security purposes within Eduardo Barretto Senior Integrated School.\n\n'
+          'The System supports four (4) distinct role-based access tiers:\n'
+          '• School Administrator Portal: Enterprise-level management of school year terms, academic calendars, teacher onboarding, centralized emergency announcements, audit log inspection, and platform operational health.\n'
+          '• Teacher Portal: Encoding, computing, and releasing official learner grades, managing classroom RFID/NFC attendance sessions, authoring digital assessments, publishing learning modules, and conducting live anti-cheating supervision.\n'
+          '• Student Portal: Reviewing personalized class schedules, accessing learning materials, taking proctored assessments, monitoring attendance scan records, and tracking quarterly academic progress.\n'
+          '• Parent and Guardian Portal: Read-only monitoring of their linked child\'s daily campus attendance, official announcements, teacher directory, and authorized academic grades.\n\n'
+          'Commercial exploitation, external advertising, unauthorized third-party integrations, and any utilization outside sanctioned school operations are strictly prohibited.',
     ),
     LegalDocumentSection(
-      title: '3. User Accounts and Role Responsibilities',
+      title: '3. User Accounts, Access Credentials, and Role Responsibilities',
       body:
-          '• System Administrators: Responsible for managing teacher accounts, academic school year configurations, system-wide broadcasts, maintenance schedules, and overall platform security.\n'
-          '• Teachers: Responsible for accurate encoding of class schedules, learning materials, assessments, attendance logs, and quarterly grades in accordance with Department of Education (DepEd) guidelines, and for safeguarding their login credentials.\n'
-          '• Students: Responsible for maintaining academic honesty during online quizzes and examinations, submitting original classwork, keeping their login credentials confidential, and using only their personally assigned RFID card for attendance scanning.\n'
-          '• Parents and Legal Guardians: Granted read-only monitoring access strictly to view their linked child\'s attendance records, class schedules, school announcements, teacher directory, and authorized academic grades.',
+          'Access to ClassRealm is restricted to verified members of the Eduardo Barretto Senior Integrated School community. All users are personally responsible for upholding the confidentiality of their credentials and adhering to their assigned roles:\n\n'
+          '• System Administrators: Obligated to enforce institutional data protection standards, manage teacher access permissions, safeguard master database credentials, schedule non-disruptive maintenance windows, and ensure prompt response to data privacy inquiries.\n'
+          '• Teachers: Must ensure prompt, objective, and accurate recording of attendance, learning outputs, and quarterly grades adhering strictly to Department of Education (DepEd) standards under the Strengthened Senior High School Curriculum (DepEd Order No. 15, s. 2026). Teachers must never share their master portal credentials or grant unverified individuals access to student records.\n'
+          '• Students: Expected to demonstrate unwavering academic honesty during examinations, submit their own original classwork, maintain the security of their login credentials, and use only their personally issued RFID card for campus gate and classroom attendance.\n'
+          '• Parents and Legal Guardians: Granted non-editable, read-only monitoring access to foster active parental guidance. Parents agree to utilize the portal solely for supporting their child\'s academic growth and must refrain from attempting to alter records, compromise other student accounts, or impersonate their child during online assessments.',
     ),
     LegalDocumentSection(
-      title: '4. RFID Attendance and Hardware Usage',
+      title: '4. RFID Card Attendance, Scanner Hardware, and Anti-Proxy Regulations',
       body:
-          'Students issued a school RFID card must tap only their own card on the classroom ESP32 RFID scanner or authorized teacher NFC device. Tapping an RFID card on behalf of another student ("proxy attendance") or tampering with classroom scanning hardware is a disciplinary offense subject to school policies.',
+          'ClassRealm utilizes an integrated attendance architecture combining physical ESP32 RFID scanning terminals with optional teacher NFC verification devices:\n\n'
+          '• Physical Card Possession: Every student is issued an individual school RFID card linked to their unique Learner Reference Number (LRN). The card remains the student\'s personal responsibility throughout the academic school year.\n'
+          '• Tap Execution: Students must tap only their own card upon arriving at and departing from designated school scanning terminals. Tapping on behalf of an absent or late classmate ("proxy attendance") constitutes a severe breach of school discipline and will result in disciplinary action under the EBSIS Student Code of Conduct.\n'
+          '• Hardware Tampering: Any attempt to physically damage, disconnect, tamper with, clone, emulate via unauthorized wireless transmitters, or manipulate classroom RFID readers or school network infrastructure is strictly prohibited and subject to immediate administrative sanctions and disciplinary review.',
     ),
     LegalDocumentSection(
-      title: '5. Academic Integrity and Anti-Cheating Monitoring',
+      title: '5. Academic Integrity and Real-Time Anti-Cheating Proctoring Safeguards',
       body:
-          'During digital quizzes and examinations, ClassRealm enforces automated anti-cheating safeguards. The System detects and logs focus loss, tab switching, app backgrounding, screen splits, and unauthorized copy/paste attempts ("suspicious session events"). Real-time alerts are transmitted to the proctoring teacher, who may issue warnings, lock the assessment, or require a supervised retake. Any attempt to bypass or manipulate these proctoring mechanisms is strictly prohibited.',
+          'To preserve academic credibility and fair assessment standards during digital quizzes, long tests, and quarterly examinations, ClassRealm deploys an automated real-time proctoring engine:\n\n'
+          '• Telemetry and Anomaly Detection: During active assessment sessions, the System monitors and records application lifecycle state events. This includes detecting tab switches, browser focus loss, window minimization, split-screen multi-tasking, backgrounding the application, and unauthorized copy/paste attempts ("suspicious session events").\n'
+          '• Proctor Alerts and Automated Enforcement: Detected anomalies are transmitted in real time to the proctoring teacher\'s monitoring console. Based on the frequency and severity of detected anomalies, the teacher or the System may automatically issue on-screen warnings, temporarily lock the assessment session, deduct score points, or terminate the student\'s exam attempt, requiring a formal supervised retake.\n'
+          '• Privacy Guarantee: ClassRealm does NOT record camera feeds, microphone audio, screen video recordings, browser history outside the assessment page, personal photo files, or device GPS locations. The telemetry engine is operational strictly while an assessment attempt is in progress.',
     ),
     LegalDocumentSection(
-      title: '6. Adult Student Grade Privacy (18 Years Old and Above)',
+      title: '6. Adult Student Grade Privacy Rights (18 Years Old and Above)',
       body:
-          'In compliance with Republic Act No. 10173 (Data Privacy Act of 2012), students who are eighteen (18) years of age or older are recognized as legal adults and may configure whether their Quarterly Term Grades and Final Grades are visible to linked Parent/Guardian accounts via their Settings screen. Attendance records, class schedules, and school alerts remain accessible to linked parents/guardians for student safety and school monitoring.',
+          'In strict compliance with the Philippine Data Privacy Act of 2012 (Republic Act No. 10173), students who have reached the age of majority (eighteen [18] years old and above) possess independent statutory privacy rights over their sensitive educational records:\n\n'
+          '• Privacy Controls: Adult learners are provided with configurable "Parent / Guardian Privacy Controls" within their Student Settings screen, allowing them to enable or restrict parent/guardian visibility over their Quarterly Term Grades and Final Computed Grades.\n'
+          '• Non-Restricted Safety Records: Daily campus attendance timestamps, emergency broadcast notifications, class schedules, and institutional announcements remain continuously accessible to linked parents/guardians regardless of the student\'s age, in accordance with the school\'s duty of care, campus safety policies, and institutional parental communication guidelines.',
     ),
     LegalDocumentSection(
-      title: '7. Acceptable Use and Prohibited Conduct',
+      title: '7. Acceptable Use, System Security, and Prohibited Activities',
       body:
-          'Users agree not to:\n'
-          '• Share passwords, One-Time Passwords (OTPs), or active sessions with any other person;\n'
-          '• Attempt to access accounts, portals, or student records for which they are not authorized;\n'
-          '• Upload malicious files, inappropriate content, or unauthorized third-party materials;\n'
-          '• Disrupt, overload, or reverse-engineer the System\'s servers, local databases, or authentication services.\n'
-          'Multiple failed login or verification attempts will trigger automated progressive device and account lockouts for security protection.',
+          'Users must utilize ClassRealm in an ethical, lawful, and constructive manner. The following actions are strictly forbidden:\n\n'
+          '• Credential Sharing: Disclosing, transferring, selling, or lending user passwords, One-Time Passwords (OTPs), or active session tokens to any other party.\n'
+          '• Unauthorized Access: Attempting to bypass role-based security boundaries, intercept administrative endpoints, escalate user privileges, or view academic and personal records of unassigned students.\n'
+          '• Malicious Uploads: Uploading files containing viruses, malicious scripts, corrupted executables, offensive media, or copyrighted materials without proper authorization.\n'
+          '• Infrastructure Attacks: Launching Denial-of-Service (DoS) attacks, brute-force password cracking, reverse-engineering local Drift/SQLite schemas, or probing cloud endpoints with automated vulnerability scanners.\n\n'
+          'To protect institutional data integrity, ClassRealm implements progressive automated rate-limiting, temporary IP and device lockouts, and persistent security auditing against offending sessions.',
     ),
     LegalDocumentSection(
-      title: '8. Offline-First Architecture and Data Synchronization',
+      title: '8. Offline-First Architecture, Local Caching, and Synchronization Responsibilities',
       body:
-          'ClassRealm uses an offline-first architecture. Certain academic and attendance actions may be temporarily stored on your device\'s encrypted local database when internet connectivity is unavailable and will automatically synchronize with the school\'s cloud database once a stable connection is restored. Users are responsible for connecting to the internet periodically to ensure their records are fully synchronized.',
+          'ClassRealm is constructed upon an offline-first architectural model to guarantee operational continuity even in environments with intermittent or unstable campus internet connectivity:\n\n'
+          '• Local Data Caching: Attendance scans, draft grading sheets, and learner progress updates are securely cached in encrypted local database storage on the user\'s device when offline.\n'
+          '• Synchronization Protocol: Cached records are automatically queued and synchronized with the school\'s central Supabase cloud database as soon as a verified internet connection is re-established.\n'
+          '• User Responsibility: Teachers and students are responsible for periodically connecting their mobile devices or laptops to the internet to ensure pending queue items are synchronized. The school cannot be held liable for delayed report generation or missing grade submissions arising from prolonged offline usage without synchronization prior to official deadlines.',
     ),
     LegalDocumentSection(
-      title: '9. System Maintenance and Availability',
+      title: '9. Scheduled Maintenance, System Updates, and Emergency Broadcasts',
       body:
-          'The System Administrator may schedule temporary maintenance windows or emergency broadcasts. During active maintenance, non-administrator users may be temporarily logged out while pending offline data remains preserved on the device.',
+          'To preserve optimal performance, platform stability, and software security, the school administration reserves the right to perform routine and emergency platform interventions:\n\n'
+          '• Maintenance Windows: Scheduled maintenance, database optimizations, and system migrations will be announced in advance through in-app notification banners. Non-administrative users may be temporarily restricted from logging in during active maintenance windows.\n'
+          '• Data Preservation: Offline records currently residing on end-user devices remain unaffected and preserved during server maintenance.\n'
+          '• Emergency Broadcasts: In cases of severe weather, campus emergencies, or administrative school suspensions, System Administrators may dispatch priority alert banners that override regular notification preferences to ensure immediate campus-wide awareness.',
     ),
     LegalDocumentSection(
-      title: '10. Limitation of Liability and Amendments',
+      title: '10. Limitation of Liability, Institutional Disclaimer, and Amendments',
       body:
-          'ClassRealm is provided on an "as-is" and "as-available" basis for academic pilot and institutional deployment. Eduardo Barretto Senior Integrated School and the ClassRealm Capstone Development Team shall not be liable for delays, grade synchronization delays caused by lack of user internet connectivity, or unauthorized access resulting from a user\'s failure to protect their credentials. These Terms may be updated periodically to reflect school policy or regulatory changes.',
+          'ClassRealm is provided to students, parents, and educators on an "as-is" and "as-available" basis for academic pilot deployment, institutional evaluation, and operational school management:\n\n'
+          '• Liability Disclaimer: To the fullest extent permitted by Philippine law, Eduardo Barretto Senior Integrated School, its administrators, faculty members, and the ClassRealm Capstone Development Team shall not be held liable for any indirect, incidental, or consequential damages resulting from lost internet access, device incompatibilities, user failure to safeguard credentials, or unapproved third-party hardware usage.\n'
+          '• Amendments: The school administration reserves the right to modify, refine, or update these Terms of Service periodically to reflect evolving Department of Education directives, statutory legal revisions, or institutional school policies. Continued use of the System after amendments are published constitutes full acceptance of the revised Terms.',
     ),
   ];
 

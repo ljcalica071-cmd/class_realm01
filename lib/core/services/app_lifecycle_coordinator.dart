@@ -7,7 +7,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/sync_coordinator.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
+import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/routes/app_routes.dart';
 
 /// Cross-Platform Android-style Activity Lifecycle States.
 enum AppActivityLifecycleState {
@@ -143,10 +145,21 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
         debugPrint(
           '[AppLifecycleCoordinator] Wall-clock inactivity >= 30m detected on resume.',
         );
-        // Notify session expiration if authenticated
+        // Auto-logout user on resume after 30+ minutes of inactivity
         final user = AuthRepository.instance.currentUser;
         if (user != null) {
-          unawaited(AuthRepository.instance.endSession('inactivity'));
+          final navContext = AppRoutes.navigatorKey.currentContext;
+          if (navContext != null) {
+            unawaited(LogoutHelper.logout(navContext, 'inactivity'));
+          } else {
+            unawaited(AuthRepository.instance.logout('inactivity'));
+            AppRoutes.navigatorKey.currentState?.pushNamedAndRemoveUntil(
+              AppRoutes.login,
+              (route) => false,
+              arguments: {'logout_reason': 'inactivity'},
+            );
+          }
+          return;
         }
       }
     }

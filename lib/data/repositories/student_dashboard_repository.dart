@@ -252,6 +252,46 @@ class StudentDashboardRepository {
           final submissionsByClassworkId = <String, Map<String, dynamic>>{};
           for (final row in submissionRows) {
             final submission = Map<String, dynamic>.from(row as Map);
+            final attList = submission['submission_attachments'] as List? ?? [];
+            if (attList.isEmpty &&
+                (submission['status'] == 'submitted' ||
+                    submission['status'] == 'graded')) {
+              final cwId = submission['classwork_id']?.toString();
+              if (cwId != null) {
+                try {
+                  final storageFiles = await client.storage
+                      .from('classwork-materials')
+                      .list(path: 'submissions/$cwId');
+                  for (final f in storageFiles) {
+                    if (f.name.startsWith('${uid}_')) {
+                      final fname = f.name;
+                      final underscoreIndex = fname.indexOf('_');
+                      String cleanName = fname;
+                      final secondUnderscore =
+                          fname.indexOf('_', underscoreIndex + 1);
+                      if (secondUnderscore > 0 &&
+                          secondUnderscore + 1 < fname.length) {
+                        cleanName = fname.substring(secondUnderscore + 1);
+                      }
+                      final fullPath = 'submissions/$cwId/$fname';
+                      final ext = cleanName.split('.').last.toLowerCase();
+                      final mType = (ext == 'doc' || ext == 'docx')
+                          ? 'application/msword'
+                          : 'application/pdf';
+                      submission['submission_attachments'] = [
+                        {
+                          'id': 'storage-recovered',
+                          'file_name': cleanName,
+                          'storage_url': fullPath,
+                          'mime_type': mType,
+                        }
+                      ];
+                      break;
+                    }
+                  }
+                } catch (_) {}
+              }
+            }
             final classworkId = submission['classwork_id']?.toString();
             if (classworkId != null) {
               submissionsByClassworkId[classworkId] = submission;
@@ -367,18 +407,33 @@ class StudentDashboardRepository {
               };
             }
 
+            Map<String, dynamic>? attachmentMap;
             final hasAttachment = m['storage_path'] != null &&
                 m['storage_path'].toString().trim().isNotEmpty;
-            final attachmentMap = hasAttachment
-                ? <String, dynamic>{
-                    'id': m['id']?.toString() ?? '',
-                    'file_name':
-                        m['file_name']?.toString() ?? 'Teacher Attached File',
-                    'mime_type': m['mime_type']?.toString(),
-                    'file_size_bytes': (m['file_size_bytes'] as num?)?.toInt(),
-                    'signed_url': m['storage_path']?.toString(),
-                  }
-                : null;
+            if (hasAttachment) {
+              attachmentMap = <String, dynamic>{
+                'id': m['id']?.toString() ?? '',
+                'file_name':
+                    m['file_name']?.toString() ?? 'Teacher Attached File',
+                'mime_type': m['mime_type']?.toString(),
+                'file_size_bytes': (m['file_size_bytes'] as num?)?.toInt(),
+                'signed_url': m['storage_path']?.toString(),
+              };
+            } else if (m['classwork_attachments'] is List &&
+                (m['classwork_attachments'] as List).isNotEmpty) {
+              final att = (m['classwork_attachments'] as List).first;
+              if (att is Map) {
+                attachmentMap = <String, dynamic>{
+                  'id': att['id']?.toString() ?? m['id']?.toString() ?? '',
+                  'file_name':
+                      att['file_name']?.toString() ?? 'Teacher Attached File',
+                  'mime_type': att['mime_type']?.toString(),
+                  'file_size_bytes': (att['file_size_bytes'] as num?)?.toInt(),
+                  'signed_url': att['storage_url']?.toString() ??
+                      att['storage_path']?.toString(),
+                };
+              }
+            }
 
             return {
               'id': m['id']?.toString() ?? '',

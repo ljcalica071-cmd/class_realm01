@@ -1471,7 +1471,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                   ? _buildGraphLoadingPlaceholder(theme, isDark)
                   : _TeacherActivityCurveChart(
                       key: ValueKey(
-                        'chart_${_activeFilter}_${_selectedTeacherId}_${_selectedCustomDate?.toIso8601String()}_${_sessionLogs.length}',
+                        'chart_${_activeFilter}_${_selectedTeacherId}_${_selectedCustomDate?.toIso8601String()}',
                       ),
                       seriesList: seriesList,
                       isDark: isDark,
@@ -2951,14 +2951,19 @@ class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
   @override
   void didUpdateWidget(covariant _TeacherActivityCurveChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Trigger entrance animation when user changes filter, custom date,
-    // selected teacher, or when new series data arrives
+    // Trigger entrance animation only when user changes filter, custom date, or selected teacher
     final filterChanged = oldWidget.activeFilter != widget.activeFilter ||
         oldWidget.selectedTeacherId != widget.selectedTeacherId ||
         oldWidget.selectedCustomDate != widget.selectedCustomDate;
-    final seriesChanged = oldWidget.seriesList != widget.seriesList;
 
-    if (filterChanged || seriesChanged) {
+    // Or if transition was from completely empty data to populated data
+    final wasEmpty = oldWidget.seriesList.isEmpty ||
+        (oldWidget.seriesList.isNotEmpty &&
+            oldWidget.seriesList.first.points.isEmpty);
+    final isNowNotEmpty = widget.seriesList.isNotEmpty &&
+        widget.seriesList.first.points.isNotEmpty;
+
+    if (filterChanged || (wasEmpty && isNowNotEmpty)) {
       _hoveredPointIndex = null;
       _hoveredSeriesIndex = null;
       _entranceAnimController.forward(from: 0.0);
