@@ -92,5 +92,48 @@ void main() {
       expect(find.text('Verify Password Change'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
+    testWidgets('Close (X) button is clickable and dismisses PasswordOtpDialog', (
+      tester,
+    ) async {
+      bool? dialogResult;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  dialogResult = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => const PasswordOtpDialog(
+                      email: 'mia.garcia.cr@gmail.com',
+                      title: 'Verify Password Change',
+                    ),
+                  );
+                },
+                child: const Text('Open Dialog'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Dialog'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Verify Password Change'), findsOneWidget);
+
+      // Find top-right Close IconButton by tooltip 'Close'
+      final closeButton = find.byTooltip('Close');
+      expect(closeButton, findsOneWidget);
+
+      // Tap close button and verify it pops the dialog
+      await tester.tap(closeButton);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Verify Password Change'), findsNothing);
+      expect(dialogResult, isFalse);
+    });
   });
 }

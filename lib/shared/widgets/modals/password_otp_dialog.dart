@@ -655,9 +655,10 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
 
                 // Visual 6 separated digit boxes with proper focus, cursor & selection indicator
                 SizedBox(
-                  height: 54,
+                  height: 56,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: List.generate(6, (index) {
                       final isFilled = index < currentLength;
                       final digit = isFilled ? _otpController.text[index] : '';
@@ -710,16 +711,17 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
 
                       return Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 3.5),
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: () => _onDigitBoxTapped(index),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 180),
                               curve: Curves.easeOut,
+                              height: 56,
                               decoration: BoxDecoration(
                                 color: boxBg,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
                                   color: borderColor,
                                   width: borderWidth,
@@ -751,7 +753,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                                       opacity: _cursorBlinkController!,
                                       child: Container(
                                         width: 2.2,
-                                        height: 22,
+                                        height: 24,
                                         decoration: BoxDecoration(
                                           color: hasError
                                               ? Colors.red.shade600
@@ -762,8 +764,8 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                                     )
                                   else
                                     Container(
-                                      width: 6,
-                                      height: 6,
+                                      width: 7,
+                                      height: 7,
                                       decoration: BoxDecoration(
                                         color: Colors.grey.shade400,
                                         shape: BoxShape.circle,
@@ -845,24 +847,6 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              // Top-right Close ('X') button replacing bottom Cancel button
-              Positioned(
-                top: -10,
-                right: -10,
-                child: IconButton(
-                  icon: const Icon(
-                    LucideIcons.x,
-                    size: 20,
-                    color: Color(0xFF64748B),
-                  ),
-                  splashRadius: 20,
-                  tooltip: 'Close',
-                  onPressed: _isVerifying
-                      ? null
-                      : () => Navigator.pop(context, false),
-                ),
-              ),
-
               // Modal Content
               SingleChildScrollView(
                 child: Column(
@@ -1080,6 +1064,24 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                     ],
                   ),
                 ],
+              ),
+            ),
+
+            // Top-right Close ('X') button positioned inside bounds and placed LAST in Stack to receive gestures
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                icon: const Icon(
+                  LucideIcons.x,
+                  size: 20,
+                  color: Color(0xFF64748B),
+                ),
+                splashRadius: 20,
+                tooltip: 'Close',
+                onPressed: _isVerifying
+                    ? null
+                    : () => Navigator.pop(context, false),
               ),
             ),
           ],
