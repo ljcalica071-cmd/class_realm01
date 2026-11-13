@@ -791,23 +791,22 @@ class SupabaseParentRepository {
       excludeParentId: parent.id,
     );
 
-    // 1. Update password directly in Firebase Auth
-    final pwUpdated = await FirebaseAuthAdminService.updateUserPassword(
+    // 1. Reset password (and sync the login email) directly via the admin API.
+    //    The login email is always synced so the parent can sign in with the
+    //    exact email shown on the access slip, even if their name was edited.
+    final pwUpdated = await FirebaseAuthAdminService.adminResetUserCredentials(
       uid: parent.id,
       newPassword: tempPassword,
+      email: expectedEmail,
     );
     if (!pwUpdated) {
       throw Exception(
-        'Failed to reset password in Firebase Authentication. Please try again.',
+        "We couldn't reset this parent's password right now. Please check your internet connection and try again.",
       );
     }
 
-    // 2. Ensure email in Firebase Auth & Supabase matches the canonical format
+    // 2. Keep the email in the database in sync with the login email
     if (parent.email.trim().toLowerCase() != expectedEmail.toLowerCase()) {
-      await FirebaseAuthAdminService.updateUserEmail(
-        uid: parent.id,
-        newEmail: expectedEmail,
-      );
       await _client
           .from('users')
           .update({'email': expectedEmail})

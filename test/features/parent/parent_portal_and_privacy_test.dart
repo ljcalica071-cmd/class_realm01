@@ -151,6 +151,7 @@ void main() {
               'transmuted_grade': 0,
               'remarks': 'incomplete',
               'is_finalized': false,
+              'is_published': true,
             },
           },
         };

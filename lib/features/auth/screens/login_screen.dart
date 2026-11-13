@@ -153,6 +153,11 @@ class _LoginScreenState extends State<LoginScreen> {
         isMaintenance = settings.isMaintenanceMode;
       } catch (_) {}
 
+      // If genuinely superseded and kicked, do not auto-restore session
+      if (argReason == 'signed_in_elsewhere') {
+        return;
+      }
+
       final cachedUser = await AuthRepository.instance.restoreSession();
       if (cachedUser != null && mounted) {
         // Guard against race conditions: If the user has already submitted a login or typed

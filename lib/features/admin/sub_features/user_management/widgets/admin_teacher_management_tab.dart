@@ -39,6 +39,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
   List<UserModel> get _effectiveTeachers =>
       _optimisticTeachers ?? widget.teachers;
 
+  final Set<String> _busyTeacherActionIds = <String>{};
+
   @override
   void initState() {
     super.initState();
@@ -125,10 +127,12 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
   }
 
   void _handleArchive(UserModel t) async {
+    if (_busyTeacherActionIds.contains(t.id)) return;
+
     final currentUserId = AuthRepository.instance.currentUser?.id;
     if (currentUserId != null && currentUserId == t.id) {
       if (mounted) {
-        AppModals.showErrorDialog(
+        await AppModals.showErrorDialog(
           context: context,
           title: 'Action Not Allowed',
           message: 'You cannot archive your own account.',
@@ -137,131 +141,155 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       return;
     }
 
-    final confirm = await AppModals.showArchiveCooldownDialog(
-      context: context,
-      title: 'Archive Teacher Account',
-      message:
-          'Are you sure you want to archive ${t.fullName}?\n\n'
-          '• Login access will be temporarily disabled.\n'
-          '• Assigned subjects and class sections will be deactivated from the active teaching schedule.\n'
-          '• Student attendance history, recorded term grades, and classwork records are securely preserved.\n'
-          '• You can restore this teacher account and restore their classes at any time.',
-      confirmLabel: 'Archive',
-      confirmColor: AppTheme.catOrange,
-      cooldownSeconds: 5,
-    );
-    if (confirm == true) {
-      final previousTeachers = List<UserModel>.from(_effectiveTeachers);
-      final updatedTeacher = t.copyWith(
-        isArchived: true,
-        status: AccountStatus.archived,
+    setState(() => _busyTeacherActionIds.add(t.id));
+
+    try {
+      final confirm = await AppModals.showArchiveCooldownDialog(
+        context: context,
+        title: 'Archive Teacher Account',
+        message:
+            'Are you sure you want to archive ${t.fullName}?\n\n'
+            '• Login access will be temporarily disabled.\n'
+            '• Assigned subjects and class sections will be deactivated from the active teaching schedule.\n'
+            '• Student attendance history, recorded term grades, and classwork records are securely preserved.\n'
+            '• You can restore this teacher account and restore their classes at any time.',
+        confirmLabel: 'Archive',
+        confirmColor: AppTheme.catOrange,
+        cooldownSeconds: 5,
       );
-      setState(() {
-        _optimisticTeachers = _effectiveTeachers.map((item) {
-          return item.id == t.id ? updatedTeacher : item;
-        }).toList();
-      });
-
-      if (mounted) {
-        AppTopToast.success(context, '${t.fullName} moved to archives.');
-      }
-
-      final currentHint = (t.status == AccountStatus.pendingFirstLogin)
-          ? 'pending_first_login'
-          : 'active';
-      try {
-        final success = await AuthRepository.instance.updateTeacherStatus(
-          t.id,
-          'archived',
-          currentStatusHint: currentHint,
+      if (confirm == true) {
+        final previousTeachers = List<UserModel>.from(_effectiveTeachers);
+        final updatedTeacher = t.copyWith(
+          isArchived: true,
+          status: AccountStatus.archived,
         );
-        if (success) {
-          AppDataCache.instance.invalidate('admin_teachers_list');
-          widget.onDataChanged();
-        } else {
+        setState(() {
+          _optimisticTeachers = _effectiveTeachers.map((item) {
+            return item.id == t.id ? updatedTeacher : item;
+          }).toList();
+        });
+
+        if (mounted) {
+          AppTopToast.success(context, '${t.fullName} moved to archives.');
+        }
+
+        final currentHint = (t.status == AccountStatus.pendingFirstLogin)
+            ? 'pending_first_login'
+            : 'active';
+        try {
+          final success = await AuthRepository.instance.updateTeacherStatus(
+            t.id,
+            'archived',
+            currentStatusHint: currentHint,
+          );
+          if (success) {
+            AppDataCache.instance.invalidate('admin_teachers_list');
+            widget.onDataChanged();
+          } else {
+            if (mounted) {
+              setState(() => _optimisticTeachers = previousTeachers);
+              await AppModals.showErrorDialog(
+                context: context,
+                title: 'Archive Failed',
+                message: 'Failed to archive teacher. Reverting changes.',
+              );
+            }
+          }
+        } catch (e) {
           if (mounted) {
             setState(() => _optimisticTeachers = previousTeachers);
-            AppModals.showErrorDialog(
+            await AppModals.showErrorDialog(
               context: context,
               title: 'Archive Failed',
-              message: 'Failed to archive teacher. Reverting changes.',
+              message: 'Failed to archive teacher: $e',
             );
           }
         }
-      } catch (e) {
-        if (mounted) {
-          setState(() => _optimisticTeachers = previousTeachers);
-          AppModals.showErrorDialog(
-            context: context,
-            title: 'Archive Failed',
-            message: 'Failed to archive teacher: $e',
-          );
-        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busyTeacherActionIds.remove(t.id));
+      } else {
+        _busyTeacherActionIds.remove(t.id);
       }
     }
   }
 
   void _handleRestore(UserModel t) async {
-    final confirm = await AppModals.showConfirmDialog(
-      context: context,
-      title: 'Restore Teacher',
-      message:
-          'Are you sure you want to restore ${t.fullName}? This will restore their previous status and re-enable login.',
-      confirmLabel: 'Restore',
-      confirmColor: Colors.green,
-    );
-    if (confirm == true) {
-      final previousTeachers = List<UserModel>.from(_effectiveTeachers);
-      final updatedTeacher = t.copyWith(
-        isArchived: false,
-        status: AccountStatus.active,
+    if (_busyTeacherActionIds.contains(t.id)) return;
+
+    setState(() => _busyTeacherActionIds.add(t.id));
+
+    try {
+      final confirm = await AppModals.showConfirmDialog(
+        context: context,
+        title: 'Restore Teacher',
+        message:
+            'Are you sure you want to restore ${t.fullName}? This will restore their previous status and re-enable login.',
+        confirmLabel: 'Restore',
+        confirmColor: Colors.green,
       );
-      setState(() {
-        _optimisticTeachers = _effectiveTeachers.map((item) {
-          return item.id == t.id ? updatedTeacher : item;
-        }).toList();
-      });
-
-      if (mounted) {
-        AppTopToast.success(context, '${t.fullName} restored from archives.');
-      }
-
-      try {
-        final success = await AuthRepository.instance.updateTeacherStatus(
-          t.id,
-          'active',
+      if (confirm == true) {
+        final previousTeachers = List<UserModel>.from(_effectiveTeachers);
+        final updatedTeacher = t.copyWith(
+          isArchived: false,
+          status: AccountStatus.active,
         );
-        if (success) {
-          AppDataCache.instance.invalidate('admin_teachers_list');
-          widget.onDataChanged();
-        } else {
+        setState(() {
+          _optimisticTeachers = _effectiveTeachers.map((item) {
+            return item.id == t.id ? updatedTeacher : item;
+          }).toList();
+        });
+
+        if (mounted) {
+          AppTopToast.success(context, '${t.fullName} restored from archives.');
+        }
+
+        try {
+          final success = await AuthRepository.instance.updateTeacherStatus(
+            t.id,
+            'active',
+          );
+          if (success) {
+            AppDataCache.instance.invalidate('admin_teachers_list');
+            widget.onDataChanged();
+          } else {
+            if (mounted) {
+              setState(() => _optimisticTeachers = previousTeachers);
+              await AppModals.showErrorDialog(
+                context: context,
+                title: 'Restore Failed',
+                message: 'Failed to restore teacher. Reverting changes.',
+              );
+            }
+          }
+        } catch (e) {
           if (mounted) {
             setState(() => _optimisticTeachers = previousTeachers);
-            AppModals.showErrorDialog(
+            await AppModals.showErrorDialog(
               context: context,
               title: 'Restore Failed',
-              message: 'Failed to restore teacher. Reverting changes.',
+              message: 'Failed to restore teacher: $e',
             );
           }
         }
-      } catch (e) {
-        if (mounted) {
-          setState(() => _optimisticTeachers = previousTeachers);
-          AppModals.showErrorDialog(
-            context: context,
-            title: 'Restore Failed',
-            message: 'Failed to restore teacher: $e',
-          );
-        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busyTeacherActionIds.remove(t.id));
+      } else {
+        _busyTeacherActionIds.remove(t.id);
       }
     }
   }
 
   void _handlePermanentDelete(UserModel t) async {
+    if (_busyTeacherActionIds.contains(t.id)) return;
+
     final currentUserId = AuthRepository.instance.currentUser?.id;
     if (currentUserId != null && currentUserId == t.id) {
       if (mounted) {
-        AppModals.showErrorDialog(
+        await AppModals.showErrorDialog(
           context: context,
           title: 'Action Not Allowed',
           message: 'You cannot delete your own account.',
@@ -270,68 +298,79 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
       return;
     }
 
-    // 1. Deletion Protection Guard: Verify if teacher has associated enrolled students or records
-    final hasRecords = await AuthRepository.instance.hasTeacherAcademicRecords(
-      t.id,
-    );
-    if (hasRecords) {
-      if (mounted) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Cannot Delete Teacher',
-          message: 'This teacher cannot be permanently deleted because they have associated enrolled students or academic records.',
-        );
-      }
-      return;
-    }
+    setState(() => _busyTeacherActionIds.add(t.id));
 
-    if (!mounted) return;
-
-    final confirm = await AppModals.showTypeToConfirmDeleteDialog(
-      context: context,
-      title: 'Permanently Delete Teacher',
-      message:
-          'Are you sure you want to permanently delete ${t.fullName}?\n\n'
-          '• This action is permanent and IRREVERSIBLE.\n'
-          '• Teacher profile, credentials, and account records will be permanently erased.\n'
-          '• Since this teacher has no active student enrollments, it is safe to remove completely.',
-    );
-    if (confirm == true) {
-      final previousTeachers = List<UserModel>.from(_effectiveTeachers);
-      setState(() {
-        _optimisticTeachers = _effectiveTeachers
-            .where((item) => item.id != t.id)
-            .toList();
-      });
-
-      if (mounted) {
-        AppTopToast.success(context, '${t.fullName} permanently deleted.');
+    try {
+      // 1. Deletion Protection Guard: Verify if teacher has associated enrolled students or records
+      final hasRecords = await AuthRepository.instance.hasTeacherAcademicRecords(
+        t.id,
+      );
+      if (hasRecords) {
+        if (mounted) {
+          await AppModals.showErrorDialog(
+            context: context,
+            title: 'Cannot Delete Teacher',
+            message:
+                'This teacher cannot be permanently deleted because they have associated enrolled students or academic records.',
+          );
+        }
+        return;
       }
 
-      try {
-        final success = await AuthRepository.instance.deleteTeacherRecord(t.id);
-        if (success) {
-          AppDataCache.instance.invalidate('admin_teachers_list');
-          widget.onDataChanged();
-        } else {
+      if (!mounted) return;
+
+      final confirm = await AppModals.showTypeToConfirmDeleteDialog(
+        context: context,
+        title: 'Permanently Delete Teacher',
+        message:
+            'Are you sure you want to permanently delete ${t.fullName}?\n\n'
+            '• This action is permanent and IRREVERSIBLE.\n'
+            '• Teacher profile, credentials, and account records will be permanently erased.\n'
+            '• Since this teacher has no active student enrollments, it is safe to remove completely.',
+      );
+      if (confirm == true) {
+        final previousTeachers = List<UserModel>.from(_effectiveTeachers);
+        setState(() {
+          _optimisticTeachers = _effectiveTeachers
+              .where((item) => item.id != t.id)
+              .toList();
+        });
+
+        if (mounted) {
+          AppTopToast.success(context, '${t.fullName} permanently deleted.');
+        }
+
+        try {
+          final success = await AuthRepository.instance.deleteTeacherRecord(t.id);
+          if (success) {
+            AppDataCache.instance.invalidate('admin_teachers_list');
+            widget.onDataChanged();
+          } else {
+            if (mounted) {
+              setState(() => _optimisticTeachers = previousTeachers);
+              await AppModals.showErrorDialog(
+                context: context,
+                title: 'Delete Failed',
+                message: 'Failed to delete teacher. Please try again.',
+              );
+            }
+          }
+        } catch (e) {
           if (mounted) {
             setState(() => _optimisticTeachers = previousTeachers);
-            AppModals.showErrorDialog(
+            await AppModals.showErrorDialog(
               context: context,
               title: 'Delete Failed',
-              message: 'Failed to delete teacher. Please try again.',
+              message: 'Failed to delete teacher: $e',
             );
           }
         }
-      } catch (e) {
-        if (mounted) {
-          setState(() => _optimisticTeachers = previousTeachers);
-          AppModals.showErrorDialog(
-            context: context,
-            title: 'Delete Failed',
-            message: 'Failed to delete teacher: $e',
-          );
-        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busyTeacherActionIds.remove(t.id));
+      } else {
+        _busyTeacherActionIds.remove(t.id);
       }
     }
   }
@@ -485,6 +524,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                   ),
                 ],
               ),
+              _buildArchiveButton(theme, archivedTeachers.length),
             ],
           ),
           const SizedBox(height: 18),
@@ -535,48 +575,6 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                     icon: LucideIcons.userPlus,
                     label: 'Add Teacher',
                     onPressed: _addTeacher,
-                  ),
-                  SizedBox(
-                    height: 42,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _showArchivedTeachers
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurface.withValues(
-                                alpha: 0.7,
-                              ),
-                        side: BorderSide(
-                          color: _showArchivedTeachers
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.2,
-                                ),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: Icon(
-                        _showArchivedTeachers
-                            ? Icons.people_outline
-                            : Icons.archive_outlined,
-                        size: 18,
-                      ),
-                      label: Text(
-                        _showArchivedTeachers
-                            ? 'View Active'
-                            : 'View Archive (${archivedTeachers.length})',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                      onPressed: () => setState(() {
-                        _showArchivedTeachers = !_showArchivedTeachers;
-                        _currentPage = 1;
-                      }),
-                    ),
                   ),
                 ],
               );
@@ -765,6 +763,8 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                     final isPendingFirstLogin =
                                         t.status ==
                                         AccountStatus.pendingFirstLogin;
+                                    final isBusy =
+                                        _busyTeacherActionIds.contains(t.id);
 
                                     return Container(
                                       height: 52,
@@ -886,10 +886,12 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                   IconButton(
                                                     tooltip: isPendingFirstLogin
                                                         ? 'Cannot edit: Pending First Login'
-                                                        : 'Edit Teacher Details',
+                                                        : (isBusy
+                                                            ? 'Processing...'
+                                                            : 'Edit Teacher Details'),
                                                     icon: Icon(
                                                       Icons.edit_outlined,
-                                                      color: isPendingFirstLogin
+                                                      color: (isPendingFirstLogin || isBusy)
                                                           ? theme
                                                                 .colorScheme
                                                                 .onSurface
@@ -911,24 +913,37 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                         VisualDensity.compact,
                                                     splashRadius: 18,
                                                     onPressed:
-                                                        isPendingFirstLogin
-                                                        ? () {
-                                                            AppModals.showErrorDialog(
-                                                              context: context,
-                                                              title: 'Cannot Edit Teacher',
-                                                              message: 'This teacher account has not completed their first login yet. Profiles can only be edited once the teacher has logged in and set up their account.',
-                                                            );
-                                                          }
+                                                        (isPendingFirstLogin || isBusy)
+                                                        ? (isPendingFirstLogin
+                                                            ? () {
+                                                                AppModals.showErrorDialog(
+                                                                  context: context,
+                                                                  title: 'Cannot Edit Teacher',
+                                                                  message: 'This teacher account has not completed their first login yet. Profiles can only be edited once the teacher has logged in and set up their account.',
+                                                                );
+                                                              }
+                                                            : null)
                                                         : () => _handleEdit(t),
                                                   ),
                                                   const SizedBox(width: 8),
                                                   IconButton(
-                                                    tooltip: 'Archive Teacher',
-                                                    icon: const Icon(
-                                                      Icons.archive_outlined,
-                                                      color: AppTheme.catOrange,
-                                                      size: 18,
-                                                    ),
+                                                    tooltip: isBusy
+                                                        ? 'Processing...'
+                                                        : 'Archive Teacher',
+                                                    icon: isBusy
+                                                        ? const SizedBox(
+                                                            width: 14,
+                                                            height: 14,
+                                                            child: CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                              color: AppTheme.catOrange,
+                                                            ),
+                                                          )
+                                                        : const Icon(
+                                                            Icons.archive_outlined,
+                                                            color: AppTheme.catOrange,
+                                                            size: 18,
+                                                          ),
                                                     padding: EdgeInsets.zero,
                                                     constraints:
                                                         const BoxConstraints(
@@ -938,15 +953,18 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                     visualDensity:
                                                         VisualDensity.compact,
                                                     splashRadius: 18,
-                                                    onPressed: () =>
-                                                        _handleArchive(t),
+                                                    onPressed: isBusy
+                                                        ? null
+                                                        : () => _handleArchive(t),
                                                   ),
                                                 ] else ...[
                                                   IconButton(
-                                                    tooltip: 'Restore Teacher',
-                                                    icon: const Icon(
+                                                    tooltip: isBusy
+                                                        ? 'Processing...'
+                                                        : 'Restore Teacher',
+                                                    icon: Icon(
                                                       Icons.restore,
-                                                      color: Colors.green,
+                                                      color: isBusy ? Colors.grey : Colors.green,
                                                       size: 18,
                                                     ),
                                                     padding: EdgeInsets.zero,
@@ -958,18 +976,30 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                     visualDensity:
                                                         VisualDensity.compact,
                                                     splashRadius: 18,
-                                                    onPressed: () =>
-                                                        _handleRestore(t),
+                                                    onPressed: isBusy
+                                                        ? null
+                                                        : () => _handleRestore(t),
                                                   ),
                                                   const SizedBox(width: 8),
                                                   IconButton(
-                                                    tooltip: 'Delete Teacher',
-                                                    icon: const Icon(
-                                                      Icons
-                                                          .delete_forever_outlined,
-                                                      color: AppTheme.catRed,
-                                                      size: 18,
-                                                    ),
+                                                    tooltip: isBusy
+                                                        ? 'Processing...'
+                                                        : 'Delete Teacher',
+                                                    icon: isBusy
+                                                        ? const SizedBox(
+                                                            width: 14,
+                                                            height: 14,
+                                                            child: CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                              color: AppTheme.catRed,
+                                                            ),
+                                                          )
+                                                        : const Icon(
+                                                            Icons
+                                                                .delete_forever_outlined,
+                                                            color: AppTheme.catRed,
+                                                            size: 18,
+                                                          ),
                                                     padding: EdgeInsets.zero,
                                                     constraints:
                                                         const BoxConstraints(
@@ -979,10 +1009,12 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                                                     visualDensity:
                                                         VisualDensity.compact,
                                                     splashRadius: 18,
-                                                    onPressed: () =>
-                                                        _handlePermanentDelete(
-                                                          t,
-                                                        ),
+                                                    onPressed: isBusy
+                                                        ? null
+                                                        : () =>
+                                                            _handlePermanentDelete(
+                                                              t,
+                                                            ),
                                                   ),
                                                 ],
                                               ],
@@ -1174,6 +1206,47 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                 : theme.colorScheme.onSurface.withValues(alpha: 0.3),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildArchiveButton(ThemeData theme, int count) {
+    return SizedBox(
+      height: 42,
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _showArchivedTeachers
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          side: BorderSide(
+            color: _showArchivedTeachers
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withValues(alpha: 0.2),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        icon: Icon(
+          _showArchivedTeachers
+              ? Icons.people_outline
+              : Icons.archive_outlined,
+          size: 18,
+        ),
+        label: Text(
+          _showArchivedTeachers
+              ? 'View Active'
+              : 'View Archive ($count)',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+        onPressed: () => setState(() {
+          _showArchivedTeachers = !_showArchivedTeachers;
+          _currentPage = 1;
+        }),
       ),
     );
   }

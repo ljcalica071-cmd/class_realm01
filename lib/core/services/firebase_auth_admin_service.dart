@@ -395,6 +395,76 @@ class FirebaseAuthAdminService {
     return false;
   }
 
+  /// Admin-only credential reset for ANOTHER user (e.g. teacher resetting a
+  /// parent's password). Uses the Service Account Admin API exclusively —
+  /// it never falls back to the currently signed-in user's session, so the
+  /// teacher's own password can never be changed by mistake.
+  ///
+  /// Optionally syncs the login [email] in the same request so the account
+  /// can sign in with the email shown on the access slip.
+  /// Retries once with a fresh access token on failure.
+  static Future<bool> adminResetUserCredentials({
+    required String uid,
+    required String newPassword,
+    String? email,
+  }) async {
+    final projectId = EnvConfig.firebaseProjectId.isNotEmpty
+        ? EnvConfig.firebaseProjectId
+        : 'classrealm01';
+
+    Future<http.Response?> send(Map<String, dynamic> payload) async {
+      final token = await _getAccessToken();
+      if (token == null || token.isEmpty) return null;
+      return http.post(
+        Uri.parse(
+          'https://identitytoolkit.googleapis.com/v1/projects/$projectId/accounts:update',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(payload),
+      );
+    }
+
+    final cleanEmail = email?.trim().toLowerCase();
+    final fullPayload = <String, dynamic>{
+      'localId': uid,
+      'password': newPassword,
+      if (cleanEmail != null && cleanEmail.isNotEmpty) ...{
+        'email': cleanEmail,
+        'emailVerified': true,
+      },
+    };
+
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        if (attempt > 0) {
+          // Force a fresh OAuth2 token on retry (cached one may be stale).
+          _cachedAccessToken = null;
+          _tokenExpiry = null;
+        }
+        var res = await send(fullPayload);
+        if (res == null) continue;
+        if (res.statusCode == 200) return true;
+
+        debugPrint(
+          'FirebaseAuthAdminService adminResetUserCredentials returned ${res.statusCode}: ${res.body}',
+        );
+
+        // If the email is already used by another account, still reset the
+        // password so the parent is not locked out.
+        if (res.body.contains('EMAIL_EXISTS') && fullPayload.containsKey('email')) {
+          res = await send({'localId': uid, 'password': newPassword});
+          if (res != null && res.statusCode == 200) return true;
+        }
+      } catch (e) {
+        debugPrint('FirebaseAuthAdminService adminResetUserCredentials error: $e');
+      }
+    }
+    return false;
+  }
+
   /// Obtains Google OAuth 2.0 Access Token from Service Account credentials
   static Future<String?> _getAccessToken() async {
     final now = DateTime.now();

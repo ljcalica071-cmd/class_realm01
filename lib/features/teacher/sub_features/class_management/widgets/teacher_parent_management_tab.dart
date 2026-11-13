@@ -173,7 +173,10 @@ class _TeacherParentManagementTabState
     return age;
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool forceRefresh = false}) async {
+    if (forceRefresh) {
+      AppDataCache.instance.invalidatePrefix('teacher_parents_');
+    }
     if (_activeParents.isEmpty && _archivedParents.isEmpty) {
       setState(() => _isLoading = true);
     }
@@ -437,6 +440,7 @@ class _TeacherParentManagementTabState
                       ),
                     ],
                   ),
+                  _buildArchiveButton(theme),
                 ],
               ),
               const SizedBox(height: 16),
@@ -611,49 +615,6 @@ class _TeacherParentManagementTabState
                     ],
                   );
 
-                  final archiveButton = SizedBox(
-                    height: 44, // Match Add Students uniform height
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _showArchivedParents
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurface.withValues(
-                                alpha: 0.7,
-                              ),
-                        side: BorderSide(
-                          color: _showArchivedParents
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.2,
-                                ),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: Icon(
-                        _showArchivedParents
-                            ? Icons.people_outline
-                            : Icons.archive_outlined,
-                        size: 18,
-                      ),
-                      label: Text(
-                        _showArchivedParents
-                            ? 'View Active'
-                            : 'View Archive (${_archivedParents.length})',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                      onPressed: () => setState(() {
-                        _showArchivedParents = !_showArchivedParents;
-                        _selectedParentIds.clear();
-                      }),
-                    ),
-                  );
-
                   final actionButtons = Wrap(
                     spacing: 12,
                     runSpacing: 12,
@@ -681,7 +642,6 @@ class _TeacherParentManagementTabState
                           onPressed: _showAddParentDialog,
                         ),
                       ),
-                      archiveButton,
                     ],
                   );
 
@@ -1527,6 +1487,35 @@ class _TeacherParentManagementTabState
           );
 
     if (confirm == true) {
+      setState(() {
+        if (isArchiving) {
+          _activeParents.removeWhere((p) => p.id == parent.id);
+          final archivedParent = parent.copyWith(
+            isArchived: true,
+            status: AccountStatus.archived,
+          );
+          _archivedParents.removeWhere((p) => p.id == parent.id);
+          _archivedParents.add(archivedParent);
+        } else {
+          _archivedParents.removeWhere((p) => p.id == parent.id);
+          final restoredParent = parent.copyWith(
+            isArchived: false,
+            status: AccountStatus.active,
+          );
+          _activeParents.removeWhere((p) => p.id == parent.id);
+          _activeParents.add(restoredParent);
+        }
+      });
+
+      if (mounted) {
+        AppTopToast.success(
+          context,
+          isArchiving
+              ? '${parent.fullName} moved to archives.'
+              : '${parent.fullName} restored to active status.',
+        );
+      }
+
       try {
         final repo = SupabaseParentRepository();
         final currentHint = (parent.status == AccountStatus.pendingFirstLogin)
@@ -1537,17 +1526,11 @@ class _TeacherParentManagementTabState
           isArchiving,
           currentStatusHint: currentHint,
         );
-      } catch (_) {}
-
-      _loadData();
-      if (mounted) {
-        AppTopToast.success(
-          context,
-          isArchiving
-              ? '${parent.fullName} moved to archives.'
-              : '${parent.fullName} restored to active status.',
-        );
+      } catch (e) {
+        debugPrint('Error toggling parent archive: $e');
       }
+
+      await _loadData(forceRefresh: true);
     }
   }
 
@@ -1560,19 +1543,68 @@ class _TeacherParentManagementTabState
     );
 
     if (confirm == true) {
-      try {
-        final repo = SupabaseParentRepository();
-        await repo.permanentlyDelete(parent.id);
-      } catch (_) {}
+      setState(() {
+        _activeParents.removeWhere((p) => p.id == parent.id);
+        _archivedParents.removeWhere((p) => p.id == parent.id);
+      });
 
-      _loadData();
       if (mounted) {
         AppTopToast.success(
           context,
           '${parent.fullName} permanently deleted.',
         );
       }
+
+      try {
+        final repo = SupabaseParentRepository();
+        await repo.permanentlyDelete(parent.id);
+      } catch (e) {
+        debugPrint('Error permanently deleting parent: $e');
+      }
+
+      await _loadData(forceRefresh: true);
     }
+  }
+
+  Widget _buildArchiveButton(ThemeData theme) {
+    return SizedBox(
+      height: 44,
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _showArchivedParents
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          side: BorderSide(
+            color: _showArchivedParents
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withValues(alpha: 0.2),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        icon: Icon(
+          _showArchivedParents
+              ? Icons.people_outline
+              : Icons.archive_outlined,
+          size: 18,
+        ),
+        label: Text(
+          _showArchivedParents
+              ? 'View Active'
+              : 'View Archive (${_archivedParents.length})',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+        onPressed: () => setState(() {
+          _showArchivedParents = !_showArchivedParents;
+          _selectedParentIds.clear();
+        }),
+      ),
+    );
   }
 }
 
@@ -1692,6 +1724,7 @@ class _ParentAccessSlipDialogState extends State<_ParentAccessSlipDialog> {
       });
       widget.onParentResetOrUpdated();
     } catch (e) {
+      debugPrint('Parent password reset error: $e');
       if (!mounted) return;
       setState(() {
         _isResettingPassword = false;
@@ -1699,7 +1732,8 @@ class _ParentAccessSlipDialogState extends State<_ParentAccessSlipDialog> {
       AppModals.showErrorDialog(
         context: context,
         title: 'Password Reset Failed',
-        message: e.toString().replaceAll('Exception: ', ''),
+        message:
+            "We couldn't reset this parent's password right now. Please check your internet connection and try again.",
       );
     }
   }

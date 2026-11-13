@@ -991,28 +991,40 @@ class AuthRepository {
               return existingSessionId;
             }
 
-            // If this session was closed with 'terminated' just a few seconds ago
-            // (because the user pressed F5 refresh in the same tab), check if another device logged in.
-            // If no newer session exists for this user, seamlessly re-activate this session!
             final logoutReason = existingRow['logout_reason']?.toString();
-            final logoutAt = DateTime.tryParse(
-              existingRow['logout_at']?.toString() ?? '',
-            )?.toUtc();
-            final secondsSinceClose = logoutAt != null
-                ? now.difference(logoutAt).inSeconds.abs()
-                : 9999;
 
-            if (logoutReason == 'terminated' &&
-                secondsSinceClose <= 25 &&
-                dbLoginAt != null) {
-              final newerSessions = await _supabaseClient
+            // Check if any newer session exists for this user (either currently active or logged in after this session)
+            final newerActive = await _supabaseClient
+                .from('user_session_logs')
+                .select('id')
+                .eq('user_id', user.id)
+                .neq('id', existingSessionId)
+                .eq('is_active', true)
+                .limit(1);
+            final hasNewerActive = (newerActive as List).isNotEmpty;
+
+            bool hasNewerLogin = false;
+            if (dbLoginAt != null) {
+              final newerLogins = await _supabaseClient
                   .from('user_session_logs')
                   .select('id')
                   .eq('user_id', user.id)
+                  .neq('id', existingSessionId)
                   .gt('login_at', dbLoginAt.toUtc().toIso8601String())
                   .limit(1);
+              hasNewerLogin = (newerLogins as List).isNotEmpty;
+            }
 
-              if ((newerSessions as List).isEmpty) {
+            final isGenuinelySuperseded =
+                hasNewerActive ||
+                hasNewerLogin ||
+                logoutReason == 'superseded' ||
+                logoutReason == 'signed_in_elsewhere';
+
+            if (!isGenuinelySuperseded) {
+              // NO newer session exists! Seamlessly reactivate or continue this session
+              // (e.g., slow refresh, tab sleep/resume, or app reopened without other device logins)
+              if (dbLoginAt != null) {
                 final dur = now
                     .difference(dbLoginAt.toUtc())
                     .inSeconds
@@ -1028,12 +1040,14 @@ class AuthRepository {
                     })
                     .eq('id', existingSessionId);
                 _activeSessionId = existingSessionId;
+                await LocalStorageService.saveActiveSessionId(
+                  existingSessionId,
+                );
+                await LocalStorageService.saveSessionLoginAt(dbLoginAt);
                 return existingSessionId;
               }
-            }
-
-            // Otherwise, this session was superseded by another device or explicitly closed!
-            if (!allowCreateIfSuperseded) {
+            } else if (!allowCreateIfSuperseded) {
+              // A genuinely newer session exists from another device or login
               return '__SUPERSEDED__';
             }
           }

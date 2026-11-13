@@ -34,6 +34,16 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
 
   Set<String> _enrolledSubjectNames = {};
   RealtimeChannel? _channel;
+  RealtimeChannel? _enrollmentChannel;
+
+  /// Sorting: true = Newest to Oldest (default), false = Oldest to Newest.
+  bool _newestFirst = true;
+
+  /// Display names of the student's enrolled subjects (for the filter dropdown).
+  List<String> _subjectOptions = [];
+
+  /// Currently selected subject filter. `null` means "All Subjects".
+  String? _selectedSubject;
 
   @override
   void initState() {
@@ -42,6 +52,7 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
     _loadNotifications(initial: true);
     _scrollController.addListener(_onScroll);
     _subscribeToRealtime();
+    _subscribeToEnrollmentChanges();
   }
 
   @override
@@ -50,22 +61,40 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
     if (_channel != null) {
       Supabase.instance.client.removeChannel(_channel!);
     }
+    if (_enrollmentChannel != null) {
+      Supabase.instance.client.removeChannel(_enrollmentChannel!);
+    }
     super.dispose();
+  }
+
+  void _applySubjects(Iterable<String> displayNames) {
+    final byKey = <String, String>{};
+    for (final raw in displayNames) {
+      final name = raw.trim();
+      if (name.isEmpty) continue;
+      byKey.putIfAbsent(name.toLowerCase(), () => name);
+    }
+    final options = byKey.values.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    if (!mounted) return;
+    setState(() {
+      _enrolledSubjectNames = byKey.keys.toSet();
+      _subjectOptions = options;
+      // Reset the filter if the selected subject is no longer enrolled.
+      if (_selectedSubject != null &&
+          !byKey.containsKey(_selectedSubject!.toLowerCase())) {
+        _selectedSubject = null;
+      }
+    });
   }
 
   Future<void> _loadEnrolledSubjects() async {
     try {
+      // Show cached subjects instantly, then refresh from the server so the
+      // list stays in sync with any changes made by the teacher.
       final dashboard = StudentDashboardRepository.instance.currentDashboard;
       if (dashboard != null && dashboard.enrollments.isNotEmpty) {
-        if (mounted) {
-          setState(() {
-            _enrolledSubjectNames = dashboard.enrollments
-                .map((e) => e.subjectName.trim().toLowerCase())
-                .where((name) => name.isNotEmpty)
-                .toSet();
-          });
-        }
-        return;
+        _applySubjects(dashboard.enrollments.map((e) => e.subjectName));
       }
 
       final studentId = AuthRepository.instance.currentUser?.id;
@@ -77,21 +106,22 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
           .eq('student_id', studentId)
           .eq('status', 'enrolled');
 
-      final subjects = <String>{};
+      final subjects = <String>[];
       for (final row in (res as List)) {
-        final offering = row['subject_offerings'] as Map<String, dynamic>?;
-        if (offering != null) {
-          final sName = offering['subject_name']?.toString().trim().toLowerCase();
-          if (sName != null && sName.isNotEmpty) {
-            subjects.add(sName);
-          }
+        final rawOffering = row['subject_offerings'];
+        final Map? offering = rawOffering is Map
+            ? rawOffering
+            : (rawOffering is List && rawOffering.isNotEmpty
+                  ? rawOffering.first as Map?
+                  : null);
+        final sName = offering?['subject_name'];
+        if (sName != null && '$sName'.trim().isNotEmpty) {
+          subjects.add('$sName'.trim());
         }
       }
 
-      if (mounted) {
-        setState(() {
-          _enrolledSubjectNames = subjects;
-        });
+      if (subjects.isNotEmpty || _subjectOptions.isEmpty) {
+        _applySubjects(subjects);
       }
     } catch (e) {
       debugPrint('Error loading enrolled subjects for student: $e');
@@ -108,6 +138,31 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
           callback: (_) => _loadNotifications(initial: true, silent: true),
         )
         .subscribe();
+  }
+
+  /// Keeps the subject dropdown updated when the teacher enrolls/unenrolls
+  /// the student or updates their subjects.
+  void _subscribeToEnrollmentChanges() {
+    final studentId = AuthRepository.instance.currentUser?.id;
+    if (studentId == null) return;
+    try {
+      _enrollmentChannel = Supabase.instance.client
+          .channel('student_notif_enrollments_$studentId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'student_enrollments',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'student_id',
+              value: studentId,
+            ),
+            callback: (_) => _loadEnrolledSubjects(),
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('Error subscribing to enrollment changes: $e');
+    }
   }
 
   void _onScroll() {
@@ -142,7 +197,7 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
           .select()
           .eq('is_archived', false)
           .inFilter('target_audience', ['all', 'students', 'students_parents'])
-          .order('created_at', ascending: false)
+          .order('created_at', ascending: !_newestFirst)
           .range(targetOffset, targetOffset + _pageSize - 1);
 
       final items = (res as List)
@@ -185,7 +240,8 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
           currentUser.status == AccountStatus.deactivated) {
         return [];
       }
-      final isEligible = currentUser.status == AccountStatus.active ||
+      final isEligible =
+          currentUser.status == AccountStatus.active ||
           currentUser.status == AccountStatus.pendingFirstLogin;
       if (!isEligible) {
         return [];
@@ -194,41 +250,167 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
 
     final currentStudentName = currentUser?.fullName.toLowerCase() ?? '';
 
-    return _notifications.where((n) {
-      // Exclude announcements broadcasted before the student account existed
-      if (currentUser?.createdAt != null && n.type.toLowerCase() == 'announcement') {
-        if (n.timestamp.isBefore(currentUser!.createdAt!)) {
-          return false;
-        }
-      }
-
-      final title = n.title.toLowerCase();
-      final body = n.message.toLowerCase();
-
-      // Extract subject and section if present
-      final regex = RegExp(r'in\s+([A-Za-z0-9\s/&_-]+?)\s*\(([^)]+)\)', caseSensitive: false);
-      final match = regex.firstMatch('${n.title} ${n.message}');
-
-      if (match != null) {
-        final notifSubject = match.group(1)?.trim().toLowerCase() ?? '';
-        // If it's a personalized absence warning for another student, hide it
-        if (body.contains('recorded absences') || body.contains('attendance check-in')) {
-          if (currentStudentName.isNotEmpty && !body.contains(currentStudentName) && !title.contains(currentStudentName)) {
-            return false;
+    return _notifications
+        .where((n) {
+          // Exclude announcements broadcasted before the student account existed
+          if (currentUser?.createdAt != null &&
+              n.type.toLowerCase() == 'announcement') {
+            if (n.timestamp.isBefore(currentUser!.createdAt!)) {
+              return false;
+            }
           }
-        }
 
-        // If enrolled subjects are known and this notification references a non-general subject the student isn't in
-        if (_enrolledSubjectNames.isNotEmpty &&
-            notifSubject.isNotEmpty &&
-            !notifSubject.contains('general') &&
-            !_enrolledSubjectNames.any((enrolled) => notifSubject.contains(enrolled) || enrolled.contains(notifSubject))) {
-          return false;
-        }
-      }
+          final title = n.title.toLowerCase();
+          final body = n.message.toLowerCase();
 
-      return true;
-    }).toList();
+          // Extract subject and section if present
+          final regex = RegExp(
+            r'in\s+([A-Za-z0-9\s/&_-]+?)\s*\(([^)]+)\)',
+            caseSensitive: false,
+          );
+          final match = regex.firstMatch('${n.title} ${n.message}');
+
+          if (match != null) {
+            final notifSubject = match.group(1)?.trim().toLowerCase() ?? '';
+            // If it's a personalized absence warning for another student, hide it
+            if (body.contains('recorded absences') ||
+                body.contains('attendance check-in')) {
+              if (currentStudentName.isNotEmpty &&
+                  !body.contains(currentStudentName) &&
+                  !title.contains(currentStudentName)) {
+                return false;
+              }
+            }
+
+            // If enrolled subjects are known and this notification references a non-general subject the student isn't in
+            if (_enrolledSubjectNames.isNotEmpty &&
+                notifSubject.isNotEmpty &&
+                !notifSubject.contains('general') &&
+                !_enrolledSubjectNames.any(
+                  (enrolled) =>
+                      notifSubject.contains(enrolled) ||
+                      enrolled.contains(notifSubject),
+                )) {
+              return false;
+            }
+          }
+
+          return true;
+        })
+        .where((n) {
+          // Subject dropdown filter
+          final selected = _selectedSubject?.trim().toLowerCase();
+          if (selected == null || selected.isEmpty) return true;
+          final haystack = '${n.title} ${n.message}'.toLowerCase();
+          return haystack.contains(selected);
+        })
+        .toList();
+  }
+
+  void _toggleSort() {
+    setState(() => _newestFirst = !_newestFirst);
+    _loadNotifications(initial: true);
+  }
+
+  Widget _buildFilterBar(ThemeData theme, bool isDark) {
+    final borderColor = theme.colorScheme.onSurface.withValues(
+      alpha: isDark ? 0.14 : 0.09,
+    );
+    final surface = isDark ? const Color(0xFF263040) : Colors.white;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: Row(
+        children: [
+          // Sort button: Newest -> Oldest / Oldest -> Newest
+          Material(
+            color: surface,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              key: const Key('student_notif_sort_button'),
+              borderRadius: BorderRadius.circular(12),
+              onTap: _toggleSort,
+              child: Container(
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _newestFirst
+                          ? LucideIcons.arrowDownWideNarrow
+                          : LucideIcons.arrowUpNarrowWide,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _newestFirst ? 'Newest' : 'Oldest',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Subject dropdown
+          Expanded(
+            child: Container(
+              height: 42,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String?>(
+                  key: const Key('student_notif_subject_dropdown'),
+                  value: _selectedSubject,
+                  isExpanded: true,
+                  borderRadius: BorderRadius.circular(12),
+                  icon: Icon(
+                    LucideIcons.chevronDown,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text(
+                        'All Subjects',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    ..._subjectOptions.map(
+                      (s) => DropdownMenuItem<String?>(
+                        value: s,
+                        child: Text(s, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                  ],
+                  onChanged: (val) => setState(() => _selectedSubject = val),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -249,91 +431,105 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 540),
-        child: AppPullToRefresh(
-          onRefresh: () => _loadNotifications(initial: true, silent: true),
-          child: displayedNotifications.isEmpty
-              ? AppPullToRefresh.scrollableState(
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 32,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF263040) : Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: isDark ? 0.14 : 0.09,
-                        ),
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 56,
-                          height: 56,
+        child: Column(
+          children: [
+            _buildFilterBar(theme, isDark),
+            Expanded(
+              child: AppPullToRefresh(
+                onRefresh: () =>
+                    _loadNotifications(initial: true, silent: true),
+                child: displayedNotifications.isEmpty
+                    ? AppPullToRefresh.scrollableState(
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 32,
+                          ),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: isDark ? 0.18 : 0.1,
+                            color: isDark
+                                ? const Color(0xFF263040)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: isDark ? 0.14 : 0.09,
+                              ),
                             ),
-                            shape: BoxShape.circle,
                           ),
-                          child: Icon(
-                            LucideIcons.bellOff,
-                            size: 26,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'You are all caught up',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'There are no announcements or alerts for your enrolled subjects right now.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: theme.colorScheme.onSurfaceVariant,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  itemCount: displayedNotifications.length + (_hasMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == displayedNotifications.length) {
-                      return Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Center(
-                          child: LoadingAnimationWidget.staggeredDotsWave(
-                            color: theme.colorScheme.primary,
-                            size: 26,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 56,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: isDark ? 0.18 : 0.1,
+                                  ),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  LucideIcons.bellOff,
+                                  size: 26,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'You are all caught up',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'There are no announcements or alerts for your enrolled subjects right now.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      );
-                    }
-                    final notification = displayedNotifications[index];
-                    return ExpandableNotificationCard(
-                      notification: notification,
-                      maxCollapsedLines: 2,
-                    );
-                  },
-                ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        itemCount:
+                            displayedNotifications.length + (_hasMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == displayedNotifications.length) {
+                            return Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Center(
+                                child: LoadingAnimationWidget.staggeredDotsWave(
+                                  color: theme.colorScheme.primary,
+                                  size: 26,
+                                ),
+                              ),
+                            );
+                          }
+                          final notification = displayedNotifications[index];
+                          return ExpandableNotificationCard(
+                            notification: notification,
+                            maxCollapsedLines: 2,
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
     );

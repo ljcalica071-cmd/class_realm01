@@ -181,15 +181,53 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
               final rowId = newRecord['id']?.toString();
               final isActive = newRecord['is_active'] == true;
 
-              // Case 1: Our own session row was marked inactive (superseded by another device)
+              // Case 1: Our own session row was marked inactive
               if (rowId == currentSessionId && !isActive) {
-                await _handleKickedByAnotherDevice();
+                final logoutReason = newRecord['logout_reason']?.toString();
+                if (logoutReason == 'superseded' ||
+                    logoutReason == 'signed_in_elsewhere') {
+                  await _handleKickedByAnotherDevice();
+                  return;
+                }
+
+                // If marked inactive due to unload/tab sleep ('terminated'), do NOT kick
+                // unless a genuinely newer active session now exists for this user.
+                try {
+                  final newer = await Supabase.instance.client
+                      .from('user_session_logs')
+                      .select('id')
+                      .eq('user_id', userId)
+                      .neq('id', currentSessionId)
+                      .eq('is_active', true)
+                      .limit(1);
+                  if ((newer as List).isNotEmpty) {
+                    await _handleKickedByAnotherDevice();
+                  }
+                } catch (_) {}
                 return;
               }
 
-              // Case 2: Another device inserted a brand-new active session for this user
+              // Case 2: Another record is active for this user
               if (rowId != null && rowId != currentSessionId && isActive) {
-                await _handleKickedByAnotherDevice();
+                // Atomic verification: check if this rowId was just saved locally as our session
+                final latestLocalId =
+                    LocalStorageService.getActiveSessionId() ??
+                    AuthRepository.instance.activeSessionId;
+                if (rowId == latestLocalId) {
+                  _activeSessionLogId = rowId;
+                  return;
+                }
+
+                // Confirm it is genuinely a newer active session
+                final newLoginAt = DateTime.tryParse(
+                  newRecord['login_at']?.toString() ?? '',
+                );
+                if (newLoginAt == null ||
+                    !newLoginAt.isBefore(
+                      _sessionStart.subtract(const Duration(seconds: 2)),
+                    )) {
+                  await _handleKickedByAnotherDevice();
+                }
               }
             },
           )
@@ -266,10 +304,76 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
             .maybeSingle();
 
         if (updated == null) {
-          // Session was closed externally (e.g., user signed in on another device)
-          if (!AuthRepository.instance.isLoggingOut) {
+          if (AuthRepository.instance.isLoggingOut) return;
+
+          // Check if another device/login genuinely superseded this session
+          final currentSessionRow = await Supabase.instance.client
+              .from('user_session_logs')
+              .select('id, login_at, is_active, logout_reason')
+              .eq('id', sessionId)
+              .maybeSingle();
+
+          final currentLoginAt =
+              DateTime.tryParse(
+                currentSessionRow?['login_at']?.toString() ?? '',
+              )?.toUtc() ??
+              _sessionStart;
+
+          final newerActiveSessions = await Supabase.instance.client
+              .from('user_session_logs')
+              .select('id')
+              .eq('user_id', user.id)
+              .neq('id', sessionId)
+              .eq('is_active', true)
+              .limit(1);
+
+          final hasNewerActiveSession =
+              (newerActiveSessions as List).isNotEmpty;
+
+          final logoutReason = currentSessionRow?['logout_reason']?.toString();
+          final isExplicitTakeover =
+              logoutReason == 'superseded' ||
+              logoutReason == 'signed_in_elsewhere';
+
+          if (hasNewerActiveSession || isExplicitTakeover) {
             await _handleKickedByAnotherDevice();
+            return;
           }
+
+          // If the session row was closed with 'terminated' (e.g. from pagehide/tab sleep/reload)
+          // and NO newer active session exists, seamlessly re-activate/resume the session!
+          if (currentSessionRow != null &&
+              (logoutReason == 'terminated' ||
+                  currentSessionRow['is_active'] == false)) {
+            final dur = nowUtc
+                .difference(currentLoginAt)
+                .inSeconds
+                .clamp(0, 86400);
+            await Supabase.instance.client
+                .from('user_session_logs')
+                .update({
+                  'is_active': true,
+                  'logout_at': null,
+                  'logout_reason': null,
+                  'last_active_at': nowUtc.toIso8601String(),
+                  'duration_seconds': dur,
+                })
+                .eq('id', sessionId);
+            return;
+          }
+
+          if (currentSessionRow == null && !hasNewerActiveSession) {
+            final newId = await AuthRepository.instance.startSessionLog(
+              user,
+              forceNewSession: true,
+            );
+            if (newId != null && mounted) {
+              _activeSessionLogId = newId;
+            }
+            return;
+          }
+
+          await _handleKickedByAnotherDevice();
           return;
         }
 

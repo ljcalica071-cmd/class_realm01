@@ -330,6 +330,10 @@ class _TeacherStudentManagementTabState
         );
 
         if (confirm == true) {
+          setState(() {
+            _activeStudents.removeWhere((item) => item.id == s.id);
+            _archivedStudents.removeWhere((item) => item.id == s.id);
+          });
           await studentRepo.permanentlyDeleteStudent(s.id, subjectOfferingId);
           await _loadData(forceRefresh: true);
           if (mounted) {
@@ -355,6 +359,10 @@ class _TeacherStudentManagementTabState
         );
 
         if (confirm == true) {
+          setState(() {
+            _activeStudents.removeWhere((item) => item.id == s.id);
+            _archivedStudents.removeWhere((item) => item.id == s.id);
+          });
           await studentRepo.permanentlyDeleteStudent(s.id, subjectOfferingId);
           await _loadData(forceRefresh: true);
           if (mounted) {
@@ -571,6 +579,7 @@ class _TeacherStudentManagementTabState
                       ),
                     ],
                   ),
+                  _buildArchiveButton(theme),
                 ],
               ),
               const SizedBox(height: 16),
@@ -726,48 +735,6 @@ class _TeacherStudentManagementTabState
                       ),
                     ],
                   );
-                  final archiveButton = SizedBox(
-                    height: 44, // Fixed height for uniformity
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _showArchivedStudents
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurface.withValues(
-                                alpha: 0.7,
-                              ),
-                        side: BorderSide(
-                          color: _showArchivedStudents
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.2,
-                                ),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: Icon(
-                        _showArchivedStudents
-                            ? Icons.people_outline
-                            : Icons.archive_outlined,
-                        size: 18,
-                      ),
-                      label: Text(
-                        _showArchivedStudents
-                            ? 'View Active'
-                            : 'View Archive (${_archivedStudents.length})',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                      onPressed: () => setState(() {
-                        _showArchivedStudents = !_showArchivedStudents;
-                      }),
-                    ),
-                  );
-
                   final actionButtons = Wrap(
                     spacing: 12,
                     runSpacing: 12,
@@ -800,7 +767,6 @@ class _TeacherStudentManagementTabState
                           ),
                         ),
                       ),
-                      archiveButton,
                     ],
                   );
 
@@ -1506,17 +1472,30 @@ class _TeacherStudentManagementTabState
                                                                                   confirmColor: AppTheme.catOrange,
                                                                                 );
                                                                                 if (confirm == true) {
-                                                                                  await SupabaseStudentRepository().archiveStudent(
-                                                                                    s.id,
-                                                                                    s.enrolledSubjectId,
-                                                                                    (s.status == AccountStatus.pendingFirstLogin)
-                                                                                        ? 'pending_first_login'
-                                                                                        : 'active',
-                                                                                  );
-                                                                                  _loadData();
+                                                                                  setState(() {
+                                                                                    _activeStudents.removeWhere((item) => item.id == s.id);
+                                                                                    final archivedStudent = s.copyWith(
+                                                                                      isArchived: true,
+                                                                                      status: AccountStatus.archived,
+                                                                                    );
+                                                                                    _archivedStudents.removeWhere((item) => item.id == s.id);
+                                                                                    _archivedStudents.add(archivedStudent);
+                                                                                  });
                                                                                   if (context.mounted) {
                                                                                     AppTopToast.success(context, '${s.fullName} moved to archives.');
                                                                                   }
+                                                                                  try {
+                                                                                    await SupabaseStudentRepository().archiveStudent(
+                                                                                      s.id,
+                                                                                      s.enrolledSubjectId,
+                                                                                      (s.status == AccountStatus.pendingFirstLogin)
+                                                                                          ? 'pending_first_login'
+                                                                                          : 'active',
+                                                                                    );
+                                                                                  } catch (e) {
+                                                                                    debugPrint('Error archiving student: $e');
+                                                                                  }
+                                                                                  await _loadData(forceRefresh: true);
                                                                                 }
                                                                               },
                                                                             ),
@@ -1538,11 +1517,24 @@ class _TeacherStudentManagementTabState
                                                                                   confirmColor: Colors.green,
                                                                                 );
                                                                                 if (confirm == true) {
-                                                                                  await SupabaseStudentRepository().restoreStudent(s.id);
-                                                                                  _loadData();
+                                                                                  setState(() {
+                                                                                    _archivedStudents.removeWhere((item) => item.id == s.id);
+                                                                                    final restoredStudent = s.copyWith(
+                                                                                      isArchived: false,
+                                                                                      status: AccountStatus.active,
+                                                                                    );
+                                                                                    _activeStudents.removeWhere((item) => item.id == s.id);
+                                                                                    _activeStudents.add(restoredStudent);
+                                                                                  });
                                                                                   if (context.mounted) {
                                                                                     AppTopToast.success(context, '${s.fullName} restored to active enrollment.');
                                                                                   }
+                                                                                  try {
+                                                                                    await SupabaseStudentRepository().restoreStudent(s.id);
+                                                                                  } catch (e) {
+                                                                                    debugPrint('Error restoring student: $e');
+                                                                                  }
+                                                                                  await _loadData(forceRefresh: true);
                                                                                 }
                                                                               },
                                                                             ),
@@ -1797,6 +1789,46 @@ class _TeacherStudentManagementTabState
                       : theme.colorScheme.onSurface.withValues(alpha: 0.3)),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildArchiveButton(ThemeData theme) {
+    return SizedBox(
+      height: 44,
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _showArchivedStudents
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          side: BorderSide(
+            color: _showArchivedStudents
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withValues(alpha: 0.2),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        icon: Icon(
+          _showArchivedStudents
+              ? Icons.people_outline
+              : Icons.archive_outlined,
+          size: 18,
+        ),
+        label: Text(
+          _showArchivedStudents
+              ? 'View Active'
+              : 'View Archive (${_archivedStudents.length})',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+        onPressed: () => setState(() {
+          _showArchivedStudents = !_showArchivedStudents;
+        }),
       ),
     );
   }

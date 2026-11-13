@@ -6,7 +6,6 @@ import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 import 'package:class_realm/features/student/shared/widgets/student_classwork_card.dart';
-import 'package:class_realm/features/student/sub_features/academics/screens/student_academic_performance_screen.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_assessment_screen.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_grades_screen.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_learning_materials_screen.dart';
@@ -462,16 +461,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
           _drawerItem(
             context,
-            icon: Icons.school_outlined,
-            title: 'My Academic Performance',
-            onTap: () => _openPage(
-              context,
-              const StudentAcademicPerformanceScreen(),
-              AppRoutes.studentPerformance,
-            ),
-          ),
-          _drawerItem(
-            context,
             icon: Icons.settings_outlined,
             title: 'Settings',
             onTap: () => _openPage(context, const StudentSettingsScreen()),
@@ -826,45 +815,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   StudentScheduleScreen(dashboardData: _dashboard!),
                 ),
               ),
-              const SizedBox(width: 10),
-              _buildQuickActionTile(
-                context: context,
-                theme: theme,
-                isDark: isDark,
-                icon: Icons.folder_copy_rounded,
-                color: AppTheme.catOrange,
-                label: 'Materials',
-                onTap: () => _pushDirectPage(
-                  context,
-                  const StudentLearningMaterialsScreen(),
-                ),
-              ),
-              const SizedBox(width: 10),
-              _buildQuickActionTile(
-                context: context,
-                theme: theme,
-                isDark: isDark,
-                icon: Icons.grade_rounded,
-                color: AppTheme.catTeal,
-                label: 'Grades',
-                onTap: () =>
-                    _pushDirectPage(context, const StudentGradesScreen()),
-              ),
             ],
           ),
 
-          if (enrollments.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            _buildSectionHeader(
-              theme: theme,
-              title: 'My Enrolled Classes',
-              badgeText:
-                  '${enrollments.length} ${enrollments.length == 1 ? 'subject' : 'subjects'}',
-              subtitle: 'Your registered subjects and assigned teachers.',
-            ),
-            const SizedBox(height: 12),
-            ...enrollments.map((e) => _buildEnrollmentCard(context, e)),
-          ],
           const SizedBox(height: 24),
           _buildSectionHeader(
             theme: theme,
@@ -1046,134 +999,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildEnrollmentCard(
-    BuildContext context,
-    StudentEnrollmentModel item,
-  ) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(
-            alpha: isDark ? 0.14 : 0.1,
-          ),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.035),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 5,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  bottomLeft: Radius.circular(16),
-                ),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(15),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(11),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(
-                          alpha: isDark ? 0.18 : 0.1,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        Icons.menu_book_rounded,
-                        color: theme.colorScheme.primary,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 13),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (item.subjectCode.isNotEmpty)
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 5),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2.5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary.withValues(
-                                  alpha: 0.12,
-                                ),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                item.subjectCode,
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                            ),
-                          Text(
-                            item.subjectName.isNotEmpty
-                                ? item.subjectName
-                                : 'Enrolled Subject',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15.5,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.person_outline,
-                                size: 15,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  item.teacherName.isNotEmpty
-                                      ? 'Teacher: ${item.teacherName}'
-                                      : 'Assigned Teacher',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
