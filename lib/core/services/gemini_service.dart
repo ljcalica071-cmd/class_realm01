@@ -190,6 +190,8 @@ class GeminiService {
   static const List<String> _preferredModels = [
     'gemini-3.5-flash-lite',
     'gemini-3-flash-preview',
+    'gemini-2.5-flash',
+    'gemini-flash-latest',
     'gemini-3.7-flash',
     'gemini-3.8-flash',
     'gemini-flash-lite-latest',
@@ -375,8 +377,10 @@ class GeminiService {
       }
 
       return GeminiLessonPlanResult.failure(
-        'All configured Gemini API keys (${keys.length}) are currently exhausted or unavailable. '
-        'Details: ${lastRedactedError ?? 'Request failed.'}',
+        formatUserFriendlyErrorMessage(
+          lastRedactedError,
+          totalKeys: keys.length,
+        ),
       );
     } finally {
       _isInFlight = false;
@@ -451,6 +455,72 @@ class GeminiService {
       'key=[REDACTED_API_KEY]',
     );
     return clean;
+  }
+
+  /// Formats raw Gemini / GenerativeAI exceptions into clean, user-friendly
+  /// guidance without exposing raw JSON dumps or internal stack traces.
+  static String formatUserFriendlyErrorMessage(
+    String? rawError, {
+    int totalKeys = 1,
+  }) {
+    if (rawError == null || rawError.trim().isEmpty) {
+      return 'The AI service is temporarily unavailable. Please wait a moment and try again, or click "Open Manual Template" to proceed.';
+    }
+
+    final lower = rawError.toLowerCase();
+
+    // 1. High demand / 503 / Unavailable / Overloaded
+    if (lower.contains('503') ||
+        lower.contains('high demand') ||
+        lower.contains('spikes in demand') ||
+        lower.contains('unavailable') ||
+        lower.contains('overloaded') ||
+        lower.contains('server error')) {
+      return 'Gemini AI is currently experiencing high demand and temporary traffic spikes. Please wait a moment and try generating again, or click "Open Manual Template" to proceed without waiting.';
+    }
+
+    // 2. Rate limit / 429 / Quota / Exhausted
+    if (lower.contains('429') ||
+        lower.contains('quota') ||
+        lower.contains('too many requests') ||
+        lower.contains('resource_exhausted') ||
+        lower.contains('resource has been exhausted') ||
+        lower.contains('exhausted') ||
+        lower.contains('rate limit')) {
+      return 'AI generation limit has been temporarily reached. Please wait about a minute before trying again, or click "Open Manual Template" to proceed without waiting.';
+    }
+
+    // 3. Network / Connection errors
+    if (lower.contains('socketexception') ||
+        lower.contains('network') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('connection refused') ||
+        lower.contains('connection timed out') ||
+        lower.contains('clientexception') ||
+        lower.contains('handshake') ||
+        lower.contains('offline')) {
+      return 'Unable to reach the Gemini AI service. Please check your internet connection and try again, or click "Open Manual Template" to proceed.';
+    }
+
+    // 4. Authentication / Invalid key / 401 / 403
+    if (lower.contains('401') ||
+        lower.contains('403') ||
+        lower.contains('api_key_invalid') ||
+        lower.contains('api key not valid') ||
+        lower.contains('permission_denied') ||
+        lower.contains('unauthorized')) {
+      return 'The configured Gemini API key is invalid or unauthorized. Please verify your API key in settings or proceed with "Open Manual Template".';
+    }
+
+    // 5. Model retired / not found
+    if (lower.contains('404') ||
+        (lower.contains('model') && lower.contains('not found')) ||
+        lower.contains('no longer available')) {
+      return 'The requested AI model version is currently unavailable. Please wait a moment and try again, or click "Open Manual Template" to proceed.';
+    }
+
+    // 6. Generic friendly fallback
+    return 'The AI service encountered a temporary issue while preparing your lesson plan. Please wait a moment and try again, or click "Open Manual Template" to proceed.';
   }
 
   static String _buildShsIlawPrompt({
@@ -913,8 +983,10 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
       }
 
       return GeminiAssessmentGenerationResult.failure(
-        'All configured Gemini API keys (${keys.length}) are currently exhausted or unavailable. '
-        'Details: ${lastRedactedError ?? 'Request failed.'}',
+        formatUserFriendlyErrorMessage(
+          lastRedactedError,
+          totalKeys: keys.length,
+        ),
       );
     } finally {
       _isInFlight = false;

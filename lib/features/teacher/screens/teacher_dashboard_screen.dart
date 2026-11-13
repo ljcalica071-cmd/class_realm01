@@ -42,7 +42,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   bool _isSidebarExpanded = true;
   final String _selectedClassSection = 'All Sections';
   ActivityModel? _viewingSubmissionsFor;
-  bool _isLoading = true;
+  bool _isLoading = false;
   List<ActivityModel>? _persistedActivities;
   List<UserModel> _allStudents = [];
   List<UserModel> _parents = [];
@@ -147,8 +147,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final nav = LocalStorageService.getTeacherClassworkNavState();
       final catIdx = (nav['categoryTabIndex'] as num?)?.toInt() ?? 0;
       final tabParam = catIdx == 0 ? 'ww' : (catIdx == 1 ? 'pt' : 'ex');
-      final assessId = nav['activeAssessmentId']?.toString();
-      final actId = nav['activeActivityId']?.toString();
+      final assessId = nav['activeAssessmentId'] != null
+          ? '${nav['activeAssessmentId']}'
+          : null;
+      final actId = nav['activeActivityId'] != null
+          ? '${nav['activeActivityId']}'
+          : null;
       if (assessId != null && assessId.isNotEmpty) {
         updateBrowserUrl('$route?tab=$tabParam&view=proctoring', replace: false);
       } else if (actId != null && actId.isNotEmpty) {
@@ -200,8 +204,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final nav = LocalStorageService.getTeacherClassworkNavState();
       final catIdx = (nav['categoryTabIndex'] as num?)?.toInt() ?? 0;
       final tabParam = catIdx == 0 ? 'ww' : (catIdx == 1 ? 'pt' : 'ex');
-      final assessId = nav['activeAssessmentId']?.toString();
-      final actId = nav['activeActivityId']?.toString();
+      final assessId = nav['activeAssessmentId'] != null
+          ? '${nav['activeAssessmentId']}'
+          : null;
+      final actId = nav['activeActivityId'] != null
+          ? '${nav['activeActivityId']}'
+          : null;
       if (assessId != null && assessId.isNotEmpty) {
         updateBrowserUrl('$currentRoute?tab=$tabParam&view=proctoring');
       } else if (actId != null && actId.isNotEmpty) {
@@ -298,7 +306,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         final loadedActs = results[0] as List<ActivityModel>;
         final loadedAssess = results[1] as List<QuizOrExamModel>;
         final navState = LocalStorageService.getTeacherClassworkNavState();
-        final savedActId = navState['activeActivityId']?.toString();
+        final savedActId = navState['activeActivityId'] != null
+            ? '${navState['activeActivityId']}'
+            : null;
         ActivityModel? restoredAct;
         if (savedActId != null && savedActId.isNotEmpty) {
           for (final a in loadedActs) {
@@ -348,11 +358,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Future<void> _loadData() async {
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
     final user = widget.teacher ?? AuthRepository.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     try {
       final studentRepo = SupabaseStudentRepository();
       final parentRepo = SupabaseParentRepository();
@@ -366,7 +376,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           _parents = results[1];
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      // Fallback gracefully if offline or error
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override

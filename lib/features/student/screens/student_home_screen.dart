@@ -585,16 +585,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             return a.deadline!.compareTo(b.deadline!);
           });
 
-    final submittedItems = classwork
-        .where((item) =>
-            item.status == 'submitted' ||
-            item.status == 'graded')
-        .toList()
-      ..sort((a, b) {
-        if (a.submittedAt == null) return 1;
-        if (b.submittedAt == null) return -1;
-        return b.submittedAt!.compareTo(a.submittedAt!);
-      });
     final enrollmentLabel = [
       if (student.gradeLevel?.isNotEmpty == true) 'Grade ${student.gradeLevel}',
       if (student.departmentOrSection?.isNotEmpty == true)
@@ -900,26 +890,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 ),
               ),
             ),
-          if (submittedItems.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            _buildSectionHeader(
-              theme: theme,
-              title: 'Submitted Work & Tasks',
-              badgeText: '${submittedItems.length} turned in',
-              subtitle:
-                  'Activities and performance tasks you have already submitted.',
-            ),
-            const SizedBox(height: 14),
-            ...submittedItems.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: StudentClassworkCard(
-                  classwork: item,
-                  onRefresh: () => _loadDashboard(forceRefresh: true),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );

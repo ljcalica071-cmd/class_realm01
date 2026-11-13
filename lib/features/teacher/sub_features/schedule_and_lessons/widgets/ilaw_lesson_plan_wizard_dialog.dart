@@ -420,8 +420,9 @@ class _IlawLessonPlanWizardDialogState
       setState(() {
         _isGenerating = false;
         _inlineAlertIsError = true;
-        _inlineAlertMessage =
-            result.errorMessage ?? 'Lesson plan generation failed. Try again.';
+        _inlineAlertMessage = GeminiService.formatUserFriendlyErrorMessage(
+          result.errorMessage,
+        );
       });
       return;
     }
@@ -912,7 +913,19 @@ class _IlawLessonPlanWizardDialogState
                       isSmall: true,
                       onPressed: _handleLoadTemplateDraft,
                     )
-                  : null,
+                  : (_inlineAlertIsError && _step == IlawWizardStep.details
+                      ? AppButton.outline(
+                          label: 'Open Manual Template',
+                          icon: Icons.edit_note_outlined,
+                          isSmall: true,
+                          onPressed: _handleLoadTemplateDraft,
+                        )
+                      : null),
+              onDismiss: () {
+                setState(() {
+                  _inlineAlertMessage = null;
+                });
+              },
             ),
           if (hasInline && hasExport) const SizedBox(height: 8),
           if (hasExport)
@@ -2420,6 +2433,7 @@ class _IlawLessonPlanWizardDialogState
     required String message,
     required bool isError,
     Widget? action,
+    VoidCallback? onDismiss,
   }) {
     final color = isError ? _errorRed : AppTheme.catGreen;
     return Container(
@@ -2456,6 +2470,21 @@ class _IlawLessonPlanWizardDialogState
               ],
             ),
           ),
+          if (onDismiss != null) ...[
+            const SizedBox(width: 6),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: onDismiss,
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(
+                  Icons.close,
+                  size: 16,
+                  color: color.withValues(alpha: 0.7),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

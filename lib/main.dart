@@ -152,6 +152,41 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy(); // Removes the # from the URL
 
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+  };
+
+  // Replaces the jarring red screen of death with a smooth, graceful fallback
+  // during any transient initialization or widget building hiccup.
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      color: Colors.transparent,
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Loading...',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  };
+
   if (!kIsWeb) {
     // -----------------------------------------------------------------------
     // Android / iOS / Native Bootstrap Guarantee:

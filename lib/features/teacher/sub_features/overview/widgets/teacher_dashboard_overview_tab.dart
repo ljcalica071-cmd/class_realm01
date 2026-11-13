@@ -505,8 +505,9 @@ class _TeacherDashboardOverviewTabState
 
     // Filter strictly for classes scheduled today
     final todaySchedules = _schedules.where((s) {
-      return s.dayOfWeekIndex == todayIndex ||
-          s.dayOfWeek.trim().toLowerCase() == todayName.toLowerCase();
+      final sDay = s.dayOfWeek.trim().toLowerCase();
+      final targetDay = todayName.toLowerCase();
+      return s.dayOfWeekIndex == todayIndex || sDay == targetDay;
     }).toList()..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
 
     const todayScheduleTitle = 'My Classes Today';
@@ -621,275 +622,328 @@ class _TeacherDashboardOverviewTabState
           const SizedBox(height: 28),
 
           // LOWER SECTION: Today's Classes & Quick Actions
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 7,
-                child: SizedBox(
+          if (MediaQuery.of(context).size.width < 900)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
                   height: 320,
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                todayScheduleTitle,
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.onSurface,
-                                ),
+                  child: _buildTodayClassesCard(
+                    context,
+                    theme: theme,
+                    todayScheduleTitle: todayScheduleTitle,
+                    todayName: todayName,
+                    todaySchedules: todaySchedules,
+                    nowInMinutes: nowInMinutes,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildQuickActionsCard(
+                  context,
+                  theme: theme,
+                  childAspectRatio: 2.1,
+                ),
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 7,
+                  child: SizedBox(
+                    height: 320,
+                    child: _buildTodayClassesCard(
+                      context,
+                      theme: theme,
+                      todayScheduleTitle: todayScheduleTitle,
+                      todayName: todayName,
+                      todaySchedules: todaySchedules,
+                      nowInMinutes: nowInMinutes,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 24),
+                // Right: Quick Actions Menu
+                Expanded(
+                  flex: 3,
+                  child: SizedBox(
+                    height: 320,
+                    child: _buildQuickActionsCard(
+                      context,
+                      theme: theme,
+                      childAspectRatio: 1.55,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTodayClassesCard(
+    BuildContext context, {
+    required ThemeData theme,
+    required String todayScheduleTitle,
+    required String todayName,
+    required List<ScheduleModel> todaySchedules,
+    required int nowInMinutes,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  todayScheduleTitle,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => widget.onNavigateTo(14),
+                  child: Text(
+                    'View All Schedule',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (isLoadingStats)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: ShimmerLoading(
+                    child: Column(
+                      children: List.generate(
+                        3,
+                        (_) => Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: theme.scaffoldBackgroundColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.05),
                               ),
-                              TextButton(
-                                onPressed: () => widget.onNavigateTo(14),
-                                child: Text(
-                                  'View All Schedule',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.colorScheme.primary,
-                                  ),
+                            ),
+                            child: Row(
+                              children: const [
+                                ShimmerBox(
+                                  width: 36,
+                                  height: 36,
+                                  borderRadius: 10,
                                 ),
-                              ),
-                            ],
-                          ),
-                          if (isLoadingStats)
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                child: ShimmerLoading(
-                                  child: Column(
-                                    children: List.generate(
-                                      3,
-                                      (_) => Padding(
-                                        padding: const EdgeInsets.only(top: 10),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(14),
-                                          decoration: BoxDecoration(
-                                            color: theme.scaffoldBackgroundColor,
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(
-                                              color: theme.colorScheme.onSurface
-                                                  .withValues(alpha: 0.05),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            children: const [
-                                              ShimmerBox(
-                                                width: 36,
-                                                height: 36,
-                                                borderRadius: 10,
-                                              ),
-                                              SizedBox(width: 14),
-                                              Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  ShimmerBox(
-                                                    width: 160,
-                                                    height: 14,
-                                                    borderRadius: 4,
-                                                  ),
-                                                  SizedBox(height: 6),
-                                                  ShimmerBox(
-                                                    width: 110,
-                                                    height: 12,
-                                                    borderRadius: 4,
-                                                  ),
-                                                ],
-                                              ),
-                                              Spacer(),
-                                              ShimmerBox(
-                                                width: 80,
-                                                height: 14,
-                                                borderRadius: 4,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            )
-                          else if (todaySchedules.isEmpty)
-                            Expanded(
-                              child: Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
+                                SizedBox(width: 14),
+                                Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
                                   children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: theme.colorScheme.primary
-                                            .withValues(alpha: 0.08),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        LucideIcons.calendarCheck2,
-                                        size: 28,
-                                        color: theme.colorScheme.primary,
-                                      ),
+                                    ShimmerBox(
+                                      width: 160,
+                                      height: 14,
+                                      borderRadius: 4,
                                     ),
-                                    const SizedBox(height: 10),
-                                    Text(
-                                      'No classes scheduled for today',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14.5,
-                                        color: theme.colorScheme.onSurface,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'You have no teaching sessions scheduled for $todayName. Check "View All Schedule" to see your weekly timetable.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.6),
-                                      ),
+                                    SizedBox(height: 6),
+                                    ShimmerBox(
+                                      width: 110,
+                                      height: 12,
+                                      borderRadius: 4,
                                     ),
                                   ],
                                 ),
-                              ),
-                            )
-                          else
-                            Expanded(
-                              child: ListView.builder(
-                                padding: EdgeInsets.zero,
-                                itemCount: todaySchedules.length,
-                                itemBuilder: (context, index) {
-                                  final schedule = todaySchedules[index];
-                                  final _ScheduleSessionStatus status;
-                                  if (nowInMinutes < schedule.startMinutes) {
-                                    status = _ScheduleSessionStatus.upcoming;
-                                  } else if (nowInMinutes <= schedule.endMinutes) {
-                                    status = _ScheduleSessionStatus.ongoing;
-                                  } else {
-                                    status = _ScheduleSessionStatus.completed;
-                                  }
-
-                                  final sec = schedule.section.trim();
-                                  final secFormatted =
-                                      sec.toLowerCase().startsWith('section')
-                                      ? (sec.isEmpty ? 'Section' : sec)
-                                      : (sec.isEmpty ? 'Section' : 'Section $sec');
-                                  final roomStr = schedule.room.trim();
-                                  final sectionAndRoom = roomStr.isNotEmpty
-                                      ? '$secFormatted • Room $roomStr'
-                                      : secFormatted;
-
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 10),
-                                    child: _buildClassItem(
-                                      context,
-                                      subject: schedule.subject,
-                                      sectionAndRoom: sectionAndRoom,
-                                      time:
-                                          '${schedule.startTime} - ${schedule.endTime}',
-                                      status: status,
-                                    ),
-                                  );
-                                },
-                              ),
+                                Spacer(),
+                                ShimmerBox(
+                                  width: 80,
+                                  height: 14,
+                                  borderRadius: 4,
+                                ),
+                              ],
                             ),
-                        ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 24),
-
-              // Right: Quick Actions Menu
+              )
+            else if (todaySchedules.isEmpty)
               Expanded(
-                flex: 3,
-                child: SizedBox(
-                  height: 320,
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Quick Actions',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                              Icon(
-                                LucideIcons.sparkles,
-                                size: 16,
-                                color: theme.colorScheme.primary.withValues(
-                                  alpha: 0.7,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          GridView.count(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                            childAspectRatio: 1.55,
-                            children: [
-                              _buildQuickActionCard(
-                                context,
-                                title: 'Attendance',
-                                subtitle: 'RFID & Roster',
-                                icon: LucideIcons.checkSquare,
-                                accentColor: Colors.teal,
-                                onTap: () => widget.onNavigateTo(5),
-                              ),
-                              _buildQuickActionCard(
-                                context,
-                                title: 'Create',
-                                subtitle: 'WW, PT, Exam',
-                                icon: LucideIcons.filePlus2,
-                                accentColor: theme.colorScheme.primary,
-                                onTap: widget.onCreateChooser,
-                              ),
-                              _buildQuickActionCard(
-                                context,
-                                title: 'Gradebook',
-                                subtitle: 'DepEd Grades',
-                                icon: LucideIcons.bookOpenCheck,
-                                accentColor: Colors.deepPurple,
-                                onTap: () => widget.onNavigateTo(18),
-                              ),
-                              _buildQuickActionCard(
-                                context,
-                                title: 'Schedule',
-                                subtitle: 'Timetable',
-                                icon: LucideIcons.calendarDays,
-                                accentColor: Colors.amber.shade800,
-                                onTap: () => widget.onNavigateTo(14),
-                              ),
-                            ],
-                          ),
-                        ],
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary
+                              .withValues(alpha: 0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          LucideIcons.calendarCheck2,
+                          size: 28,
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'No classes scheduled for today',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14.5,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'You have no teaching sessions scheduled for $todayName. Check "View All Schedule" to see your weekly timetable.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              )
+            else
+              Expanded(
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: todaySchedules.length,
+                  itemBuilder: (context, index) {
+                    final schedule = todaySchedules[index];
+                    final _ScheduleSessionStatus status;
+                    if (nowInMinutes < schedule.startMinutes) {
+                      status = _ScheduleSessionStatus.upcoming;
+                    } else if (nowInMinutes <= schedule.endMinutes) {
+                      status = _ScheduleSessionStatus.ongoing;
+                    } else {
+                      status = _ScheduleSessionStatus.completed;
+                    }
+
+                    final sec = schedule.section.trim();
+                    final secFormatted =
+                        sec.toLowerCase().startsWith('section')
+                        ? (sec.isEmpty ? 'Section' : sec)
+                        : (sec.isEmpty ? 'Section' : 'Section $sec');
+                    final roomStr = schedule.room.trim();
+                    final sectionAndRoom = roomStr.isNotEmpty
+                        ? '$secFormatted • Room $roomStr'
+                        : secFormatted;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: _buildClassItem(
+                        context,
+                        subject: schedule.subject,
+                        sectionAndRoom: sectionAndRoom,
+                        time:
+                            '${schedule.startTime} - ${schedule.endTime}',
+                        status: status,
+                      ),
+                    );
+                  },
+                ),
               ),
-            ],
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsCard(
+    BuildContext context, {
+    required ThemeData theme,
+    required double childAspectRatio,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Quick Actions',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                Icon(
+                  LucideIcons.sparkles,
+                  size: 16,
+                  color: theme.colorScheme.primary.withValues(
+                    alpha: 0.7,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: childAspectRatio,
+              children: [
+                _buildQuickActionCard(
+                  context,
+                  title: 'Attendance',
+                  subtitle: 'RFID & Roster',
+                  icon: LucideIcons.checkSquare,
+                  accentColor: Colors.teal,
+                  onTap: () => widget.onNavigateTo(5),
+                ),
+                _buildQuickActionCard(
+                  context,
+                  title: 'Create',
+                  subtitle: 'WW, PT, Exam',
+                  icon: LucideIcons.filePlus2,
+                  accentColor: theme.colorScheme.primary,
+                  onTap: widget.onCreateChooser,
+                ),
+                _buildQuickActionCard(
+                  context,
+                  title: 'Gradebook',
+                  subtitle: 'DepEd Grades',
+                  icon: LucideIcons.bookOpenCheck,
+                  accentColor: Colors.deepPurple,
+                  onTap: () => widget.onNavigateTo(18),
+                ),
+                _buildQuickActionCard(
+                  context,
+                  title: 'Schedule',
+                  subtitle: 'Timetable',
+                  icon: LucideIcons.calendarDays,
+                  accentColor: Colors.amber.shade800,
+                  onTap: () => widget.onNavigateTo(14),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -514,6 +514,24 @@ void main() {
       expect(scrubbed, contains('[REDACTED_API_KEY]'));
     });
 
+    test('formatUserFriendlyErrorMessage transforms raw 503/429 JSON errors into clean guidance with manual fallback', () {
+      const sample503Json = 'GenerativeAIException: Server Error [503]: { "error": { "code": 503, "message": "This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.", "status": "UNAVAILABLE" } }';
+      final msg503 = GeminiService.formatUserFriendlyErrorMessage(sample503Json);
+      expect(msg503, contains('Gemini AI is currently experiencing high demand'));
+      expect(msg503, contains('Open Manual Template'));
+      expect(msg503.contains('{ "error"'), isFalse);
+      expect(msg503.contains('GenerativeAIException'), isFalse);
+
+      const sample429 = 'ClientException: 429 Resource has been exhausted (e.g. check quota)';
+      final msg429 = GeminiService.formatUserFriendlyErrorMessage(sample429);
+      expect(msg429, contains('AI generation limit has been temporarily reached'));
+      expect(msg429, contains('Open Manual Template'));
+
+      const sampleNetwork = 'SocketException: Failed host lookup generativelanguage.googleapis.com';
+      final msgNet = GeminiService.formatUserFriendlyErrorMessage(sampleNetwork);
+      expect(msgNet, contains('Unable to reach the Gemini AI service'));
+    });
+
     test('generates DepEd 2026 multi-session matrix JSON and extracts 4 sessions and rubrics', () async {
       final multiService = GeminiService.forTesting(
         apiKeysProvider: () => ['test-api-key'],

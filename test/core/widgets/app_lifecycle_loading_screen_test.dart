@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:class_realm/core/widgets/app_lifecycle_loading_screen.dart';
+import 'package:class_realm/core/services/sync_coordinator.dart';
 import 'package:class_realm/models/user_model.dart';
 
 void main() {
   testWidgets(
     'AppLifecycleLoadingScreen renders and invokes onComplete upon finish',
     (tester) async {
+      addTearDown(() => SyncCoordinator.instance.stopBackgroundSync());
       bool completed = false;
       await tester.pumpWidget(
         MaterialApp(
@@ -35,6 +37,7 @@ void main() {
       }
 
       expect(completed, isTrue);
+      SyncCoordinator.instance.stopBackgroundSync();
     },
   );
 }
