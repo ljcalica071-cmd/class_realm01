@@ -495,31 +495,42 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       return DateTime(1899, 12, 30).add(Duration(days: numVal.floor()));
     }
 
-    // 2. ISO-8601 (YYYY-MM-DD)
-    final iso = DateTime.tryParse(clean);
-    if (iso != null) return iso;
-
-    // 3. YYYY/MM/DD, YYYY-MM-DD, YYYY MM DD, or YYYY.MM.DD
-    final slashYmd = RegExp(r'^(\d{4})[/\-\s\.](\d{1,2})[/\-\s\.](\d{1,2})$')
+    // 2. Strict YYYY-MM-DD format (or with slash/dot/space delimiter) with calendar boundary validation (no overflow)
+    final ymdMatch = RegExp(r'^(\d{4})[/\-\s\.](\d{1,2})[/\-\s\.](\d{1,2})$')
         .firstMatch(clean);
-    if (slashYmd != null) {
-      final y = int.parse(slashYmd.group(1)!);
-      final m = int.parse(slashYmd.group(2)!);
-      final d = int.parse(slashYmd.group(3)!);
-      return DateTime(y, m, d);
+    if (ymdMatch != null) {
+      final y = int.parse(ymdMatch.group(1)!);
+      final m = int.parse(ymdMatch.group(2)!);
+      final d = int.parse(ymdMatch.group(3)!);
+
+      if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+
+      final parsed = DateTime(y, m, d);
+      // Guard against silent calendar overflow (e.g. 2005-02-31 turning into 2005-03-03)
+      if (parsed.year != y || parsed.month != m || parsed.day != d) {
+        return null;
+      }
+      return parsed;
     }
 
-    // 4. MM/DD/YYYY, DD/MM/YYYY, or with spaces / dots
-    final slashMdy = RegExp(r'^(\d{1,2})[/\-\s\.](\d{1,2})[/\-\s\.](\d{4})$')
+    // 3. Fallback for MM/DD/YYYY or DD/MM/YYYY with calendar boundary validation
+    final mdyMatch = RegExp(r'^(\d{1,2})[/\-\s\.](\d{1,2})[/\-\s\.](\d{4})$')
         .firstMatch(clean);
-    if (slashMdy != null) {
-      final p1 = int.parse(slashMdy.group(1)!);
-      final p2 = int.parse(slashMdy.group(2)!);
-      final y = int.parse(slashMdy.group(3)!);
-      if (p1 > 12) {
-        return DateTime(y, p2, p1);
+    if (mdyMatch != null) {
+      final p1 = int.parse(mdyMatch.group(1)!);
+      final p2 = int.parse(mdyMatch.group(2)!);
+      final y = int.parse(mdyMatch.group(3)!);
+
+      final int m = p1 > 12 ? p2 : p1;
+      final int d = p1 > 12 ? p1 : p2;
+
+      if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+
+      final parsed = DateTime(y, m, d);
+      if (parsed.year != y || parsed.month != m || parsed.day != d) {
+        return null;
       }
-      return DateTime(y, p1, p2);
+      return parsed;
     }
 
     return null;
@@ -1149,6 +1160,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           continue;
         }
 
+        bool hasRowError = false;
+
         // 3. LRN Format Check (Contains letters/symbols, length != 12, starts with 0, or repeating digits)
         final isPureDigits = RegExp(r'^\d+$').hasMatch(rawLrn);
         final startsWithZero = rawLrn.startsWith('0');
@@ -1166,11 +1179,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Must be exactly 12 digits.',
             ),
           );
-          continue;
-        }
-
-        // 4. Duplicate LRN (In File)
-        if (seenLrnsInFile.contains(cleanLrn)) {
+          hasRowError = true;
+        } else if (seenLrnsInFile.contains(cleanLrn)) {
+          // 4. Duplicate LRN (In File)
           invalidRows.add(
             _InvalidStudentRow(
               rowNumber: rowNum,
@@ -1179,9 +1190,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Duplicate LRN in file.',
             ),
           );
-          continue;
+          hasRowError = true;
+        } else {
+          seenLrnsInFile.add(cleanLrn);
         }
-        seenLrnsInFile.add(cleanLrn);
 
         // 5. Email Strict Format / Domain Check
         final hasAllowedDomain = allowedEmailDomains.any(
@@ -1209,11 +1221,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Invalid email address.',
             ),
           );
-          continue;
-        }
-
-        // Duplicate Email within file
-        if (seenEmailsInFile.contains(rawEmail)) {
+          hasRowError = true;
+        } else if (seenEmailsInFile.contains(rawEmail)) {
+          // Duplicate Email within file
           invalidRows.add(
             _InvalidStudentRow(
               rowNumber: rowNum,
@@ -1222,9 +1232,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Duplicate email in file.',
             ),
           );
-          continue;
+          hasRowError = true;
+        } else {
+          seenEmailsInFile.add(rawEmail);
         }
-        seenEmailsInFile.add(rawEmail);
 
         // 7. Name Format (First, Middle, Last)
         // First Name
@@ -1237,9 +1248,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'First name is required.',
             ),
           );
-          continue;
-        }
-        if (RegExp(r'[0-9]').hasMatch(rawFirst)) {
+          hasRowError = true;
+        } else if (RegExp(r'[0-9]').hasMatch(rawFirst)) {
           invalidRows.add(
             _InvalidStudentRow(
               rowNumber: rowNum,
@@ -1248,9 +1258,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Cannot contain numbers.',
             ),
           );
-          continue;
-        }
-        if (!RegExp(r"^[a-zA-Z\s\-\.\'ñÑ]+$").hasMatch(rawFirst)) {
+          hasRowError = true;
+        } else if (!RegExp(r"^[a-zA-Z\s\-\.\'ñÑ]+$").hasMatch(rawFirst)) {
           invalidRows.add(
             _InvalidStudentRow(
               rowNumber: rowNum,
@@ -1259,9 +1268,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Invalid special characters.',
             ),
           );
-          continue;
-        }
-        if (rawFirst.length < 2 || rawFirst.length > 30) {
+          hasRowError = true;
+        } else if (rawFirst.length < 2 || rawFirst.length > 30) {
           invalidRows.add(
             _InvalidStudentRow(
               rowNumber: rowNum,
@@ -1270,7 +1278,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'First name must be between 2 and 30 characters.',
             ),
           );
-          continue;
+          hasRowError = true;
         }
 
         // Last Name
@@ -1283,9 +1291,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Last name is required.',
             ),
           );
-          continue;
-        }
-        if (RegExp(r'[0-9]').hasMatch(rawLast)) {
+          hasRowError = true;
+        } else if (RegExp(r'[0-9]').hasMatch(rawLast)) {
           invalidRows.add(
             _InvalidStudentRow(
               rowNumber: rowNum,
@@ -1294,9 +1301,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Cannot contain numbers.',
             ),
           );
-          continue;
-        }
-        if (!RegExp(r"^[a-zA-Z\s\-\.\'ñÑ]+$").hasMatch(rawLast)) {
+          hasRowError = true;
+        } else if (!RegExp(r"^[a-zA-Z\s\-\.\'ñÑ]+$").hasMatch(rawLast)) {
           invalidRows.add(
             _InvalidStudentRow(
               rowNumber: rowNum,
@@ -1305,9 +1311,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Invalid special characters.',
             ),
           );
-          continue;
-        }
-        if (rawLast.length < 2 || rawLast.length > 30) {
+          hasRowError = true;
+        } else if (rawLast.length < 2 || rawLast.length > 30) {
           invalidRows.add(
             _InvalidStudentRow(
               rowNumber: rowNum,
@@ -1316,7 +1321,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Last name must be between 2 and 30 characters.',
             ),
           );
-          continue;
+          hasRowError = true;
         }
 
         // The middle initial is optional, but a provided value must match
@@ -1333,7 +1338,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: AppValidators.invalidBulkMiddleInitialMessage,
             ),
           );
-          continue;
+          hasRowError = true;
         }
         final cleanMiddle =
             AppValidators.normalizeMiddleInitial(rawMiddle) ?? '';
@@ -1349,7 +1354,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Must be Male or Female.',
             ),
           );
-          continue;
+          hasRowError = true;
         }
 
         // 8. Birthday Parsing (Handles YYYY-MM-DD and Excel serial date)
@@ -1363,24 +1368,28 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               reason: 'Use YYYY-MM-DD format.',
             ),
           );
-          continue;
+          hasRowError = true;
+        } else {
+          // 9. Age Limits Check (10 - 50 years old)
+          int age = now.year - parsedBday.year;
+          if (now.month < parsedBday.month ||
+              (now.month == parsedBday.month && now.day < parsedBday.day)) {
+            age--;
+          }
+          if (parsedBday.isAfter(now) || age < 10 || age > 50) {
+            invalidRows.add(
+              _InvalidStudentRow(
+                rowNumber: rowNum,
+                fieldTag: 'Birthday',
+                identifier: rawBday,
+                reason: 'Must be 10-50 years old.',
+              ),
+            );
+            hasRowError = true;
+          }
         }
 
-        // 9. Age Limits Check (10 - 50 years old)
-        int age = now.year - parsedBday.year;
-        if (now.month < parsedBday.month ||
-            (now.month == parsedBday.month && now.day < parsedBday.day)) {
-          age--;
-        }
-        if (parsedBday.isAfter(now) || age < 10 || age > 50) {
-          invalidRows.add(
-            _InvalidStudentRow(
-              rowNumber: rowNum,
-              fieldTag: 'Birthday',
-              identifier: rawBday,
-              reason: 'Must be 10-50 years old.',
-            ),
-          );
+        if (hasRowError) {
           continue;
         }
 
@@ -1391,8 +1400,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             firstName: _toTitleCase(rawFirst),
             middleName: cleanMiddle,
             lastName: _toTitleCase(rawLast),
-            gender: parsedGender,
-            birthday: parsedBday,
+            gender: parsedGender!,
+            birthday: parsedBday!,
             email: rawEmail,
           ),
         );

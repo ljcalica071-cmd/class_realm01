@@ -1,10 +1,8 @@
 # ClassRealm Git & Linguist Configuration
-# Tells GitHub that build/web contains compiled vendored artifacts,
-# so GitHub excludes it from the repository language statistics
-# without deleting or breaking the Vercel web deployment.
+# Tells GitHub that build artifacts and generated JS files are excluded from
+# repository language statistics.
 
-build/web/** linguist-vendored
-build/web/** linguist-generated
-*.js linguist-generated
-*.map linguist-generated
-
+build/** linguist-generated=true linguist-vendored=true
+build/web/** linguist-generated=true linguist-vendored=true
+*.js linguist-generated=true linguist-vendored=true
+*.js.map linguist-generated=true linguist-vendored=true
