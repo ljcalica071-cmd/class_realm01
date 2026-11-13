@@ -134,6 +134,7 @@ class TeacherLessonPlanStore {
         final cloudIds = cloudPlans.map((p) => p.id).toSet();
         final unsyncedLocal = localPlans.where((p) => !cloudIds.contains(p.id)).toList();
 
+        final unsyncedLocalFailed = <IlawLessonPlan>[];
         if (unsyncedLocal.isNotEmpty) {
           for (final plan in unsyncedLocal) {
             try {
@@ -141,17 +142,19 @@ class TeacherLessonPlanStore {
               cloudPlans.add(plan);
             } catch (e) {
               debugPrint('Auto-sync single plan notice: $e');
+              unsyncedLocalFailed.add(plan);
             }
           }
         }
 
-        cloudPlans.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        final combinedPlans = [...cloudPlans, ...unsyncedLocalFailed];
+        combinedPlans.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
         // 3. Cache latest records locally
-        await _persistForTeacher(teacher.id, cloudPlans);
+        await _persistForTeacher(teacher.id, combinedPlans);
         lastSyncCloudSuccess = true;
         lastSyncError = null;
-        return cloudPlans;
+        return combinedPlans;
       } catch (e) {
         lastSyncCloudSuccess = false;
         lastSyncError = e.toString();
