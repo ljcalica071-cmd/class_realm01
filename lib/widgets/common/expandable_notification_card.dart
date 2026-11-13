@@ -150,31 +150,6 @@ class _ExpandableNotificationCardState
         .trim();
   }
 
-  /// Extracts subject and section metadata if present in title or message
-  Map<String, String>? _extractSubjectAndSection(String title, String message) {
-    final combined = '$title $message';
-    final regIn = RegExp(r'in\s+([^()]+?)\s*\(([^)]+)\)', caseSensitive: false);
-    final matchIn = regIn.firstMatch(combined);
-    if (matchIn != null) {
-      final subj = matchIn.group(1)?.trim();
-      final sec = matchIn.group(2)?.trim();
-      if (subj != null && subj.isNotEmpty && sec != null && sec.isNotEmpty) {
-        return {'subject': subj, 'section': sec};
-      }
-    }
-
-    final regDash = RegExp(r'([A-Za-z0-9\s]+)\s*[-—•]\s*(Section\s*[A-Za-z0-9]+)', caseSensitive: false);
-    final matchDash = regDash.firstMatch(combined);
-    if (matchDash != null) {
-      final subj = matchDash.group(1)?.trim();
-      final sec = matchDash.group(2)?.trim();
-      if (subj != null && subj.isNotEmpty && sec != null && sec.isNotEmpty) {
-        return {'subject': subj, 'section': sec};
-      }
-    }
-    return null;
-  }
-
   String _formatTime(DateTime dt) {
     final now = DateTime.now();
     final diff = now.difference(dt);
@@ -198,7 +173,6 @@ class _ExpandableNotificationCardState
 
     final formattedTitle = ExpandableNotificationCard.wrapUnbrokenString(_cleanTitle(n.title));
     final formattedMessage = ExpandableNotificationCard.wrapUnbrokenString(n.message);
-    final subjectSection = _extractSubjectAndSection(n.title, n.message);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -301,37 +275,6 @@ class _ExpandableNotificationCardState
                             ),
                           ),
                         ),
-                        if (subjectSection != null) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.08)
-                                  : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.12)
-                                    : const Color(0xFFE2E8F0),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              '${subjectSection['subject']} • ${subjectSection['section']}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isDark
-                                    ? const Color(0xFF94A3B8)
-                                    : _crSlateBody,
-                              ),
-                            ),
-                          ),
-                        ],
                         const SizedBox(width: 8),
 
                         // Timestamp
