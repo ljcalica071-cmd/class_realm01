@@ -45,6 +45,35 @@ class _TeacherStudentManagementTabState
   List<String> _teacherSections = [];
   List<Map<String, dynamic>> _teacherSubjectsData = [];
 
+  List<String> get _availableSubjects {
+    final set = <String>{};
+    for (final s in _teacherSubjectsData) {
+      final name = s['subject_name']?.toString().trim();
+      if (name != null && name.isNotEmpty) {
+        set.add(name);
+      }
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  List<String> get _availableSections {
+    final set = <String>{};
+    for (final s in _teacherSubjectsData) {
+      final subMatches = _selectedSubjectFilter == '— All Subjects —' ||
+          s['subject_name']?.toString().trim().toLowerCase() ==
+              _selectedSubjectFilter.trim().toLowerCase();
+      if (subMatches) {
+        final sec = s['section_name']?.toString().trim();
+        if (sec != null && sec.isNotEmpty) {
+          set.add(sec);
+        }
+      }
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
   int _currentPage = 1;
   final int _itemsPerPage = 20;
 
@@ -239,10 +268,11 @@ class _TeacherStudentManagementTabState
           // Filter archived so it doesn't duplicate ones in active
           _archivedStudents = archived.where((s) => s.isArchived).toList();
 
+          final availableSubs = _availableSubjects;
           if ((_selectedSubjectFilter == '— All Subjects —' ||
-                  !_teacherSubjects.contains(_selectedSubjectFilter)) &&
-              _teacherSubjects.isNotEmpty) {
-            _selectedSubjectFilter = _teacherSubjects.first;
+                  !availableSubs.contains(_selectedSubjectFilter)) &&
+              availableSubs.isNotEmpty) {
+            _selectedSubjectFilter = availableSubs.first;
           }
 
           _isLoading = false;
@@ -580,173 +610,18 @@ class _TeacherStudentManagementTabState
                     ),
                   ),
                   const SizedBox(width: 16),
-                  _buildArchiveButton(theme),
-                ],
-              ),
-              const SizedBox(height: 16),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final filters = Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.12,
-                            ),
-                          ),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value:
-                                _teacherSubjects.contains(
-                                  _selectedSubjectFilter,
-                                )
-                                ? _selectedSubjectFilter
-                                : (_teacherSubjects.isNotEmpty
-                                      ? _teacherSubjects.first
-                                      : null),
-                            dropdownColor: theme.colorScheme.surface,
-                            style: TextStyle(
-                              color: theme.colorScheme.onSurface,
-                            ),
-                            hint: Text(
-                              _teacherSubjects.isEmpty
-                                  ? 'No Subjects'
-                                  : 'Select Subject',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            items: _teacherSubjects
-                                .map(
-                                  (sub) => DropdownMenuItem(
-                                    value: sub,
-                                    child: Text(
-                                      sub,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() {
-                                  _selectedSubjectFilter = val;
-                                  _selectedSectionFilter = '— All Sections —';
-                                  _currentPage = 1;
-                                });
-                                unawaited(_saveFilters());
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.12,
-                            ),
-                          ),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedSectionFilter,
-                            dropdownColor: theme.colorScheme.surface,
-                            style: TextStyle(
-                              color: theme.colorScheme.onSurface,
-                            ),
-                            items: ['— All Sections —', ...availableSections]
-                                .map(
-                                  (sec) => DropdownMenuItem(
-                                    value: sec,
-                                    child: Text(
-                                      sec,
-                                      style: TextStyle(fontSize: 13),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() {
-                                  _selectedSectionFilter = val;
-                                  _currentPage = 1;
-                                });
-                                unawaited(_saveFilters());
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 300,
-                        child: TextField(
-                          onChanged: (v) =>
-                              setState(() => _studentSearchQuery = v),
-                          decoration: InputDecoration(
-                            hintText: 'Search by name or LRN...',
-                            hintStyle: TextStyle(
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                            prefixIcon: Icon(
-                              LucideIcons.search,
-                              size: 20,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                            filled: true,
-                            fillColor: theme.colorScheme.surface,
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 10,
-                              horizontal: 16,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.12,
-                                ),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.12,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                  final actionButtons = Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     alignment: WrapAlignment.end,
                     children: [
                       SizedBox(
-                        height: 44, // 10% Accent/Action styling
+                        height: 38,
                         child: AppButton.success(
                           icon: LucideIcons.upload,
                           label: 'Import Excel',
+                          isSmall: true,
                           onPressed: () => UnifiedEnrollStudentDialog.show(
                             context,
                             teacherSubjects: _teacherSubjectsData,
@@ -756,10 +631,11 @@ class _TeacherStudentManagementTabState
                         ),
                       ),
                       SizedBox(
-                        height: 44,
+                        height: 38,
                         child: AppButton.primary(
                           icon: LucideIcons.userPlus,
                           label: 'Add Students',
+                          isSmall: true,
                           onPressed: () => UnifiedEnrollStudentDialog.show(
                             context,
                             teacherSubjects: _teacherSubjectsData,
@@ -769,27 +645,143 @@ class _TeacherStudentManagementTabState
                         ),
                       ),
                     ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 950;
+                  final leftControls = Wrap(
+                    spacing: 12,
+                    runSpacing: 10,
+                    crossAxisAlignment: WrapCrossAlignment.end,
+                    children: [
+                      _buildFilterDropdown(
+                        label: 'Subject',
+                        icon: LucideIcons.bookOpen,
+                        value: _selectedSubjectFilter,
+                        items: _availableSubjects,
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _selectedSubjectFilter = val;
+                              _selectedSectionFilter = '— All Sections —';
+                              _currentPage = 1;
+                            });
+                            unawaited(_saveFilters());
+                          }
+                        },
+                        itemLabel: (val) => val,
+                        theme: theme,
+                        isDark: isDark,
+                      ),
+                      _buildFilterDropdown(
+                        label: 'Section',
+                        icon: LucideIcons.users,
+                        value: _selectedSectionFilter,
+                        items: ['— All Sections —', ..._availableSections],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _selectedSectionFilter = val;
+                              _currentPage = 1;
+                            });
+                            unawaited(_saveFilters());
+                          }
+                        },
+                        itemLabel: (val) => val,
+                        theme: theme,
+                        isDark: isDark,
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Search',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.65,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            width: isCompact ? constraints.maxWidth : 260,
+                            height: 38,
+                            child: TextField(
+                              onChanged: (v) =>
+                                  setState(() => _studentSearchQuery = v),
+                              style: const TextStyle(fontSize: 12.5),
+                              decoration: InputDecoration(
+                                hintText: 'Search by name or LRN...',
+                                hintStyle: TextStyle(
+                                  fontSize: 12.5,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                ),
+                                prefixIcon: Icon(
+                                  LucideIcons.search,
+                                  size: 16,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                ),
+                                filled: true,
+                                fillColor: theme.colorScheme.surface,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                  horizontal: 12,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: theme.colorScheme.onSurface.withValues(
+                                      alpha: isDark ? 0.18 : 0.16,
+                                    ),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: theme.colorScheme.onSurface.withValues(
+                                      alpha: isDark ? 0.18 : 0.16,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   );
 
-                  if (constraints.maxWidth < 760) {
+                  if (isCompact) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        filters,
+                        leftControls,
                         const SizedBox(height: 12),
                         Align(
                           alignment: Alignment.centerRight,
-                          child: actionButtons,
+                          child: _buildArchiveButton(theme),
                         ),
                       ],
                     );
                   }
 
                   return Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(child: filters),
-                      const SizedBox(width: 12),
-                      actionButtons,
+                      Expanded(child: leftControls),
+                      const SizedBox(width: 16),
+                      _buildArchiveButton(theme),
                     ],
                   );
                 },
@@ -1796,7 +1788,7 @@ class _TeacherStudentManagementTabState
 
   Widget _buildArchiveButton(ThemeData theme) {
     return SizedBox(
-      height: 44,
+      height: 38,
       child: OutlinedButton.icon(
         style: OutlinedButton.styleFrom(
           foregroundColor: _showArchivedStudents
@@ -1816,7 +1808,7 @@ class _TeacherStudentManagementTabState
           _showArchivedStudents
               ? Icons.people_outline
               : Icons.archive_outlined,
-          size: 18,
+          size: 16,
         ),
         label: Text(
           _showArchivedStudents
@@ -1824,13 +1816,121 @@ class _TeacherStudentManagementTabState
               : 'View Archive (${_archivedStudents.length})',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 13,
+            fontSize: 12.5,
           ),
         ),
         onPressed: () => setState(() {
           _showArchivedStudents = !_showArchivedStudents;
         }),
       ),
+    );
+  }
+
+  Widget _buildFilterDropdown({
+    required String label,
+    required IconData icon,
+    required String? value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+    required String Function(String) itemLabel,
+    required ThemeData theme,
+    required bool isDark,
+  }) {
+    final validValue = (value != null && items.contains(value))
+        ? value
+        : (items.isNotEmpty ? items.first : null);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(
+                alpha: isDark ? 0.18 : 0.16,
+              ),
+            ),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: validValue,
+              dropdownColor: theme.colorScheme.surface,
+              icon: Icon(
+                LucideIcons.chevronDown,
+                size: 14,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+              style: TextStyle(
+                color: theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+                fontSize: 12.5,
+              ),
+              isDense: true,
+              items: items.isEmpty
+                  ? [
+                      DropdownMenuItem<String>(
+                        value: null,
+                        enabled: false,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              icon,
+                              size: 13.5,
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'No ${label.toLowerCase()}s',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ]
+                  : items.map((item) {
+                      return DropdownMenuItem<String>(
+                        value: item,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              icon,
+                              size: 13.5,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(itemLabel(item)),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

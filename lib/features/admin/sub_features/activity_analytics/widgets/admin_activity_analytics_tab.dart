@@ -32,54 +32,44 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   static const int _historyItemsPerPage = 10;
   String? _selectedTeacherId; // null = all teachers
 
+  // Fixed Status Indicators across the timeline and analytics.
+  // Teachers must NEVER be assigned any of these colors to prevent confusion.
+  static const Color statusOnlineColor = AppTheme.catGreen; // Emerald (#10B981)
+  static const Color statusManualLogoutColor = Color(0xFF2563EB); // Royal Blue (#2563EB)
+  static const Color statusInactivityColor = Color(0xFFF59E0B); // Amber (#F59E0B)
+  static const Color statusTerminatedColor = Color(0xFF64748B); // Slate Gray (#64748B)
+
+  /// Distinct, non-colliding palette dedicated EXCLUSIVELY to Teachers.
+  /// Strictly excludes Green (Online), Blue (Manual Logout), Amber (Inactivity), and Slate Gray (Terminated).
   static const List<Color> _teacherColorPalette = [
-    AppTheme.catGreen, // Emerald (#10B981) - Sir Naruto Uzumaki
-    Color(0xFF8B5CF6), // Purple / Violet - Ma'am Jhon Calantina
-    Color(0xFFF59E0B), // Amber - Sir Rex San Juan
-    Color(0xFF06B6D4), // Cyan
-    Color(0xFFF43F5E), // Coral / Rose
-    Color(0xFF3B82F6), // Blue
-    Color(0xFF14B8A6), // Teal
-    Color(0xFFEC4899), // Pink
+    Color(0xFF8B5CF6), // 0: Vivid Purple / Violet
+    Color(0xFF06B6D4), // 1: Cyan / Electric Cyan
+    Color(0xFFF43F5E), // 2: Coral / Rose
+    Color(0xFF14B8A6), // 3: Teal / Deep Sea Green (distinct from catGreen)
+    Color(0xFFEC4899), // 4: Pink / Magenta
+    Color(0xFFD97706), // 5: Burnt Orange (distinct from status Amber)
+    Color(0xFF6366F1), // 6: Indigo
+    Color(0xFF84CC16), // 7: Lime Green
+    Color(0xFFA855F7), // 8: Bright Purple
+    Color(0xFFE11D48), // 9: Crimson
+    Color(0xFF0D9488), // 10: Deep Teal
+    Color(0xFFDB2777), // 11: Deep Rose
   ];
 
   static final Map<String, Color> _cachedTeacherColors = {};
 
   /// Returns a permanent, deterministic color for each teacher that NEVER changes across filters
+  /// and NEVER collides with another teacher or with the 4 status indicators (Online, Manual Logout, Inactivity, Terminated).
   static Color getTeacherColor(String teacherId, [String? teacherName]) {
     if (_cachedTeacherColors.containsKey(teacherId)) {
       return _cachedTeacherColors[teacherId]!;
     }
 
-    final nameLower = (teacherName ?? '').toLowerCase();
-    final idLower = teacherId.toLowerCase();
-
-    // 1. Permanent canonical assignments for primary teachers
-    if (nameLower.contains('naruto') || idLower.contains('naruto')) {
-      _cachedTeacherColors[teacherId] =
-          _teacherColorPalette[0]; // Always Emerald Green
-      return _teacherColorPalette[0];
-    }
-    if (nameLower.contains('calantina') ||
-        nameLower.contains('jhon') ||
-        idLower.contains('calantina') ||
-        idLower.contains('jhon')) {
-      _cachedTeacherColors[teacherId] =
-          _teacherColorPalette[1]; // Always Purple
-      return _teacherColorPalette[1];
-    }
-    if (nameLower.contains('rex') ||
-        nameLower.contains('san juan') ||
-        idLower.contains('rex')) {
-      _cachedTeacherColors[teacherId] = _teacherColorPalette[2]; // Always Amber
-      return _teacherColorPalette[2];
-    }
-
-    // 2. Persistent storage in AppDataCache
+    // 1. Persistent storage in AppDataCache
     try {
       final savedRegistry = AppDataCache.instance
           .getCached<Map<String, dynamic>>(
-            'admin_teacher_color_registry',
+            'admin_teacher_color_registry_v2',
             (raw) => Map<String, dynamic>.from(raw as Map),
           );
       if (savedRegistry != null && savedRegistry.containsKey(teacherId)) {
@@ -90,10 +80,10 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       }
     } catch (_) {}
 
-    // 3. Deterministically pick next available distinct color
+    // 2. Deterministically pick next available distinct color from palette
     final usedColors = _cachedTeacherColors.values.toSet();
     Color? assignedColor;
-    int assignedIdx = 0;
+    int assignedIdx = -1;
     for (int i = 0; i < _teacherColorPalette.length; i++) {
       if (!usedColors.contains(_teacherColorPalette[i])) {
         assignedColor = _teacherColorPalette[i];
@@ -101,23 +91,26 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         break;
       }
     }
-    assignedColor ??=
-        _teacherColorPalette[teacherId.hashCode.abs() %
-            _teacherColorPalette.length];
+
+    // If more teachers than palette length, cycle deterministically by hash
+    if (assignedColor == null) {
+      assignedIdx = teacherId.hashCode.abs() % _teacherColorPalette.length;
+      assignedColor = _teacherColorPalette[assignedIdx];
+    }
 
     _cachedTeacherColors[teacherId] = assignedColor;
 
     try {
       final savedRegistry =
           AppDataCache.instance.getCached<Map<String, dynamic>>(
-            'admin_teacher_color_registry',
+            'admin_teacher_color_registry_v2',
             (raw) => Map<String, dynamic>.from(raw as Map),
           ) ??
           <String, dynamic>{};
       savedRegistry[teacherId] = assignedIdx;
       unawaited(
         AppDataCache.instance.setCache(
-          'admin_teacher_color_registry',
+          'admin_teacher_color_registry_v2',
           savedRegistry,
         ),
       );
@@ -547,7 +540,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
     if (teachersMap.isEmpty) {
       return const [
-        _TeacherInfo(id: 'faculty', name: 'Faculty', color: AppTheme.catGreen),
+        _TeacherInfo(
+          id: 'faculty',
+          name: 'Faculty',
+          color: Color(0xFF8B5CF6),
+        ),
       ];
     }
 
@@ -1651,18 +1648,20 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                   return LayoutBuilder(
                     builder: (context, wlConstraints) {
                       final maxW = wlConstraints.maxWidth;
-                      final double itemWidth;
-                      if (maxW < 580) {
-                        itemWidth = maxW;
-                      } else if (maxW < 880) {
-                        itemWidth = (maxW - 12) / 2;
-                      } else {
-                        itemWidth = 280;
-                      }
+                      const double minCardWidth = 240.0;
+                      const double spacing = 12.0;
+
+                      // Compute optimal columns and stretch items equally to fill full available width
+                      final int columns = math.max(
+                        1,
+                        ((maxW + spacing) / (minCardWidth + spacing)).floor(),
+                      );
+                      final double itemWidth = (maxW - (spacing * (columns - 1))) /
+                          columns;
 
                       return Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
+                        spacing: spacing,
+                        runSpacing: spacing,
                         children: sortedSummaries.map((w) {
                           final teacherSessions = _sessionLogs
                               .where((s) => s.userId == w.teacherId)
@@ -3099,22 +3098,22 @@ class _TeacherSessionTimelineAndHourlyViewState
                   runSpacing: 4,
                   children: [
                     _buildLegendIndicator(
-                      color: AppTheme.catGreen,
+                      color: _AdminActivityAnalyticsTabState.statusOnlineColor,
                       label: 'Online Now ▶',
                       isDark: widget.isDark,
                     ),
                     _buildLegendIndicator(
-                      color: const Color(0xFF3B82F6),
+                      color: _AdminActivityAnalyticsTabState.statusManualLogoutColor,
                       label: 'Manual Logout',
                       isDark: widget.isDark,
                     ),
                     _buildLegendIndicator(
-                      color: const Color(0xFFF59E0B),
+                      color: _AdminActivityAnalyticsTabState.statusInactivityColor,
                       label: 'Inactivity',
                       isDark: widget.isDark,
                     ),
                     _buildLegendIndicator(
-                      color: const Color(0xFF64748B),
+                      color: _AdminActivityAnalyticsTabState.statusTerminatedColor,
                       label: 'Terminated',
                       isDark: widget.isDark,
                     ),
@@ -3455,11 +3454,13 @@ class _TeacherSessionTimelineAndHourlyViewState
 
                                     Color endCapColor = bar.color;
                                     if (!bar.isActive) {
-                                      if (bar.logoutReason == 'inactivity') {
-                                        endCapColor = const Color(0xFFF59E0B);
-                                      } else if (bar.logoutReason ==
-                                          'terminated') {
-                                        endCapColor = const Color(0xFF64748B);
+                                      if (bar.logoutReason == 'inactivity' ||
+                                          bar.logoutReason == 'inactivity_timeout') {
+                                        endCapColor = _AdminActivityAnalyticsTabState.statusInactivityColor;
+                                      } else if (bar.logoutReason == 'terminated') {
+                                        endCapColor = _AdminActivityAnalyticsTabState.statusTerminatedColor;
+                                      } else {
+                                        endCapColor = _AdminActivityAnalyticsTabState.statusManualLogoutColor;
                                       }
                                     }
 

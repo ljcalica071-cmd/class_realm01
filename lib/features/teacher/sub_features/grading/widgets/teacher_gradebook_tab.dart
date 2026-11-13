@@ -1313,19 +1313,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         : DepEdGradingEngine.transmuteDO15(initialGrade);
   }
 
-  bool _hasRecordedScoresForTerm(int term) {
-    final termScoresMap = _termScores[term];
-    if (termScoresMap != null) {
-      for (final studentEntry in termScoresMap.values) {
-        for (final catEntry in studentEntry.values) {
-          for (final score in catEntry.values) {
-            if (score != null) return true;
-          }
-        }
-      }
-    }
+  bool _hasAnyTermGrade(int term) {
     for (final student in _students) {
-      if (_initialGrade(student.id, term: term) != null) {
+      if (_termGrade(student.id, term) != null) {
         return true;
       }
     }
@@ -1333,8 +1323,20 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
   }
 
   bool _hasAnyFinalGrades() {
-    for (final term in _activeTerms) {
-      if (_hasRecordedScoresForTerm(term)) return true;
+    final activeTermsList = _activeTerms.isEmpty ? const [1] : _activeTerms;
+    for (final student in _students) {
+      final termGrades = {
+        for (final term in activeTermsList)
+          term: _termGrade(student.id, term),
+      };
+      final fg = DepEdGradingEngine.computeFinalGrade(
+        termsTaught: _termsTaught,
+        activeTerms: activeTermsList,
+        termGrades: termGrades,
+        unitsPerTerm: _unitsPerTerm,
+        totalUnitsEarned: _unitsPerYear,
+      );
+      if (fg != null) return true;
     }
     return false;
   }
@@ -1850,6 +1852,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
   // SCHOOL INFO BAR (like the DepEd header)
   // ====================================================================
   Widget _buildSchoolInfoBar(ThemeData theme, Color bg, Color text) {
+    final isDark = theme.brightness == Brightness.dark;
     final sub = _selectedSubject;
     final sec = _selectedSection;
     final data = _currentSubjectData;
@@ -1886,36 +1889,43 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
               ],
             ),
           ),
-          // Right: School Year
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppTheme.catGreen.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: AppTheme.catGreen.withValues(alpha: 0.3),
+          // Right: Publish / Unpublish Button & School Year Badge
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildPublishButton(theme, isDark),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppTheme.catGreen.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: AppTheme.catGreen.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'S.Y.: ',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: text.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    Text(
+                      '${data?['school_year'] ?? '2026-2027'}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: text,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'S.Y.: ',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: text.withValues(alpha: 0.7),
-                  ),
-                ),
-                Text(
-                  '${data?['school_year'] ?? '2026-2027'}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: text,
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
         ],
       ),
@@ -3969,15 +3979,17 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         : _isFinalGradePublished;
     final willPublish = !currentlyPublished;
 
-    // Validate: cannot publish if no records/scores recorded
+    // Validate: cannot publish if no computed grades recorded
     if (willPublish) {
-      final hasRecords = isTermGrade
-          ? _hasRecordedScoresForTerm(_selectedTerm)
+      final hasGrades = isTermGrade
+          ? _hasAnyTermGrade(_selectedTerm)
           : _hasAnyFinalGrades();
-      if (!hasRecords) {
+      if (!hasGrades) {
         AppTopToast.warning(
           context,
-          'Cannot publish: No scores or grades recorded yet.',
+          isTermGrade
+              ? 'Cannot publish: No computed grades available yet for Term $_selectedTerm.'
+              : 'Cannot publish: No computed final grades available yet.',
         );
         return;
       }
@@ -3995,9 +4007,27 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
       final client = SupabaseService().client;
       if (isTermGrade) {
         final termNumber = _selectedTerm;
+
+        // Fetch existing term_grades rows for this offering to reuse their primary key id
+        final existingRows = await client
+            .from('term_grades')
+            .select('id, student_id, term_number')
+            .eq('subject_offering_id', offeringId);
+
+        final existingIdMap = <String, String>{};
+        for (final row in (existingRows as List? ?? [])) {
+          final sId = row['student_id']?.toString() ?? '';
+          final tNum = (row['term_number'] as num?)?.toInt();
+          if (tNum == termNumber && sId.isNotEmpty) {
+            existingIdMap[sId] = row['id'].toString();
+          }
+        }
+
         final termRows = [
           for (final student in _students)
             {
+              if (existingIdMap.containsKey(student.id))
+                'id': existingIdMap[student.id],
               ..._buildPersistedTermGrade(student.id, termNumber),
               'is_published': willPublish,
               'subject_offering_id': offeringId,
@@ -4009,7 +4039,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
               .from('term_grades')
               .upsert(
                 termRows,
-                onConflict: 'student_id,subject_offering_id,term_number',
+                onConflict: 'id',
               );
         }
         await client
@@ -4052,7 +4082,23 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
     } catch (e) {
       debugPrint('Error toggling grade publish status: $e');
       if (mounted) {
-        AppTopToast.error(context, 'Failed to update publication status: $e');
+        final errStr = e.toString().toLowerCase();
+        final String friendlyMsg;
+        if (errStr.contains('23505') ||
+            errStr.contains('unique') ||
+            errStr.contains('duplicate')) {
+          friendlyMsg =
+              'Unable to update publication: Grade records conflict. Please refresh the page.';
+        } else if (errStr.contains('socket') ||
+            errStr.contains('network') ||
+            errStr.contains('timeout')) {
+          friendlyMsg =
+              'Connection error. Please check your internet connection and try again.';
+        } else {
+          friendlyMsg =
+              'Failed to update publication status. Please try again.';
+        }
+        AppTopToast.error(context, friendlyMsg);
       }
     } finally {
       if (mounted) {
@@ -4085,10 +4131,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         : _isFinalGradePublished;
     final inCooldown = _cooldownSeconds > 0;
 
-    final hasRecords = isTermGrade
-        ? _hasRecordedScoresForTerm(_selectedTerm)
+    final hasGrades = isTermGrade
+        ? _hasAnyTermGrade(_selectedTerm)
         : _hasAnyFinalGrades();
-    final canPublish = isPublished || hasRecords;
+    final canPublish = isPublished || hasGrades;
 
     final isDisabled =
         _isPublishing ||
@@ -4147,7 +4193,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
 
     final String tooltipMessage;
     if (!canPublish) {
-      tooltipMessage = 'Cannot publish: No scores or grades recorded yet.';
+      tooltipMessage = isTermGrade
+          ? 'Cannot publish: No computed grades available yet for Term $_selectedTerm.'
+          : 'Cannot publish: No computed final grades available yet.';
     } else if (inCooldown) {
       tooltipMessage =
           'Please wait ${_cooldownSeconds}s before updating again.';
@@ -4292,13 +4340,11 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                       ),
                     );
                   }),
+                  const SizedBox(width: 12),
                 ],
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          _buildPublishButton(theme, isDark),
-          const SizedBox(width: 12),
         ],
       ),
     );

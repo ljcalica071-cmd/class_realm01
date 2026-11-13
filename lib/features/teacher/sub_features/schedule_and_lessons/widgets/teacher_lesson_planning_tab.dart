@@ -281,15 +281,33 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
     if (value == null) return;
     if (value == 'Custom Range') {
       final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final min2026 = DateTime(2026, 1, 1);
+      final lastAllowed = today.isBefore(min2026) ? min2026 : today;
+
+      DateTimeRange? initialRange;
+      if (_customDateRange != null) {
+        var start = _customDateRange!.start;
+        var end = _customDateRange!.end;
+        if (start.isBefore(min2026)) start = min2026;
+        if (start.isAfter(lastAllowed)) start = lastAllowed;
+        if (end.isBefore(start)) end = start;
+        if (end.isAfter(lastAllowed)) end = lastAllowed;
+        initialRange = DateTimeRange(start: start, end: end);
+      } else {
+        var defaultStart = today.subtract(const Duration(days: 7));
+        if (defaultStart.isBefore(min2026)) defaultStart = min2026;
+        initialRange = DateTimeRange(start: defaultStart, end: lastAllowed);
+      }
+
       final picked = await showDateRangePicker(
         context: context,
-        firstDate: DateTime(2023),
-        lastDate: DateTime(2030),
-        initialDateRange: _customDateRange ??
-            DateTimeRange(
-              start: now.subtract(const Duration(days: 7)),
-              end: now,
-            ),
+        firstDate: min2026,
+        lastDate: lastAllowed,
+        currentDate: today,
+        initialDateRange: initialRange,
+        helpText: 'Select Date Range',
+        saveText: 'Save',
       );
       if (picked != null) {
         setState(() {
