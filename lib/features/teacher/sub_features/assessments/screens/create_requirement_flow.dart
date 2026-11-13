@@ -120,7 +120,18 @@ class _CreateRequirementFlowDialogState
     _titleCtrl.text = task?.title ?? '';
     _instructionsCtrl.text = task?.instructions ?? '';
     _maxScoreCtrl.text = task?.maxScore.toInt().toString() ?? '100';
-    _attachmentName = task?.attachmentName;
+    final rawAttName = task?.attachmentName;
+    if (rawAttName != null && rawAttName.trim().isNotEmpty) {
+      _attachmentName = rawAttName.trim();
+    } else if (task?.storagePath != null && task!.storagePath!.trim().isNotEmpty) {
+      final lastPart = task.storagePath!.trim().split('/').last;
+      final underscoreIdx = lastPart.indexOf('_');
+      _attachmentName = (underscoreIdx != -1 && underscoreIdx + 1 < lastPart.length)
+          ? lastPart.substring(underscoreIdx + 1)
+          : lastPart;
+    } else {
+      _attachmentName = null;
+    }
     _pickedFileSizeBytes = task?.fileSizeBytes;
 
     if (task != null) {

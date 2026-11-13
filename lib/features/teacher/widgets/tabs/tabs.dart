@@ -1,11 +1,9 @@
-export 'package:class_realm/features/teacher/sub_features/setup/widgets/teacher_academic_setup_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/attendance/widgets/teacher_attendance_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/setup/widgets/teacher_classroom_setup_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/overview/widgets/teacher_dashboard_overview_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/assessments/widgets/teacher_exam_checker_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_grades_tab.dart';
-export 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_grading_system_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/widgets/teacher_learning_materials_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/schedule_and_lessons/widgets/teacher_lesson_planning_tab.dart';
 export 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/teacher_notifications_tab.dart';

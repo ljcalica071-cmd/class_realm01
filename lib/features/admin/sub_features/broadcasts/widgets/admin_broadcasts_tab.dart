@@ -501,18 +501,18 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     final message = _messageController.text.trim();
 
     bool hasValidationError = false;
-    if (title.length < 3 || title.length > 100) {
+    if (title.length < 2 || title.length > 100) {
       setState(() {
-        _titleError = 'Title must be between 3 and 100 characters.';
+        _titleError = 'Title must be between 2 and 100 characters.';
       });
       hasValidationError = true;
     } else {
       if (_titleError != null) setState(() => _titleError = null);
     }
 
-    if (message.length < 5 || message.length > 1000) {
+    if (message.length < 2 || message.length > 1000) {
       setState(() {
-        _messageError = 'Message must be between 5 and 1,000 characters.';
+        _messageError = 'Message must be between 2 and 1,000 characters.';
       });
       hasValidationError = true;
     } else {
@@ -588,6 +588,62 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           SnackBar(
             backgroundColor: AppTheme.catRed,
             content: Text('Error: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleDeleteAnnouncement(AppNotificationModel b) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Announcement'),
+        content: Text(
+          'Are you sure you want to delete "${b.title}"? This announcement will no longer be visible to any recipient.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await AdminRepository.instance.softDeleteAnnouncement(b.id);
+      if (mounted) {
+        setState(() {
+          _broadcasts.removeWhere((item) => item.id == b.id);
+        });
+        AppDataCache.instance.setCache(
+          'admin_broadcasts_history',
+          _broadcasts.map((e) => e.toJson()).toList(),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: AppTheme.catGreen,
+            content: Text('Announcement deleted successfully.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.catRed,
+            content: Text('Failed to delete announcement: $e'),
           ),
         );
       }
@@ -1048,7 +1104,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '3 – 100 characters required',
+                          '2 – 100 characters required',
                           style: TextStyle(
                             fontSize: 12,
                             color: theme.colorScheme.onSurface.withValues(
@@ -1332,7 +1388,8 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                         final b = pagedBroadcasts[i];
                         return ExpandableNotificationCard(
                           notification: b,
-                          showDelete: false,
+                          showDelete: true,
+                          onDelete: () => _handleDeleteAnnouncement(b),
                         );
                       },
                     ),

@@ -13,6 +13,7 @@ import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/grading/utils/gradebook_analytics_calculator.dart';
 import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class TeacherGradesTab extends StatefulWidget {
   final List<UserModel> students;
@@ -80,11 +81,18 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       curve: Curves.easeOutCubic,
     );
 
-    TeacherGradebookTab.gradebookRefreshNotifier.addListener(_handleGradebookChanged);
-    TeacherGradebookTab.classworkSyncNotifier.addListener(_handleGradebookChanged);
-    SubjectRepository.classworkSyncedNotifier.addListener(_handleGradebookChanged);
+    TeacherGradebookTab.gradebookRefreshNotifier.addListener(
+      _handleGradebookChanged,
+    );
+    TeacherGradebookTab.classworkSyncNotifier.addListener(
+      _handleGradebookChanged,
+    );
+    SubjectRepository.classworkSyncedNotifier.addListener(
+      _handleGradebookChanged,
+    );
 
     _fetchTeacherSubjects();
+    _animController.forward(from: 0.0);
   }
 
   @override
@@ -99,9 +107,15 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
 
   @override
   void dispose() {
-    TeacherGradebookTab.gradebookRefreshNotifier.removeListener(_handleGradebookChanged);
-    TeacherGradebookTab.classworkSyncNotifier.removeListener(_handleGradebookChanged);
-    SubjectRepository.classworkSyncedNotifier.removeListener(_handleGradebookChanged);
+    TeacherGradebookTab.gradebookRefreshNotifier.removeListener(
+      _handleGradebookChanged,
+    );
+    TeacherGradebookTab.classworkSyncNotifier.removeListener(
+      _handleGradebookChanged,
+    );
+    SubjectRepository.classworkSyncedNotifier.removeListener(
+      _handleGradebookChanged,
+    );
     _animController.dispose();
     super.dispose();
   }
@@ -136,21 +150,27 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
               .toSet()
               .toList();
 
-          if (_selectedSubjectName == null || !uniqueSubjects.contains(_selectedSubjectName)) {
-            _selectedSubjectName = uniqueSubjects.isNotEmpty ? uniqueSubjects.first : null;
+          if (_selectedSubjectName == null ||
+              !uniqueSubjects.contains(_selectedSubjectName)) {
+            _selectedSubjectName = uniqueSubjects.isNotEmpty
+                ? uniqueSubjects.first
+                : null;
           }
 
           final offeringsForSubject = subjects
               .where((s) => s['subject_name'] == _selectedSubjectName)
               .toList();
 
-          final availableSections = offeringsForSubject
-              .map((s) => s['section_name']?.toString() ?? '')
-              .where((sec) => sec.isNotEmpty)
-              .toSet()
-              .toList()..sort();
+          final availableSections =
+              offeringsForSubject
+                  .map((s) => s['section_name']?.toString() ?? '')
+                  .where((sec) => sec.isNotEmpty)
+                  .toSet()
+                  .toList()
+                ..sort();
 
-          if (_selectedSectionFilter != 'All Sections' && !availableSections.contains(_selectedSectionFilter)) {
+          if (_selectedSectionFilter != 'All Sections' &&
+              !availableSections.contains(_selectedSectionFilter)) {
             _selectedSectionFilter = 'All Sections';
           }
 
@@ -159,16 +179,22 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   (s) => s['section_name'] == _selectedSectionFilter,
                   orElse: () => offeringsForSubject.first,
                 )
-              : (offeringsForSubject.isNotEmpty ? offeringsForSubject.first : null);
+              : (offeringsForSubject.isNotEmpty
+                    ? offeringsForSubject.first
+                    : null);
 
           _selectedOfferingId = initialOffering?['id']?.toString();
-          final termsTaught = (initialOffering?['terms_taught'] as num?)?.toInt() ?? 3;
+          final termsTaught =
+              (initialOffering?['terms_taught'] as num?)?.toInt() ?? 3;
           _selectedTermView = termsTaught > 1 ? 0 : 1;
         }
       });
 
       if (_selectedSubjectName != null) {
         await _loadSubjectData();
+      }
+      if (mounted) {
+        _animController.forward(from: 0.0);
       }
     } catch (_) {
       if (mounted) setState(() => _isLoadingSubjects = false);
@@ -212,24 +238,30 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     }
   }
 
-  Future<void> _loadSubjectData() async {
+  Future<void> _loadSubjectData({bool forceFresh = false}) async {
     final user = AuthRepository.instance.currentUser;
     if (_selectedSubjectName == null) return;
 
     final cacheKey =
         'gradebook_analytics_sheets_${_selectedSubjectName}_$_selectedSectionFilter';
-    final cachedSheets =
-        AppDataCache.instance.get<Map<int, Map<String, dynamic>>>(cacheKey);
+    if (forceFresh) {
+      AppDataCache.instance.remove(cacheKey);
+    }
+    final cachedSheets = AppDataCache.instance
+        .get<Map<int, Map<String, dynamic>>>(cacheKey);
 
-    if (cachedSheets != null) {
+    if (cachedSheets != null && !forceFresh) {
       _termSheets.clear();
       _termSheets.addAll(cachedSheets);
       _isLoadingSheets = false;
       if (AppDataCache.instance.isFresh(cacheKey)) {
-        if (mounted) setState(() {});
+        if (mounted) {
+          setState(() {});
+          _animController.forward(from: 0.0);
+        }
         return;
       }
-    } else if (_termSheets.isEmpty) {
+    } else if (_termSheets.isEmpty || forceFresh) {
       setState(() => _isLoadingSheets = true);
     }
 
@@ -262,10 +294,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
         for (final off in targetOfferings) {
           final offId = off['id']?.toString();
           if (offId == null) continue;
-          final students = await SupabaseStudentRepository().getStudentsForTeacher(
-            user.id,
-            subjectId: offId,
-          );
+          final students = await SupabaseStudentRepository()
+              .getStudentsForTeacher(user.id, subjectId: offId);
           for (final s in students) {
             if (seenStudentIds.add(s.id)) {
               allStudents.add(s);
@@ -317,7 +347,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           Future.wait([
             for (final off in targetOfferings)
               if (off['id'] != null)
-                SubjectRepository.instance.getGradebookTermSheet(off['id'].toString(), term),
+                SubjectRepository.instance.getGradebookTermSheet(
+                  off['id'].toString(),
+                  term,
+                ),
           ]).then((freshSheets) {
             if (!mounted) return;
             Map<String, dynamic>? baseFresh;
@@ -356,16 +389,17 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           _isLoadingSheets = false;
           _refreshedAt = DateTime.now();
         });
+        _animController.forward(from: 0.0);
       }
     }
   }
 
   void _reloadGradebookData({bool animate = true}) {
-    if (_selectedSubjectName != null) {
-      _loadSubjectData();
-    }
     if (animate) {
       _animController.forward(from: 0.0);
+    }
+    if (_selectedSubjectName != null) {
+      _loadSubjectData(forceFresh: true);
     }
   }
 
@@ -374,23 +408,28 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    if (_isLoadingSubjects) {
-      return const Center(
-        child: CircularProgressIndicator(color: crSteelBlue),
+    final isInitialLoading = _isLoadingSubjects ||
+        (_isLoadingSheets && _termSheets.values.every((s) => s == null));
+    if (isInitialLoading) {
+      return Scaffold(
+        backgroundColor: isDark ? theme.scaffoldBackgroundColor : crCanvas,
+        body: _buildSkeletonLoading(isDark),
       );
     }
 
     final hasNoOfferings = _teacherSubjects.isEmpty && widget.students.isEmpty;
 
-    final offering = _currentOffering ?? {
-      'id': 'default',
-      'subject_name': 'No Subject Selected',
-      'ww_weight': 20.0,
-      'pt_weight': 60.0,
-      'ex_weight': 20.0,
-      'terms_taught': 3,
-      'term_block': 'FIRST TERM',
-    };
+    final offering =
+        _currentOffering ??
+        {
+          'id': 'default',
+          'subject_name': 'No Subject Selected',
+          'ww_weight': 20.0,
+          'pt_weight': 60.0,
+          'ex_weight': 20.0,
+          'terms_taught': 3,
+          'term_block': 'FIRST TERM',
+        };
 
     final activeTerms = _activeTerms;
     if (activeTerms.length <= 1 &&
@@ -400,7 +439,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     }
 
     // Filter students by section if specified
-    var studentsForComputation = _activeRoster.isNotEmpty ? _activeRoster : widget.students;
+    var studentsForComputation = _activeRoster.isNotEmpty
+        ? _activeRoster
+        : widget.students;
     if (_selectedSectionFilter != 'All Sections') {
       studentsForComputation = studentsForComputation
           .where((s) => s.departmentOrSection == _selectedSectionFilter)
@@ -428,12 +469,19 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             if (hasNoOfferings)
               Container(
                 margin: const EdgeInsets.only(top: 8, bottom: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+                  color: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFEFF6FF),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isDark ? const Color(0xFF334155) : const Color(0xFFBFDBFE),
+                    color: isDark
+                        ? const Color(0xFF334155)
+                        : const Color(0xFFBFDBFE),
                   ),
                 ),
                 child: Row(
@@ -445,7 +493,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                         'No subject offerings found yet. Set up your subjects and class sections in Classroom Setup first.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: isDark ? Colors.white70 : const Color(0xFF1E40AF),
+                          color: isDark
+                              ? Colors.white70
+                              : const Color(0xFF1E40AF),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -453,20 +503,16 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   ],
                 ),
               ),
-            if (_isLoadingSheets)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 6),
-                child: LinearProgressIndicator(
-                  minHeight: 2,
-                  color: crSteelBlue,
-                  backgroundColor: Color(0xFFE2E8F0),
-                ),
-              )
-            else
-              const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
             // 2. UNIFIED FILTER & OVERVIEW ROW (5-col Filter + 7-col Class Summary Strip)
-            _buildFilterAndOverviewRow(offering, activeTerms, summary, isDark, theme),
+            _buildFilterAndOverviewRow(
+              offering,
+              activeTerms,
+              summary,
+              isDark,
+              theme,
+            ),
             const SizedBox(height: 16),
 
             // 3. FOUR KPI METRIC CARDS
@@ -482,7 +528,12 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                     children: [
                       Expanded(
                         flex: 7,
-                        child: _buildVerticalBarChartCard(summary, activeTerms, isDark, theme),
+                        child: _buildVerticalBarChartCard(
+                          summary,
+                          activeTerms,
+                          isDark,
+                          theme,
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -494,7 +545,12 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                 } else {
                   return Column(
                     children: [
-                      _buildVerticalBarChartCard(summary, activeTerms, isDark, theme),
+                      _buildVerticalBarChartCard(
+                        summary,
+                        activeTerms,
+                        isDark,
+                        theme,
+                      ),
                       const SizedBox(height: 16),
                       _buildDonutPieChartCard(summary, isDark, theme),
                     ],
@@ -507,6 +563,301 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             // 5. INTEGRATED GRADES COMPUTATION & STUDENT RANKING TABLE
             _buildGradesTableCard(summary, activeTerms, isDark, theme),
             const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- 0. SKELETON LOADING STATE (Matching exact UI layout) ---
+  Widget _buildSkeletonLoading(bool isDark) {
+    return ShimmerLoading(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top Header Skeleton
+            Row(
+              children: [
+                const ShimmerBox(width: 38, height: 38, borderRadius: 10),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    ShimmerBox(width: 170, height: 16, borderRadius: 4),
+                    SizedBox(height: 6),
+                    ShimmerBox(width: 250, height: 12, borderRadius: 4),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Filter & Overview Row Skeleton
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 990;
+                final filterBox = Container(
+                  height: 110,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: isDark ? Colors.white10 : crBorder),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: const [
+                          Expanded(flex: 4, child: ShimmerBox(height: 38, borderRadius: 8)),
+                          SizedBox(width: 12),
+                          Expanded(flex: 3, child: ShimmerBox(height: 38, borderRadius: 8)),
+                        ],
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: const [
+                          ShimmerBox(width: 80, height: 22, borderRadius: 6),
+                          SizedBox(width: 8),
+                          ShimmerBox(width: 55, height: 22, borderRadius: 6),
+                          SizedBox(width: 8),
+                          ShimmerBox(width: 55, height: 22, borderRadius: 6),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+
+                final summaryBox = Container(
+                  height: 110,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: isDark ? Colors.white10 : crBorder),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: const [
+                          ShimmerBox(width: 160, height: 14, borderRadius: 4),
+                          ShimmerBox(width: 160, height: 14, borderRadius: 4),
+                        ],
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: const [
+                          Expanded(child: ShimmerBox(height: 42, borderRadius: 8)),
+                          SizedBox(width: 8),
+                          Expanded(child: ShimmerBox(height: 42, borderRadius: 8)),
+                          SizedBox(width: 8),
+                          Expanded(child: ShimmerBox(height: 42, borderRadius: 8)),
+                          SizedBox(width: 8),
+                          Expanded(child: ShimmerBox(height: 42, borderRadius: 8)),
+                          SizedBox(width: 8),
+                          Expanded(child: ShimmerBox(height: 42, borderRadius: 8)),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+
+                if (isWide) {
+                  return Row(
+                    children: [
+                      Expanded(flex: 5, child: filterBox),
+                      const SizedBox(width: 16),
+                      Expanded(flex: 7, child: summaryBox),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      filterBox,
+                      const SizedBox(height: 14),
+                      summaryBox,
+                    ],
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // 4 KPI Cards Skeleton
+            LayoutBuilder(
+              builder: (context, constraints) {
+                Widget buildKpiSkeleton() => Container(
+                  height: 94,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: isDark ? Colors.white10 : crBorder),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: const [
+                          ShimmerBox(width: 95, height: 12, borderRadius: 4),
+                          ShimmerBox(width: 22, height: 22, borderRadius: 6),
+                        ],
+                      ),
+                      const ShimmerBox(width: 60, height: 20, borderRadius: 6),
+                      const ShimmerBox(width: 110, height: 10, borderRadius: 4),
+                    ],
+                  ),
+                );
+
+                if (constraints.maxWidth >= 920) {
+                  return Row(
+                    children: [
+                      Expanded(child: buildKpiSkeleton()),
+                      const SizedBox(width: 14),
+                      Expanded(child: buildKpiSkeleton()),
+                      const SizedBox(width: 14),
+                      Expanded(child: buildKpiSkeleton()),
+                      const SizedBox(width: 14),
+                      Expanded(child: buildKpiSkeleton()),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: buildKpiSkeleton()),
+                          const SizedBox(width: 14),
+                          Expanded(child: buildKpiSkeleton()),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(child: buildKpiSkeleton()),
+                          const SizedBox(width: 14),
+                          Expanded(child: buildKpiSkeleton()),
+                        ],
+                      ),
+                    ],
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // Charts Section Skeleton
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final barShimmer = Container(
+                  height: 320,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? Colors.white10 : crBorder),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: const [
+                          ShimmerBox(width: 200, height: 15, borderRadius: 4),
+                          ShimmerBox(width: 90, height: 22, borderRadius: 6),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const ShimmerBox(width: 250, height: 11, borderRadius: 4),
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: const [
+                          ShimmerBox(width: 44, height: 100, borderRadius: 6),
+                          ShimmerBox(width: 44, height: 170, borderRadius: 6),
+                          ShimmerBox(width: 44, height: 130, borderRadius: 6),
+                          ShimmerBox(width: 44, height: 140, borderRadius: 6),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                );
+
+                final donutShimmer = Container(
+                  height: 320,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? Colors.white10 : crBorder),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: const [
+                          ShimmerBox(width: 130, height: 15, borderRadius: 4),
+                          ShimmerBox(width: 100, height: 26, borderRadius: 6),
+                        ],
+                      ),
+                      const Spacer(),
+                      const Center(child: ShimmerBox(width: 150, height: 150, borderRadius: 75)),
+                      const Spacer(),
+                      const ShimmerBox(height: 28, borderRadius: 6),
+                      const SizedBox(height: 6),
+                      const ShimmerBox(height: 28, borderRadius: 6),
+                    ],
+                  ),
+                );
+
+                if (constraints.maxWidth >= 950) {
+                  return Row(
+                    children: [
+                      Expanded(flex: 7, child: barShimmer),
+                      const SizedBox(width: 16),
+                      Expanded(flex: 5, child: donutShimmer),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      barShimmer,
+                      const SizedBox(height: 16),
+                      donutShimmer,
+                    ],
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 24),
+
+            // Table Skeleton
+            Container(
+              height: 200,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: isDark ? Colors.white10 : crBorder),
+              ),
+              child: Column(
+                children: const [
+                  ShimmerBox(height: 36, borderRadius: 8),
+                  SizedBox(height: 14),
+                  ShimmerBox(height: 22, borderRadius: 6),
+                  SizedBox(height: 8),
+                  ShimmerBox(height: 22, borderRadius: 6),
+                  SizedBox(height: 8),
+                  ShimmerBox(height: 22, borderRadius: 6),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -531,7 +882,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
               ),
             ],
           ),
-          child: const Icon(LucideIcons.barChart3, color: Colors.white, size: 20),
+          child: const Icon(
+            LucideIcons.barChart3,
+            color: Colors.white,
+            size: 20,
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -552,7 +907,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(20),
@@ -563,7 +921,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(LucideIcons.link2, size: 12, color: crSteelBlue),
+                        const Icon(
+                          LucideIcons.link2,
+                          size: 12,
+                          color: crSteelBlue,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           'Synced with Gradebook',
@@ -615,15 +977,27 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           ),
           const SizedBox(width: 6),
           InkWell(
-            onTap: () {
-              _reloadGradebookData(animate: true);
-            },
+            onTap: _isLoadingSheets
+                ? null
+                : () {
+                    _reloadGradebookData(animate: true);
+                  },
             borderRadius: BorderRadius.circular(4),
             child: Padding(
               padding: const EdgeInsets.all(3),
-              child: RotationTransition(
-                turns: _chartAnim,
-                child: const Icon(LucideIcons.refreshCw, size: 12, color: crSteelBlue),
+              child: AnimatedBuilder(
+                animation: _animController,
+                builder: (context, child) {
+                  return Transform.rotate(
+                    angle: _animController.value * 2 * math.pi,
+                    child: child,
+                  );
+                },
+                child: const Icon(
+                  LucideIcons.refreshCw,
+                  size: 12,
+                  color: crSteelBlue,
+                ),
               ),
             ),
           ),
@@ -697,17 +1071,15 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     // Sections for currently selected subject
     final availableSections = safeSubject != null
         ? (_teacherSubjects
-            .where((s) => s['subject_name'] == safeSubject)
-            .map((s) => s['section_name']?.toString() ?? '')
-            .where((sec) => sec.isNotEmpty)
-            .toSet()
-            .toList()..sort())
+              .where((s) => s['subject_name'] == safeSubject)
+              .map((s) => s['section_name']?.toString() ?? '')
+              .where((sec) => sec.isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort())
         : <String>[];
 
-    final sectionItems = [
-      'All Sections',
-      ...availableSections,
-    ];
+    final sectionItems = ['All Sections', ...availableSections];
 
     final safeSection = sectionItems.contains(_selectedSectionFilter)
         ? _selectedSectionFilter
@@ -749,11 +1121,17 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       key: ValueKey('subject_${safeSubject ?? "none"}'),
                       isExpanded: true,
                       initialValue: safeSubject,
-                      dropdownColor: isDark ? theme.colorScheme.surface : Colors.white,
+                      dropdownColor: isDark
+                          ? theme.colorScheme.surface
+                          : Colors.white,
                       decoration: _inputDecoration(isDark),
                       hint: const Text(
                         'No subjects available',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: crSlateMuted),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: crSlateMuted,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                       items: uniqueSubjects.isEmpty
@@ -763,7 +1141,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                 value: s,
                                 child: Text(
                                   s,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               );
@@ -775,9 +1156,15 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                 setState(() {
                                   _selectedSubjectName = val;
                                   _selectedSectionFilter = 'All Sections';
-                                  final offerings = _teacherSubjects.where((s) => s['subject_name'] == val).toList();
+                                  final offerings = _teacherSubjects
+                                      .where((s) => s['subject_name'] == val)
+                                      .toList();
                                   if (offerings.isNotEmpty) {
-                                    final termsTaught = (offerings.first['terms_taught'] as num?)?.toInt() ?? 3;
+                                    final termsTaught =
+                                        (offerings.first['terms_taught']
+                                                as num?)
+                                            ?.toInt() ??
+                                        3;
                                     _selectedTermView = termsTaught > 1 ? 0 : 1;
                                   }
                                   _currentPage = 1;
@@ -811,14 +1198,19 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       key: ValueKey('section_${safeSubject}_$safeSection'),
                       isExpanded: true,
                       initialValue: safeSection,
-                      dropdownColor: isDark ? theme.colorScheme.surface : Colors.white,
+                      dropdownColor: isDark
+                          ? theme.colorScheme.surface
+                          : Colors.white,
                       decoration: _inputDecoration(isDark),
                       items: sectionItems.map((sec) {
                         return DropdownMenuItem<String>(
                           value: sec,
                           child: Text(
                             sec,
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -858,7 +1250,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(LucideIcons.calendarRange, size: 13, color: crSlateMuted),
+                      Icon(
+                        LucideIcons.calendarRange,
+                        size: 13,
+                        color: crSlateMuted,
+                      ),
                       SizedBox(width: 5),
                       Text(
                         'GRADING PERIOD:',
@@ -873,16 +1269,29 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   ),
                   if (activeTerms.length <= 1)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.white10 : const Color(0xFFF0F9FF),
+                        color: isDark
+                            ? Colors.white10
+                            : const Color(0xFFF0F9FF),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFBAE6FD)),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white12
+                              : const Color(0xFFBAE6FD),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(LucideIcons.calendarCheck, size: 13, color: crSteelBlue),
+                          const Icon(
+                            LucideIcons.calendarCheck,
+                            size: 13,
+                            color: crSteelBlue,
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             'Single-Term • Term ${activeTerms.firstOrNull ?? 1}',
@@ -922,23 +1331,6 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   ],
                 ],
               ),
-
-              if (widget.onNavigateToGradebook != null)
-                ElevatedButton.icon(
-                  onPressed: widget.onNavigateToGradebook,
-                  icon: const Icon(LucideIcons.externalLink, size: 13),
-                  label: const Text('Open Gradebook', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: crSteelBlue,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    minimumSize: const Size(0, 32),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                  ),
-                ),
             ],
           ),
         ],
@@ -976,7 +1368,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(LucideIcons.activity, size: 15, color: crSteelBlue),
+                  const Icon(
+                    LucideIcons.activity,
+                    size: 15,
+                    color: crSteelBlue,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'Class Performance Summary',
@@ -989,7 +1385,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 3.5,
+                ),
                 decoration: BoxDecoration(
                   color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(6),
@@ -1017,7 +1416,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   ? Colors.white.withValues(alpha: 0.03)
                   : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFF1F5F9)),
+              border: Border.all(
+                color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+              ),
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -1037,7 +1438,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       Expanded(
                         child: _buildStripItem(
                           'Class Average',
-                          summary.classAverage != null ? '${summary.classAverage}' : '—',
+                          summary.classAverage != null
+                              ? '${summary.classAverage}'
+                              : '—',
                           'DO 15 Transmuted',
                           crSteelBlue,
                           isDark,
@@ -1093,7 +1496,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           Expanded(
                             child: _buildStripItem(
                               'Class Average',
-                              summary.classAverage != null ? '${summary.classAverage}' : '—',
+                              summary.classAverage != null
+                                  ? '${summary.classAverage}'
+                                  : '—',
                               'DO 15 Transmuted',
                               crSteelBlue,
                               isDark,
@@ -1107,7 +1512,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           Expanded(
                             child: _buildStripItem(
                               'Written Works',
-                              summary.wwPsAvg != null ? '${summary.wwPsAvg}%' : '—',
+                              summary.wwPsAvg != null
+                                  ? '${summary.wwPsAvg}%'
+                                  : '—',
                               'PS Average',
                               crSlateDark,
                               isDark,
@@ -1117,7 +1524,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           Expanded(
                             child: _buildStripItem(
                               'Perf. Tasks',
-                              summary.ptPsAvg != null ? '${summary.ptPsAvg}%' : '—',
+                              summary.ptPsAvg != null
+                                  ? '${summary.ptPsAvg}%'
+                                  : '—',
                               'PS Average',
                               crSlateDark,
                               isDark,
@@ -1127,7 +1536,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           Expanded(
                             child: _buildStripItem(
                               'Examinations',
-                              summary.exPsAvg != null ? '${summary.exPsAvg}%' : '—',
+                              summary.exPsAvg != null
+                                  ? '${summary.exPsAvg}%'
+                                  : '—',
                               'PS Average',
                               crSlateDark,
                               isDark,
@@ -1160,9 +1571,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
         decoration: BoxDecoration(
           color: isSelected ? crSteelBlue : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isSelected ? crSteelBlue : crBorder,
-          ),
+          border: Border.all(color: isSelected ? crSteelBlue : crBorder),
         ),
         child: Text(
           label,
@@ -1228,7 +1637,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
         final card4 = _buildKpiCard(
           title: 'Needs Support',
           value: '${summary.needsAttentionCount}',
-          badgeText: summary.needsAttentionCount > 0 ? 'Remedial Alert' : 'All Clear',
+          badgeText: summary.needsAttentionCount > 0
+              ? 'Remedial Alert'
+              : 'All Clear',
           subText: '<75 or declining scores',
           icon: LucideIcons.alertTriangle,
           iconColor: crRed,
@@ -1287,7 +1698,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: crSlateMuted, fontWeight: FontWeight.w500),
+          style: const TextStyle(
+            fontSize: 11,
+            color: crSlateMuted,
+            fontWeight: FontWeight.w500,
+          ),
         ),
         const SizedBox(height: 2),
         Text(
@@ -1301,18 +1716,17 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
         const SizedBox(height: 2),
         Text(
           subtitle,
-          style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : crSlateMuted),
+          style: TextStyle(
+            fontSize: 10,
+            color: isDark ? Colors.white38 : crSlateMuted,
+          ),
         ),
       ],
     );
   }
 
   Widget _buildStripDivider() {
-    return Container(
-      width: 1,
-      height: 38,
-      color: crBorder,
-    );
+    return Container(width: 1, height: 38, color: crBorder);
   }
 
   Widget _buildKpiCard({
@@ -1357,7 +1771,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 11, color: crSlateMuted, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: crSlateMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Row(
@@ -1372,7 +1790,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: badgeBg,
                         borderRadius: BorderRadius.circular(12),
@@ -1392,7 +1813,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                 const SizedBox(height: 4),
                 Text(
                   subText,
-                  style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : crSlateMuted),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDark ? Colors.white38 : crSlateMuted,
+                  ),
                 ),
               ],
             ),
@@ -1473,18 +1897,19 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 6,
+          // Top Row: Title + Refresh Button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 360),
+              Expanded(
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(LucideIcons.barChart2, size: 16, color: crSteelBlue),
+                    const Icon(
+                      LucideIcons.barChart2,
+                      size: 16,
+                      color: crSteelBlue,
+                    ),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
@@ -1500,48 +1925,81 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   ],
                 ),
               ),
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  _buildRefreshButton(isDark, theme),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: isDark ? Colors.white12 : crBorder),
-                    ),
-                    child: Text(
-                      isCrossTerm ? 'Cross-Term View' : 'Within-Term View',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : crSlateDark,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              const SizedBox(width: 8),
+              _buildRefreshButton(isDark, theme),
             ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: const TextStyle(fontSize: 11, color: crSlateMuted),
+          const SizedBox(height: 4),
+          // Subtitle Row: Subtitle + View Mode Badge directly across (sa tapat)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  subtitle,
+                  style: const TextStyle(fontSize: 11, color: crSlateMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: isDark ? Colors.white12 : crBorder),
+                ),
+                child: Text(
+                  isCrossTerm ? 'Cross-Term View' : 'Within-Term View',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white70 : crSlateDark,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           // Category Legend with Glassmorphism Badges
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: [
-              _buildCategoryPill('Written Works (WW)', crSteelBlue, isDark),
-              _buildCategoryPill('Performance Tasks (PT)', crEmerald, isDark),
-              _buildCategoryPill('Quarterly Exams (EX)', crAmber, isDark),
-              _buildCategoryPill('Passing Benchmark (75%)', const Color(0xFFB45309), isDark, isDashed: true),
-            ],
+            children: isCrossTerm
+                ? [
+                    _buildCategoryPill(
+                      'Term Transmuted Avg',
+                      crSteelBlue,
+                      isDark,
+                    ),
+                    _buildCategoryPill('Overall Final Avg', crEmerald, isDark),
+                    _buildCategoryPill(
+                      'Passing Benchmark (75%)',
+                      const Color(0xFFB45309),
+                      isDark,
+                      isDashed: true,
+                    ),
+                  ]
+                : [
+                    _buildCategoryPill(
+                      'Written Works (WW)',
+                      crSteelBlue,
+                      isDark,
+                    ),
+                    _buildCategoryPill(
+                      'Performance Tasks (PT)',
+                      crEmerald,
+                      isDark,
+                    ),
+                    _buildCategoryPill('Quarterly Exams (EX)', crAmber, isDark),
+                    _buildCategoryPill(
+                      'Passing Benchmark (75%)',
+                      const Color(0xFFB45309),
+                      isDark,
+                      isDashed: true,
+                    ),
+                  ],
           ),
           const SizedBox(height: 14),
 
@@ -1563,7 +2021,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                 final availableWidth = constraints.maxWidth;
                 final contentMin = barData.length * 68.0;
                 final scrollNeeded = contentMin > (availableWidth - yAxisWidth);
-                final chartWidth = scrollNeeded ? contentMin : (availableWidth - yAxisWidth);
+                final chartWidth = scrollNeeded
+                    ? contentMin
+                    : (availableWidth - yAxisWidth);
 
                 return AnimatedBuilder(
                   animation: _chartAnim,
@@ -1587,7 +2047,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                     bottom: ((v / 100.0) * chartGridHeight) - 6,
                                     child: Text(
                                       '$v',
-                                      style: const TextStyle(fontSize: 9, color: crSlateMuted),
+                                      style: const TextStyle(
+                                        fontSize: 9,
+                                        color: crSlateMuted,
+                                      ),
                                       textAlign: TextAlign.right,
                                     ),
                                   ),
@@ -1599,7 +2062,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           Expanded(
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
-                              physics: scrollNeeded ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
+                              physics: scrollNeeded
+                                  ? const BouncingScrollPhysics()
+                                  : const NeverScrollableScrollPhysics(),
                               child: SizedBox(
                                 width: chartWidth,
                                 child: Column(
@@ -1612,14 +2077,24 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                         clipBehavior: Clip.none,
                                         children: [
                                           // Horizontal Gridlines (100, 80, 60, 40, 20, 0)
-                                          for (final v in const [100, 80, 60, 40, 20, 0])
+                                          for (final v in const [
+                                            100,
+                                            80,
+                                            60,
+                                            40,
+                                            20,
+                                            0,
+                                          ])
                                             Positioned(
                                               left: 0,
                                               right: 0,
-                                              bottom: (v / 100.0) * chartGridHeight,
+                                              bottom:
+                                                  (v / 100.0) * chartGridHeight,
                                               child: Container(
                                                 height: 1,
-                                                color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+                                                color: isDark
+                                                    ? Colors.white12
+                                                    : const Color(0xFFF1F5F9),
                                               ),
                                             ),
 
@@ -1627,26 +2102,39 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                           Positioned(
                                             left: 0,
                                             right: 0,
-                                            bottom: (chartGridHeight * 0.75) - 6,
+                                            bottom:
+                                                (chartGridHeight * 0.75) - 6,
                                             child: Row(
                                               children: [
                                                 Expanded(
                                                   child: Container(
                                                     height: 1,
-                                                    color: crAmber.withValues(alpha: 0.6),
+                                                    color: crAmber.withValues(
+                                                      alpha: 0.6,
+                                                    ),
                                                   ),
                                                 ),
                                                 Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 4,
+                                                        vertical: 1,
+                                                      ),
                                                   decoration: BoxDecoration(
-                                                    color: const Color(0xFFFEF3C7),
-                                                    borderRadius: BorderRadius.circular(4),
+                                                    color: const Color(
+                                                      0xFFFEF3C7,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
                                                   ),
                                                   child: const Text(
                                                     'Pass 75',
                                                     style: TextStyle(
                                                       fontSize: 9,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                       color: Color(0xFFB45309),
                                                     ),
                                                   ),
@@ -1662,45 +2150,92 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                             bottom: 0,
                                             height: plotAreaHeight,
                                             child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                              crossAxisAlignment: CrossAxisAlignment.end,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.spaceAround,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.end,
                                               children: barData.map((item) {
-                                                final animVal = item.value * _chartAnim.value;
-                                                final barHeight = (animVal / 100.0).clamp(0.01, 1.0) * chartGridHeight;
+                                                final animVal =
+                                                    item.value *
+                                                    _chartAnim.value;
+                                                final barHeight =
+                                                    (animVal / 100.0).clamp(
+                                                      0.01,
+                                                      1.0,
+                                                    ) *
+                                                    chartGridHeight;
 
                                                 return SizedBox(
                                                   width: 56,
                                                   child: Column(
-                                                    mainAxisAlignment: MainAxisAlignment.end,
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment.end,
                                                     children: [
                                                       // Value Label Badge (Glassmorphic)
                                                       Opacity(
-                                                        opacity: _chartAnim.value,
+                                                        opacity:
+                                                            _chartAnim.value,
                                                         child: Container(
-                                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 5,
+                                                                vertical: 2,
+                                                              ),
                                                           decoration: BoxDecoration(
                                                             color: isDark
-                                                                ? const Color(0xFF1E293B).withValues(alpha: 0.9)
-                                                                : Colors.white.withValues(alpha: 0.95),
-                                                            borderRadius: BorderRadius.circular(5),
+                                                                ? const Color(
+                                                                    0xFF1E293B,
+                                                                  ).withValues(
+                                                                    alpha: 0.9,
+                                                                  )
+                                                                : Colors.white
+                                                                      .withValues(
+                                                                        alpha:
+                                                                            0.95,
+                                                                      ),
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  5,
+                                                                ),
                                                             border: Border.all(
-                                                              color: item.color.withValues(alpha: 0.4),
+                                                              color: item.color
+                                                                  .withValues(
+                                                                    alpha: 0.4,
+                                                                  ),
                                                               width: 1,
                                                             ),
                                                             boxShadow: [
                                                               BoxShadow(
-                                                                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                                                                color: Colors
+                                                                    .black
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          isDark
+                                                                          ? 0.3
+                                                                          : 0.05,
+                                                                    ),
                                                                 blurRadius: 4,
-                                                                offset: const Offset(0, 1),
+                                                                offset:
+                                                                    const Offset(
+                                                                      0,
+                                                                      1,
+                                                                    ),
                                                               ),
                                                             ],
                                                           ),
                                                           child: Text(
-                                                            item.value.toStringAsFixed(1),
+                                                            item.value
+                                                                .toStringAsFixed(
+                                                                  1,
+                                                                ),
                                                             style: TextStyle(
                                                               fontSize: 10,
-                                                              fontWeight: FontWeight.bold,
-                                                              color: isDark ? Colors.white : crSlateDark,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              color: isDark
+                                                                  ? Colors.white
+                                                                  : crSlateDark,
                                                             ),
                                                           ),
                                                         ),
@@ -1713,23 +2248,46 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                                         height: barHeight,
                                                         decoration: BoxDecoration(
                                                           gradient: LinearGradient(
-                                                            begin: Alignment.topCenter,
-                                                            end: Alignment.bottomCenter,
+                                                            begin: Alignment
+                                                                .topCenter,
+                                                            end: Alignment
+                                                                .bottomCenter,
                                                             colors: [
                                                               item.color,
-                                                              item.color.withValues(alpha: 0.72),
+                                                              item.color
+                                                                  .withValues(
+                                                                    alpha: 0.72,
+                                                                  ),
                                                             ],
                                                           ),
-                                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                                                          borderRadius:
+                                                              const BorderRadius.vertical(
+                                                                top:
+                                                                    Radius.circular(
+                                                                      8,
+                                                                    ),
+                                                              ),
                                                           border: Border.all(
-                                                            color: Colors.white.withValues(alpha: isDark ? 0.25 : 0.45),
+                                                            color: Colors.white
+                                                                .withValues(
+                                                                  alpha: isDark
+                                                                      ? 0.25
+                                                                      : 0.45,
+                                                                ),
                                                             width: 1,
                                                           ),
                                                           boxShadow: [
                                                             BoxShadow(
-                                                              color: item.color.withValues(alpha: 0.35),
+                                                              color: item.color
+                                                                  .withValues(
+                                                                    alpha: 0.35,
+                                                                  ),
                                                               blurRadius: 6,
-                                                              offset: const Offset(0, 3),
+                                                              offset:
+                                                                  const Offset(
+                                                                    0,
+                                                                    3,
+                                                                  ),
                                                             ),
                                                           ],
                                                         ),
@@ -1747,14 +2305,18 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                     // Baseline Separator
                                     Container(
                                       height: 1,
-                                      color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                                      color: isDark
+                                          ? Colors.white24
+                                          : const Color(0xFFCBD5E1),
                                     ),
                                     const SizedBox(height: 6),
 
                                     // Dedicated X-Axis Labels Row (No Overflow)
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceAround,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: barData.map((item) {
                                         return SizedBox(
                                           width: 56,
@@ -1766,7 +2328,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.bold,
-                                                  color: isDark ? Colors.white : crSlateDark,
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : crSlateDark,
                                                 ),
                                                 textAlign: TextAlign.center,
                                                 overflow: TextOverflow.ellipsis,
@@ -1774,7 +2338,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                               const SizedBox(height: 2),
                                               Text(
                                                 item.sub,
-                                                style: const TextStyle(fontSize: 9, color: crSlateMuted),
+                                                style: const TextStyle(
+                                                  fontSize: 9,
+                                                  color: crSlateMuted,
+                                                ),
                                                 textAlign: TextAlign.center,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -1828,7 +2395,12 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     );
   }
 
-  Widget _buildCategoryPill(String label, Color color, bool isDark, {bool isDashed = false}) {
+  Widget _buildCategoryPill(
+    String label,
+    Color color,
+    bool isDark, {
+    bool isDashed = false,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
       decoration: BoxDecoration(
@@ -1916,7 +2488,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
         child: AnimatedBuilder(
           animation: _chartAnim,
           builder: (context, _) {
-            final hovered = _hoveredDonutIndex != null &&
+            final hovered =
+                _hoveredDonutIndex != null &&
                     _hoveredDonutIndex! < slices.length
                 ? slices[_hoveredDonutIndex!]
                 : null;
@@ -1970,7 +2543,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                     ] else ...[
                       Text(
                         _donutMode == 'components'
-                            ? 'Initial Avg'
+                            ? 'Class Average'
                             : 'Total Class',
                         style: const TextStyle(
                           fontSize: 10,
@@ -1981,8 +2554,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       Text(
                         _donutMode == 'components'
                             ? (summary.classAverage != null
-                                ? '${summary.classAverage}%'
-                                : '—')
+                                  ? '${summary.classAverage}'
+                                  : '—')
                             : '${summary.totalCount}',
                         style: TextStyle(
                           fontSize: 22,
@@ -1992,10 +2565,12 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       ),
                       Text(
                         _donutMode == 'components'
-                            ? 'Weighted PS%'
-                            : 'Students',
-                        style:
-                            const TextStyle(fontSize: 9.5, color: crSlateMuted),
+                            ? 'DO 15 Transmuted'
+                            : 'Enrolled Students',
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          color: crSlateMuted,
+                        ),
                       ),
                     ],
                   ],
@@ -2071,8 +2646,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color:
-                          crSteelBlue.withValues(alpha: isDark ? 0.22 : 0.12),
+                      color: crSteelBlue.withValues(
+                        alpha: isDark ? 0.22 : 0.12,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
@@ -2145,68 +2721,6 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           Center(child: donutWidget),
           const SizedBox(height: 16),
           rightColumnWidget,
-          if (_donutMode == 'components') ...[
-            const SizedBox(height: 16),
-            Divider(height: 1, color: isDark ? Colors.white12 : crBorder),
-            const SizedBox(height: 12),
-            const Text(
-              'DO 15, S. 2026 DESCRIPTOR BREAKDOWN',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: crSlateMuted,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDescriptorCard(
-                    'Advancing',
-                    '90–100',
-                    summary.advancingCount,
-                    crEmerald,
-                    isDark,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildDescriptorCard(
-                    'Benchmarking',
-                    '80–89',
-                    summary.benchmarkingCount,
-                    crSteelBlue,
-                    isDark,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDescriptorCard(
-                    'Connecting',
-                    '75–79',
-                    summary.connectingCount,
-                    crAmber,
-                    isDark,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildDescriptorCard(
-                    'Developing',
-                    '< 75',
-                    summary.developingCount,
-                    crRed,
-                    isDark,
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
       ),
     );
@@ -2236,8 +2750,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           color: isHovered
               ? color.withValues(alpha: isDark ? 0.16 : 0.08)
               : (isDark
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : const Color(0xFFF8FAFC)),
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : const Color(0xFFF8FAFC)),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isHovered
@@ -2343,8 +2857,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                     child: LinearProgressIndicator(
                       value: (score / 100).clamp(0.0, 1.0),
                       minHeight: 3.5,
-                      backgroundColor:
-                          isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                      backgroundColor: isDark
+                          ? Colors.white10
+                          : const Color(0xFFE2E8F0),
                       valueColor: AlwaysStoppedAnimation<Color>(color),
                     ),
                   ),
@@ -2378,8 +2893,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           color: isHovered
               ? color.withValues(alpha: isDark ? 0.16 : 0.08)
               : (isDark
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : const Color(0xFFF8FAFC)),
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : const Color(0xFFF8FAFC)),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isHovered
@@ -2406,10 +2921,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                 color: color,
                 shape: BoxShape.circle,
                 boxShadow: [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.4),
-                    blurRadius: 3,
-                  ),
+                  BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 3),
                 ],
               ),
             ),
@@ -2497,8 +3009,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                     child: LinearProgressIndicator(
                       value: (pct / 100).clamp(0.0, 1.0),
                       minHeight: 3.5,
-                      backgroundColor:
-                          isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                      backgroundColor: isDark
+                          ? Colors.white10
+                          : const Color(0xFFE2E8F0),
                       valueColor: AlwaysStoppedAnimation<Color>(color),
                     ),
                   ),
@@ -2507,61 +3020,6 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildDescriptorCard(String title, String range, int count, Color accent, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDark
-            ? accent.withValues(alpha: 0.10)
-            : accent.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: accent.withValues(alpha: isDark ? 0.3 : 0.22),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : crSlateDark,
-                ),
-              ),
-              Text(
-                range,
-                style: TextStyle(
-                  fontSize: 9,
-                  color: isDark ? Colors.white38 : crSlateMuted,
-                ),
-              ),
-            ],
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: isDark ? 0.3 : 0.16),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: accent,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -2579,7 +3037,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     var list = summary.studentRows.where((r) {
       if (_searchQuery.isEmpty) return true;
       final q = _searchQuery.toLowerCase();
-      return r.displayName.toLowerCase().contains(q) || r.lrn.toLowerCase().contains(q);
+      return r.displayName.toLowerCase().contains(q) ||
+          r.lrn.toLowerCase().contains(q);
     }).toList();
 
     // Sort order
@@ -2587,7 +3046,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       list.sort((a, b) {
         final ga = a.activeGrade;
         final gb = b.activeGrade;
-        if (ga == null && gb == null) return a.displayName.compareTo(b.displayName);
+        if (ga == null && gb == null)
+          return a.displayName.compareTo(b.displayName);
         if (ga == null) return 1;
         if (gb == null) return -1;
         return gb.compareTo(ga);
@@ -2596,7 +3056,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       list.sort((a, b) {
         final ga = a.activeGrade;
         final gb = b.activeGrade;
-        if (ga == null && gb == null) return a.displayName.compareTo(b.displayName);
+        if (ga == null && gb == null)
+          return a.displayName.compareTo(b.displayName);
         if (ga == null) return 1;
         if (gb == null) return -1;
         return ga.compareTo(gb);
@@ -2613,7 +3074,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
 
     final startIdx = (_currentPage - 1) * _pageSize;
     final endIdx = math.min(startIdx + _pageSize, totalEntries);
-    final paginatedRows = totalEntries > 0 ? list.sublist(startIdx, endIdx) : <StudentGradeAnalyticsRow>[];
+    final paginatedRows = totalEntries > 0
+        ? list.sublist(startIdx, endIdx)
+        : <StudentGradeAnalyticsRow>[];
 
     return Container(
       decoration: BoxDecoration(
@@ -2621,11 +3084,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: isDark ? Colors.white12 : crBorder),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -2657,7 +3116,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF0F9FF),
                             borderRadius: BorderRadius.circular(4),
@@ -2665,7 +3127,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           ),
                           child: const Text(
                             'Computed via DepEdGradingEngine',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: crSteelBlue),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: crSteelBlue,
+                            ),
                           ),
                         ),
                       ],
@@ -2695,10 +3161,20 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                         },
                         style: const TextStyle(fontSize: 12),
                         decoration: InputDecoration(
-                          prefixIcon: const Icon(LucideIcons.search, size: 14, color: crSlateMuted),
+                          prefixIcon: const Icon(
+                            LucideIcons.search,
+                            size: 14,
+                            color: crSlateMuted,
+                          ),
                           hintText: 'Search by name or LRN...',
-                          hintStyle: const TextStyle(fontSize: 12, color: crSlateMuted),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8),
+                          hintStyle: const TextStyle(
+                            fontSize: 12,
+                            color: crSlateMuted,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 0,
+                            horizontal: 8,
+                          ),
                           filled: true,
                           fillColor: isDark ? Colors.white10 : Colors.white,
                           border: OutlineInputBorder(
@@ -2725,12 +3201,29 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _sortOrder,
-                          icon: const Icon(LucideIcons.arrowUpDown, size: 13, color: crSlateMuted),
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: crSlateDark),
+                          icon: const Icon(
+                            LucideIcons.arrowUpDown,
+                            size: 13,
+                            color: crSlateMuted,
+                          ),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: crSlateDark,
+                          ),
                           items: const [
-                            DropdownMenuItem(value: 'desc', child: Text('Sort: Highest to Lowest')),
-                            DropdownMenuItem(value: 'asc', child: Text('Sort: Lowest to Highest')),
-                            DropdownMenuItem(value: 'alpha', child: Text('Sort: Alphabetical (A–Z)')),
+                            DropdownMenuItem(
+                              value: 'desc',
+                              child: Text('Sort: Highest to Lowest'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'asc',
+                              child: Text('Sort: Lowest to Highest'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'alpha',
+                              child: Text('Sort: Alphabetical (A–Z)'),
+                            ),
                           ],
                           onChanged: (val) {
                             if (val != null) {
@@ -2756,11 +3249,25 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<int>(
                           value: _pageSize,
-                          icon: const Icon(LucideIcons.chevronDown, size: 13, color: crSlateMuted),
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: crSlateDark),
+                          icon: const Icon(
+                            LucideIcons.chevronDown,
+                            size: 13,
+                            color: crSlateMuted,
+                          ),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: crSlateDark,
+                          ),
                           items: const [
-                            DropdownMenuItem(value: 10, child: Text('10 / page')),
-                            DropdownMenuItem(value: 20, child: Text('20 / page')),
+                            DropdownMenuItem(
+                              value: 10,
+                              child: Text('10 / page'),
+                            ),
+                            DropdownMenuItem(
+                              value: 20,
+                              child: Text('20 / page'),
+                            ),
                           ],
                           onChanged: (val) {
                             if (val != null) {
@@ -2790,7 +3297,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final minTableWidth = isCrossTerm ? 960.0 : 1020.0;
-                final tableWidth = math.max(constraints.maxWidth, minTableWidth);
+                final tableWidth = math.max(
+                  constraints.maxWidth,
+                  minTableWidth,
+                );
 
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -2800,7 +3310,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         // Header Row
-                        _buildCustomTableHeader(isCrossTerm, activeTerms, isDark),
+                        _buildCustomTableHeader(
+                          isCrossTerm,
+                          activeTerms,
+                          isDark,
+                        ),
 
                         // Empty State if no students
                         if (paginatedRows.isEmpty)
@@ -2810,7 +3324,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                             child: const Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(LucideIcons.users, size: 32, color: crSlateMuted),
+                                Icon(
+                                  LucideIcons.users,
+                                  size: 32,
+                                  color: crSlateMuted,
+                                ),
                                 SizedBox(height: 8),
                                 Text(
                                   'No students found',
@@ -2851,7 +3369,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   totalEntries == 0
                       ? 'Showing 0 to 0 of 0 entries'
                       : 'Showing ${startIdx + 1} to $endIdx of $totalEntries entries',
-                  style: const TextStyle(fontSize: 12, color: crSlateMuted, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: crSlateMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 if (totalPages > 1)
                   Row(
@@ -2906,7 +3428,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     letterSpacing: 0.5,
   );
 
-  Widget _buildCustomTableHeader(bool isCrossTerm, List<int> activeTerms, bool isDark) {
+  Widget _buildCustomTableHeader(
+    bool isCrossTerm,
+    List<int> activeTerms,
+    bool isDark,
+  ) {
     return Container(
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2916,10 +3442,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       ),
       child: Row(
         children: [
-          const SizedBox(
-            width: 44,
-            child: Text('#', style: _colHeaderStyle),
-          ),
+          const SizedBox(width: 44, child: Text('#', style: _colHeaderStyle)),
           const Expanded(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
@@ -3033,11 +3556,19 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(LucideIcons.trendingUp, size: 12, color: Color(0xFF047857)),
+            const Icon(
+              LucideIcons.trendingUp,
+              size: 12,
+              color: Color(0xFF047857),
+            ),
             const SizedBox(width: 4),
             Text(
               '+${row.delta?.toStringAsFixed(1) ?? '1'} pts',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF047857)),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF047857),
+              ),
             ),
           ],
         ),
@@ -3057,7 +3588,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             const SizedBox(width: 4),
             Text(
               '${row.delta?.toStringAsFixed(1) ?? '-1'} pts',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: crRed),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: crRed,
+              ),
             ),
           ],
         ),
@@ -3075,7 +3610,14 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           children: [
             Icon(LucideIcons.minus, size: 12, color: crSlateMuted),
             SizedBox(width: 4),
-            Text('Stable', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: crSlateMuted)),
+            Text(
+              'Stable',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: crSlateMuted,
+              ),
+            ),
           ],
         ),
       );
@@ -3088,9 +3630,15 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
         : Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: isPassed ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+              color: isPassed
+                  ? const Color(0xFFECFDF5)
+                  : const Color(0xFFFEF2F2),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isPassed ? const Color(0xFFA7F3D0) : const Color(0xFFFECACA)),
+              border: Border.all(
+                color: isPassed
+                    ? const Color(0xFFA7F3D0)
+                    : const Color(0xFFFECACA),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -3124,7 +3672,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       ),
       child: Text(
         row.descriptor,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: descColor),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: descColor,
+        ),
       ),
     );
 
@@ -3151,7 +3703,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: index % 2 == 1
-            ? (isDark ? Colors.white.withValues(alpha: 0.02) : const Color(0xFFFAFAFB))
+            ? (isDark
+                  ? Colors.white.withValues(alpha: 0.02)
+                  : const Color(0xFFFAFAFB))
             : (isDark ? Colors.transparent : Colors.white),
         border: const Border(bottom: BorderSide(color: crBorder)),
       ),
@@ -3161,7 +3715,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             width: 44,
             child: Text(
               '${row.rank}',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: crSlateMuted),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: crSlateMuted,
+              ),
             ),
           ),
           Expanded(
@@ -3174,7 +3732,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             width: 130,
             child: Text(
               row.lrn,
-              style: const TextStyle(fontSize: 12.5, color: crSlateMuted, fontFamily: 'monospace'),
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: crSlateMuted,
+                fontFamily: 'monospace',
+              ),
             ),
           ),
           if (isCrossTerm) ...[
@@ -3192,47 +3754,47 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
               ),
             SizedBox(
               width: 105,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: gradeBadge,
-              ),
+              child: Align(alignment: Alignment.centerLeft, child: gradeBadge),
             ),
           ] else ...[
             SizedBox(
               width: 95,
               child: Text(
                 row.wwPs != null ? '${row.wwPs}%' : '—',
-                style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : crSlateDark),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white70 : crSlateDark,
+                ),
               ),
             ),
             SizedBox(
               width: 95,
               child: Text(
                 row.ptPs != null ? '${row.ptPs}%' : '—',
-                style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : crSlateDark),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white70 : crSlateDark,
+                ),
               ),
             ),
             SizedBox(
               width: 95,
               child: Text(
                 row.exPs != null ? '${row.exPs}%' : '—',
-                style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : crSlateDark),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white70 : crSlateDark,
+                ),
               ),
             ),
             SizedBox(
               width: 110,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: gradeBadge,
-              ),
+              child: Align(alignment: Alignment.centerLeft, child: gradeBadge),
             ),
           ],
           SizedBox(
             width: 110,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: trendWidget,
-            ),
+            child: Align(alignment: Alignment.centerLeft, child: trendWidget),
           ),
           SizedBox(
             width: 130,
@@ -3243,10 +3805,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           ),
           SizedBox(
             width: 110,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: remarksWidget,
-            ),
+            child: Align(alignment: Alignment.centerLeft, child: remarksWidget),
           ),
         ],
       ),
@@ -3281,7 +3840,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: isActive ? crSteelBlue : (enabled ? Colors.white : const Color(0xFFF8FAFC)),
+          color: isActive
+              ? crSteelBlue
+              : (enabled ? Colors.white : const Color(0xFFF8FAFC)),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: isActive ? crSteelBlue : crBorder),
         ),
@@ -3290,7 +3851,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: isActive ? Colors.white : (enabled ? crSlateDark : Colors.black26),
+            color: isActive
+                ? Colors.white
+                : (enabled ? crSlateDark : Colors.black26),
           ),
         ),
       ),

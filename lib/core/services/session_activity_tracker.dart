@@ -47,10 +47,12 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
   Timer? _tickerTimer;
   Timer? _heartbeatTimer;
   RealtimeChannel? _maintenanceChannel;
+  RealtimeChannel? _sessionGuardChannel;
 
   bool _isWarningDialogShowing = false;
+  bool _isHandlingKickout = false;
   String? _activeSessionLogId;
-  DateTime _sessionStart = DateTime.now();
+  DateTime _sessionStart = DateTime.now().toUtc();
 
   @override
   void initState() {
@@ -63,6 +65,8 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
         LocalStorageService.getLastInteraction() ??
         SessionActivityTracker.nowProvider();
     LocalStorageService.saveLastInteraction(_lastInteractionAt);
+    _sessionStart =
+        LocalStorageService.getSessionLoginAt() ?? DateTime.now().toUtc();
 
     _initSessionLog();
     _startTicker();
@@ -80,6 +84,11 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     if (_maintenanceChannel != null) {
       try {
         Supabase.instance.client.removeChannel(_maintenanceChannel!);
+      } catch (_) {}
+    }
+    if (_sessionGuardChannel != null) {
+      try {
+        Supabase.instance.client.removeChannel(_sessionGuardChannel!);
       } catch (_) {}
     }
     super.dispose();
@@ -109,29 +118,126 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     final user = AuthRepository.instance.currentUser;
     if (user == null) return;
 
+    final savedLoginAt = LocalStorageService.getSessionLoginAt();
+    if (savedLoginAt != null) {
+      _sessionStart = savedLoginAt.toUtc();
+    }
+
     final existingSessionId =
         LocalStorageService.getActiveSessionId() ??
         AuthRepository.instance.activeSessionId;
     if (existingSessionId != null) {
       _activeSessionLogId = existingSessionId;
+      _subscribeToSessionGuard(user.id);
       return;
     }
 
     try {
-      _sessionStart = DateTime.now();
+      _sessionStart = DateTime.now().toUtc();
       // Delegate to AuthRepository to guarantee a single source of truth and zero duplicate inserts
       final sId = await AuthRepository.instance.startSessionLog(user);
       if (sId != null && mounted) {
         _activeSessionLogId = sId;
+        final syncedLoginAt = LocalStorageService.getSessionLoginAt();
+        if (syncedLoginAt != null) {
+          _sessionStart = syncedLoginAt.toUtc();
+        }
+        _subscribeToSessionGuard(user.id);
       }
     } catch (e) {
       debugPrint('SessionActivityTracker init session notice: $e');
     }
   }
 
+  void _subscribeToSessionGuard(String userId) {
+    if (_sessionGuardChannel != null) return;
+    try {
+      _sessionGuardChannel = Supabase.instance.client
+          .channel('user_session_guard_$userId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'user_session_logs',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: userId,
+            ),
+            callback: (payload) async {
+              if (!mounted ||
+                  _isHandlingKickout ||
+                  AuthRepository.instance.isLoggingOut) {
+                return;
+              }
+              final currentSessionId =
+                  _activeSessionLogId ??
+                  LocalStorageService.getActiveSessionId() ??
+                  AuthRepository.instance.activeSessionId;
+              if (currentSessionId == null) return;
+
+              final newRecord = payload.newRecord;
+              if (newRecord.isEmpty) return;
+
+              final rowId = newRecord['id']?.toString();
+              final isActive = newRecord['is_active'] == true;
+
+              // Case 1: Our own session row was marked inactive (superseded by another device)
+              if (rowId == currentSessionId && !isActive) {
+                await _handleKickedByAnotherDevice();
+                return;
+              }
+
+              // Case 2: Another device inserted a brand-new active session for this user
+              if (rowId != null && rowId != currentSessionId && isActive) {
+                await _handleKickedByAnotherDevice();
+              }
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('Session guard realtime subscription notice: $e');
+    }
+  }
+
+  Future<void> _handleKickedByAnotherDevice() async {
+    if (_isHandlingKickout || AuthRepository.instance.isLoggingOut) return;
+    _isHandlingKickout = true;
+
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _tickerTimer?.cancel();
+    _tickerTimer = null;
+    _activeSessionLogId = null;
+
+    if (_isWarningDialogShowing) {
+      _isWarningDialogShowing = false;
+      try {
+        AppRoutes.navigatorKey.currentState?.maybePop();
+      } catch (_) {}
+    }
+
+    await AuthRepository.instance.clearLocalSessionOnly();
+
+    final navState = AppRoutes.navigatorKey.currentState;
+    if (navState != null) {
+      navState.pushNamedAndRemoveUntil(
+        AppRoutes.login,
+        (route) => false,
+        arguments: {'logout_reason': 'signed_in_elsewhere'},
+      );
+    } else if (mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        AppRoutes.login,
+        (route) => false,
+        arguments: {'logout_reason': 'signed_in_elsewhere'},
+      );
+    }
+  }
+
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+      if (_isHandlingKickout || AuthRepository.instance.isLoggingOut) return;
       final user = AuthRepository.instance.currentUser;
       if (user == null) return;
 
@@ -139,17 +245,41 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
           _activeSessionLogId ?? LocalStorageService.getActiveSessionId();
       if (sessionId == null) return;
 
+      final savedLoginAt = LocalStorageService.getSessionLoginAt();
+      if (savedLoginAt != null) {
+        _sessionStart = savedLoginAt.toUtc();
+      }
+
       final nowUtc = DateTime.now().toUtc();
-      final totalSeconds = DateTime.now().difference(_sessionStart).inSeconds;
+      final totalSeconds = nowUtc.difference(_sessionStart.toUtc()).inSeconds;
 
       try {
-        await Supabase.instance.client
+        final updated = await Supabase.instance.client
             .from('user_session_logs')
             .update({
               'last_active_at': nowUtc.toIso8601String(),
               'duration_seconds': totalSeconds >= 0 ? totalSeconds : 0,
             })
-            .eq('id', sessionId);
+            .eq('id', sessionId)
+            .eq('is_active', true)
+            .select('id, login_at')
+            .maybeSingle();
+
+        if (updated == null) {
+          // Session was closed externally (e.g., user signed in on another device)
+          if (!AuthRepository.instance.isLoggingOut) {
+            await _handleKickedByAnotherDevice();
+          }
+          return;
+        }
+
+        final dbLoginAt = DateTime.tryParse(
+          updated['login_at']?.toString() ?? '',
+        );
+        if (dbLoginAt != null) {
+          _sessionStart = dbLoginAt.toUtc();
+          await LocalStorageService.saveSessionLoginAt(_sessionStart);
+        }
       } catch (e) {
         // Edge Case #18: Silent try-catch with local cache fallback
         debugPrint('Heartbeat sync silent retry notice: $e');
@@ -218,24 +348,31 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
 
         // Strict 60-30-10 Color Architecture
         // 60% Dominant: Card Surface (#FFFFFF Light, #263040 Dark)
-        final cardBg =
-            isDark ? const Color(0xFF263040) : const Color(0xFFFFFFFF);
+        final cardBg = isDark
+            ? const Color(0xFF263040)
+            : const Color(0xFFFFFFFF);
         // 30% Secondary: Borders & Supporting elements
         final borderColor = isDark
             ? Colors.white.withValues(alpha: 0.10)
             : const Color(0xFFE2E8F0);
-        final primaryTextColor =
-            isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111827);
-        final secondaryTextColor =
-            isDark ? const Color(0xFF94A3B8) : const Color(0xFF4B5563);
+        final primaryTextColor = isDark
+            ? const Color(0xFFF9FAFB)
+            : const Color(0xFF111827);
+        final secondaryTextColor = isDark
+            ? const Color(0xFF94A3B8)
+            : const Color(0xFF4B5563);
         // 10% Accent: Steel Blue #487898 (Light) / Sky Blue #60A5FA (Dark)
-        final accentColor =
-            isDark ? const Color(0xFF60A5FA) : const Color(0xFF487898);
+        final accentColor = isDark
+            ? const Color(0xFF60A5FA)
+            : const Color(0xFF487898);
 
         return Dialog(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 380),
             child: Container(

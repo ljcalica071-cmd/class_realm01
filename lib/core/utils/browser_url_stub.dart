@@ -79,3 +79,13 @@ void pickWebFilePlatform({
 }) {
   // No-op on non-web platforms.
 }
+
+void sendWebKeepaliveSessionEndPlatform({
+  required String supabaseUrl,
+  required String supabaseAnonKey,
+  required String sessionId,
+  required String logoutAtIso,
+  required int durationSeconds,
+}) {
+  // No-op on non-web platforms.
+}

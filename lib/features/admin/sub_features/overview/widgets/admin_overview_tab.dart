@@ -816,7 +816,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Viewing Historical Snapshot: SY ${_selectedPreviewSchoolYear?.schoolYear ?? ""} (Read-Only Snapshot)',
+                      'Viewing Historical Archive: S.Y. ${_selectedPreviewSchoolYear?.schoolYear ?? ""} (Read-Only Snapshot)',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13.5,
@@ -832,7 +832,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                       );
                     },
                     child: const Text(
-                      'Return to Active SY',
+                      'Return to Active S.Y.',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -947,37 +947,53 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
+                  // --- HEADER ROW WITH RESPONSIVE ACTION ---
+                  LayoutBuilder(
+                    builder: (context, headerConstraints) {
+                      final isNarrow = headerConstraints.maxWidth < 650;
+                      final headerTitle = Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.1,
-                              ),
-                              borderRadius: BorderRadius.circular(10),
+                              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
                               Icons.school_rounded,
                               color: theme.colorScheme.primary,
-                              size: 20,
+                              size: 22,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Academic School Year & Term Governance',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.onSurface,
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Academic School Year & Term Governance',
+                                  style: TextStyle(
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.onSurface,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Institutional session settings, trimester framework, and academic year history.',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
-                      ),
-                      ElevatedButton.icon(
+                      );
+
+                      final actionButton = ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.colorScheme.primary,
                           foregroundColor: Colors.white,
@@ -999,170 +1015,352 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                             fontSize: 13,
                           ),
                         ),
-                      ),
-                    ],
+                      );
+
+                      if (isNarrow) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            headerTitle,
+                            const SizedBox(height: 14),
+                            SizedBox(width: double.infinity, child: actionButton),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: headerTitle),
+                          const SizedBox(width: 16),
+                          actionButton,
+                        ],
+                      );
+                    },
                   ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      // Active SY Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
+                  const SizedBox(height: 20),
+
+                  // --- 2 KEY GOVERNANCE TILES ---
+                  LayoutBuilder(
+                    builder: (context, tileConstraints) {
+                      final isMultiCol = tileConstraints.maxWidth >= 600;
+                      final activeSyLabel = _activeSchoolYear?.schoolYear ?? 'Loading...';
+
+                      final activeTile = Container(
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF16A34A).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
+                          color: const Color(0xFF16A34A).withValues(alpha: isDark ? 0.12 : 0.06),
+                          borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: const Color(0xFF16A34A)
-                                .withValues(alpha: 0.3),
+                            color: const Color(0xFF16A34A).withValues(alpha: isDark ? 0.35 : 0.25),
                           ),
                         ),
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
-                              Icons.check_circle_rounded,
-                              color: Color(0xFF16A34A),
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Active SY: ${_activeSchoolYear?.schoolYear ?? "Loading..."}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF16A34A).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.event_available_rounded,
                                 color: Color(0xFF16A34A),
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 7,
+                                        height: 7,
+                                        margin: const EdgeInsets.only(right: 6),
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF16A34A),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'CURRENT ACTIVE SCHOOL YEAR',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF16A34A),
+                                          letterSpacing: 0.3,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'S.Y. $activeSyLabel',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                      color: theme.colorScheme.onSurface,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Live enrolled students, sections, and faculty',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Fixed 3-Term Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.05)
-                              : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isDark
-                                ? Colors.white10
-                                : const Color(0xFFE2E8F0),
-                          ),
-                        ),
-                        child: Text(
-                          'Structure: 3-Term Trimester (Fixed)',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: isDark
-                                ? Colors.grey.shade300
-                                : const Color(0xFF475569),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
+                      );
 
-                  // Historical Preview Selector Dropdown
-                  Row(
-                    children: [
-                      Text(
-                        'Historical Snapshot Preview:',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? Colors.grey.shade400
-                              : const Color(0xFF64748B),
+                      final structureTile = Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      if (_isLoadingSchoolYears)
-                        LoadingAnimationWidget.staggeredDotsWave(
-                          color: theme.colorScheme.primary,
-                          size: 16,
-                        )
-                      else if (_allSchoolYears.isEmpty)
-                        Text(
-                          'No school years configured',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        )
-                      else
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.05)
-                                : const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.white12
-                                  : const Color(0xFFE2E8F0),
-                            ),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value:
-                                  _allSchoolYears.any(
-                                    (sy) =>
-                                        sy.id == _selectedPreviewSchoolYearId,
-                                  )
-                                  ? _selectedPreviewSchoolYearId
-                                  : _allSchoolYears.first.id,
-                              icon: Icon(
-                                Icons.arrow_drop_down_rounded,
-                                color: isDark
-                                    ? Colors.grey.shade400
-                                    : const Color(0xFF64748B),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                              items: _allSchoolYears.map((sy) {
-                                return DropdownMenuItem<String>(
-                                  value: sy.id,
-                                  child: Text(
-                                    '${sy.schoolYear} ${sy.isCurrent ? "(ACTIVE)" : "(Archived)"}',
+                              child: Icon(
+                                Icons.view_timeline_rounded,
+                                color: theme.colorScheme.primary,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'ACADEMIC TERM STRUCTURE',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '3-Term Trimester System',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                      color: theme.colorScheme.onSurface,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '1st Trimester · 2nd Trimester · 3rd Trimester',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (isMultiCol) {
+                        return Row(
+                          children: [
+                            Expanded(child: activeTile),
+                            const SizedBox(width: 14),
+                            Expanded(child: structureTile),
+                          ],
+                        );
+                      }
+
+                      return Column(
+                        children: [
+                          activeTile,
+                          const SizedBox(height: 12),
+                          structureTile,
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+
+                  // --- ACADEMIC YEAR SESSION & ARCHIVE SWITCHER ---
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: LayoutBuilder(
+                      builder: (context, switcherConstraints) {
+                        final isStack = switcherConstraints.maxWidth < 620;
+
+                        final infoBlock = Row(
+                          children: [
+                            Icon(
+                              Icons.history_edu_rounded,
+                              size: 22,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'School Year Session & Archive Switcher',
                                     style: TextStyle(
                                       fontSize: 13,
-                                      fontWeight: sy.isCurrent
-                                          ? FontWeight.bold
-                                          : FontWeight.w500,
+                                      fontWeight: FontWeight.w700,
                                       color: theme.colorScheme.onSurface,
                                     ),
                                   ),
-                                );
-                              }).toList(),
-                              onChanged: (id) {
-                                if (id != null) {
-                                  setState(
-                                    () => _selectedPreviewSchoolYearId = id,
-                                  );
-                                }
-                              },
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    'Select a school year to inspect active data or past archived records.',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
-                    ],
+                          ],
+                        );
+
+                        Widget dropdownWidget;
+                        if (_isLoadingSchoolYears) {
+                          dropdownWidget = LoadingAnimationWidget.staggeredDotsWave(
+                            color: theme.colorScheme.primary,
+                            size: 18,
+                          );
+                        } else if (_allSchoolYears.isEmpty) {
+                          dropdownWidget = const Text(
+                            'No school years configured',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          );
+                        } else {
+                          final selectedId = _allSchoolYears.any(
+                                (sy) => sy.id == _selectedPreviewSchoolYearId,
+                              )
+                              ? _selectedPreviewSchoolYearId
+                              : _allSchoolYears.first.id;
+
+                          dropdownWidget = Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isDark ? Colors.white12 : const Color(0xFFCBD5E1),
+                              ),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: selectedId,
+                                isDense: true,
+                                icon: Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  color: isDark ? Colors.white70 : const Color(0xFF475569),
+                                ),
+                                items: _allSchoolYears.map((sy) {
+                                  return DropdownMenuItem<String>(
+                                    value: sy.id,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          margin: const EdgeInsets.only(right: 8),
+                                          decoration: BoxDecoration(
+                                            color: sy.isCurrent
+                                                ? const Color(0xFF16A34A)
+                                                : const Color(0xFFEAB308),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        Text(
+                                          'S.Y. ${sy.schoolYear} ${sy.isCurrent ? "(Current Active)" : "(Archived)"}',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: sy.isCurrent ? FontWeight.w700 : FontWeight.w500,
+                                            color: sy.isCurrent
+                                                ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                                                : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (id) {
+                                  if (id != null) {
+                                    setState(
+                                      () => _selectedPreviewSchoolYearId = id,
+                                    );
+                                  }
+                                },
+                              ),
+                            ),
+                          );
+                        }
+
+                        if (isStack) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              infoBlock,
+                              const SizedBox(height: 10),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: dropdownWidget,
+                              ),
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: infoBlock),
+                            const SizedBox(width: 16),
+                            dropdownWidget,
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
-            ),
+            )
         ],
       ),
     );

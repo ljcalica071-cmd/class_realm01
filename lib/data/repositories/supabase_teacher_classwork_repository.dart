@@ -175,6 +175,25 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
           debugPrint('Insert without upsert fallback error: $eInsert');
         }
 
+        // Fallback 1b: Try via standard _client in case adminClient session expired
+        if (!uploaded) {
+          try {
+            await _client.storage
+                .from('classwork-materials')
+                .uploadBinary(
+                  storagePath,
+                  fileBytes,
+                  fileOptions: FileOptions(
+                    contentType: mimeType ?? 'application/octet-stream',
+                    upsert: true,
+                  ),
+                );
+            uploaded = true;
+          } catch (eClient) {
+            debugPrint('Standard client storage fallback error: $eClient');
+          }
+        }
+
         // Fallback 2: Resilient upload to learning_materials bucket
         if (!uploaded) {
           try {

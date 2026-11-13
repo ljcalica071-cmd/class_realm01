@@ -47,18 +47,50 @@ class AdminRepository {
     final intervals = <DateTimeRange>[];
 
     for (final s in sessions) {
-      DateTime start = s.loginAt;
-      DateTime end = s.isActive ? now : (s.logoutAt ?? s.lastActiveAt);
+      DateTime start = s.loginAt.toLocal();
+      final nowLocal = now.toLocal();
+      DateTime end;
+      if (s.isActive) {
+        final lastActiveLocal = s.lastActiveAt.toLocal();
+        if (nowLocal.difference(lastActiveLocal).inMinutes > 35) {
+          end = lastActiveLocal.add(const Duration(minutes: 30));
+        } else {
+          end = nowLocal;
+        }
+      } else {
+        end = (s.logoutAt ?? s.lastActiveAt).toLocal();
+        if (s.durationSeconds > 0) {
+          final durEnd = start.add(Duration(seconds: s.durationSeconds));
+          if (durEnd.isBefore(end)) {
+            end = durEnd;
+          }
+        }
+        final maxInactivityEnd = s.lastActiveAt.toLocal().add(
+          const Duration(minutes: 30),
+        );
+        if (end.isAfter(maxInactivityEnd) &&
+            (s.logoutReason == 'inactivity' ||
+                s.logoutReason == 'terminated')) {
+          end = maxInactivityEnd;
+        }
+      }
 
+      final nextMidnight = DateTime(start.year, start.month, start.day + 1);
+      if (end.isAfter(nextMidnight)) {
+        end = nextMidnight;
+      }
       if (end.isBefore(start)) end = start;
 
+      final filterStartLocal = filterStart?.toLocal();
+      final filterEndLocal = filterEnd?.toLocal();
+
       // Clip to filterStart if provided
-      if (filterStart != null && start.isBefore(filterStart)) {
-        start = filterStart;
+      if (filterStartLocal != null && start.isBefore(filterStartLocal)) {
+        start = filterStartLocal;
       }
       // Clip to filterEnd if provided
-      if (filterEnd != null && end.isAfter(filterEnd)) {
-        end = filterEnd;
+      if (filterEndLocal != null && end.isAfter(filterEndLocal)) {
+        end = filterEndLocal;
       }
 
       if (end.isAfter(start)) {
@@ -241,10 +273,7 @@ class AdminRepository {
     try {
       final rpcRes = await _client.rpc(
         'set_system_maintenance_mode',
-        params: {
-          'p_enabled': isMaintenance,
-          'p_admin_id': effectiveAdminId,
-        },
+        params: {'p_enabled': isMaintenance, 'p_admin_id': effectiveAdminId},
       );
       if (rpcRes is Map) {
         final model = SystemSettingsModel.fromJson(
@@ -271,9 +300,13 @@ class AdminRepository {
         );
       }
       if (errStr.contains('UNAUTHORIZED_ADMIN')) {
-        throw StateError('Administrator access is required to toggle maintenance mode.');
+        throw StateError(
+          'Administrator access is required to toggle maintenance mode.',
+        );
       }
-      debugPrint('AdminRepository setMaintenanceMode RPC notice (falling back to table update): $e');
+      debugPrint(
+        'AdminRepository setMaintenanceMode RPC notice (falling back to table update): $e',
+      );
     }
 
     // 2. Fallback: Direct verified table update with .select().single() so 0-row updates never fail silently
@@ -337,7 +370,8 @@ class AdminRepository {
 
   /// Fetch active registered Teacher & Student email recipients with their role and formatted name ('LastName, FirstName').
   /// Excludes Parent accounts (@classrealm.com) and synthetic test/placeholder emails (.cr@gmail.com, @classrealm.local).
-  Future<List<MaintenanceEmailRecipient>> getMaintenanceEmailRecipients() async {
+  Future<List<MaintenanceEmailRecipient>>
+  getMaintenanceEmailRecipients() async {
     try {
       final usersRes = await _client
           .from('users')
@@ -575,14 +609,14 @@ class AdminRepository {
   // 4. GLOBAL ANNOUNCEMENTS & BROADCASTS (REAL SUPABASE)
   // =========================================================================
 
-  /// Returns real counts of active (non-archived) users grouped by role
+  /// Returns real counts of active/pending_first_login (non-archived) eligible users grouped by role
   Future<Map<String, int>> getActiveUserCountsByRole() async {
     try {
-      // Strictly count active users that have a valid profile/settings record
+      // Strictly count active or pending_first_login users that have a valid profile/settings record
       final teacherRes = await _client
           .from('teacher_settings')
           .select('teacher_id')
-          .eq('status', 'active');
+          .inFilter('status', ['active', 'pending_first_login']);
       final activeTeacherIds = (teacherRes as List)
           .map((r) => r['teacher_id']?.toString())
           .whereType<String>()
@@ -603,7 +637,7 @@ class AdminRepository {
         final studentRes = await _client
             .from('student_settings')
             .select('student_id')
-            .eq('status', 'active');
+            .inFilter('status', ['active', 'pending_first_login']);
         final activeStudentIds = (studentRes as List)
             .map((r) => r['student_id']?.toString())
             .whereType<String>()
@@ -623,7 +657,7 @@ class AdminRepository {
         final parentRes = await _client
             .from('parent_profiles')
             .select('parent_id')
-            .eq('status', 'active');
+            .inFilter('status', ['active', 'pending_first_login']);
         final activeParentIds = (parentRes as List)
             .map((r) => r['parent_id']?.toString())
             .whereType<String>()
@@ -682,14 +716,14 @@ class AdminRepository {
     final cleanTitle = title.trim();
     final cleanMessage = message.trim().replaceAll(RegExp(r'\s+'), ' ');
 
-    if (cleanTitle.length < 3 || cleanTitle.length > 100) {
+    if (cleanTitle.length < 2 || cleanTitle.length > 100) {
       throw const FormatException(
-        'Title must be between 3 and 100 characters.',
+        'Title must be between 2 and 100 characters.',
       );
     }
-    if (cleanMessage.length < 5 || cleanMessage.length > 1000) {
+    if (cleanMessage.length < 2 || cleanMessage.length > 1000) {
       throw const FormatException(
-        'Message must be between 5 and 1000 characters.',
+        'Message must be between 2 and 1000 characters.',
       );
     }
 

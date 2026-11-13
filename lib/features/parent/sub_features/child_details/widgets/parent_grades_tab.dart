@@ -308,6 +308,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
   /// as `0 / Needs Help`.
   static int? _encodedTermGrade(Map<String, dynamic>? row) {
     if (row == null) return null;
+    if (row['is_published'] != true) return null;
     final raw = (row['transmuted_grade'] as num?)?.toInt();
     if (raw == null || raw <= 0) return null;
     final isFinalized = row['is_finalized'] == true;
@@ -352,7 +353,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
         client
             .from('term_grades')
             .select(
-              'subject_offering_id, term_number, initial_grade, transmuted_grade, remarks, is_finalized',
+              'subject_offering_id, term_number, initial_grade, transmuted_grade, remarks, is_finalized, is_published',
             )
             .eq('student_id', studentId),
 
@@ -664,11 +665,15 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             final t1Grade = _encodedTermGrade(terms[1]);
             final t2Grade = _encodedTermGrade(terms[2]);
             final t3Grade = _encodedTermGrade(terms[3]);
-            final finalSubjGrade = DepEdGradingEngine.computeFinalGrade(
-              termsTaught: activeTerms.length,
-              activeTerms: activeTerms,
-              termGrades: {1: t1Grade, 2: t2Grade, 3: t3Grade},
-            );
+            final isFinalPublished =
+                offering['is_final_grade_published'] == true;
+            final finalSubjGrade = isFinalPublished
+                ? DepEdGradingEngine.computeFinalGrade(
+                    termsTaught: activeTerms.length,
+                    activeTerms: activeTerms,
+                    termGrades: {1: t1Grade, 2: t2Grade, 3: t3Grade},
+                  )
+                : null;
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -783,6 +788,9 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                               isActiveTerm: activeTerms.contains(1),
                               isHiddenByStudent: hideTermGrades,
                               encodedGrade: t1Grade,
+                              isUnpublished:
+                                  terms[1] != null &&
+                                  terms[1]!['is_published'] != true,
                             ),
                             const SizedBox(width: 8),
                             _buildTermGradeBox(
@@ -792,6 +800,9 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                               isActiveTerm: activeTerms.contains(2),
                               isHiddenByStudent: hideTermGrades,
                               encodedGrade: t2Grade,
+                              isUnpublished:
+                                  terms[2] != null &&
+                                  terms[2]!['is_published'] != true,
                             ),
                             const SizedBox(width: 8),
                             _buildTermGradeBox(
@@ -801,6 +812,9 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                               isActiveTerm: activeTerms.contains(3),
                               isHiddenByStudent: hideTermGrades,
                               encodedGrade: t3Grade,
+                              isUnpublished:
+                                  terms[3] != null &&
+                                  terms[3]!['is_published'] != true,
                             ),
                             const SizedBox(width: 8),
                             _buildFinalGradeBox(
@@ -808,6 +822,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                               isDark: isDark,
                               isHiddenByStudent: hideFinalGrades,
                               finalGrade: finalSubjGrade,
+                              isPublished: isFinalPublished,
                             ),
                           ],
                         ),
@@ -889,6 +904,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
     required bool isActiveTerm,
     required bool isHiddenByStudent,
     required int? encodedGrade,
+    bool isUnpublished = false,
   }) {
     if (!isActiveTerm) {
       return Expanded(
@@ -1024,7 +1040,11 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             ),
             const SizedBox(height: 1),
             Text(
-              hasGrade ? (isPassing ? 'Passed' : 'Needs Help') : 'Ongoing',
+              isUnpublished
+                  ? 'Not published'
+                  : (hasGrade
+                        ? (isPassing ? 'Passed' : 'Needs Help')
+                        : 'Ongoing'),
               style: TextStyle(
                 fontSize: 8.5,
                 fontWeight: FontWeight.w700,
@@ -1044,6 +1064,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
     required bool isDark,
     required bool isHiddenByStudent,
     required int? finalGrade,
+    bool isPublished = true,
   }) {
     if (isHiddenByStudent) {
       return Expanded(
@@ -1130,7 +1151,9 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             ),
             const SizedBox(height: 1),
             Text(
-              hasGrade ? (isPassing ? 'Passed' : 'Failed') : 'Pending',
+              !isPublished
+                  ? 'Not published'
+                  : (hasGrade ? (isPassing ? 'Passed' : 'Failed') : 'Pending'),
               style: TextStyle(
                 fontSize: 8.5,
                 fontWeight: FontWeight.w700,

@@ -72,6 +72,11 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
   final ValueNotifier<int> _hpsRevision = ValueNotifier(0);
   final Map<String, ValueNotifier<int>> _studentRevisions = {};
   Timer? _sheetSaveTimer;
+  bool _isPublishing = false;
+  int _cooldownSeconds = 0;
+  Timer? _cooldownTimer;
+  final Map<int, bool> _termPublished = {1: false, 2: false, 3: false};
+  bool _isFinalGradePublished = false;
 
   final Map<int, Map<String, Map<int, double?>>> _termHps = {
     1: {'ww': {}, 'pt': {}, 'ex': {}},
@@ -269,10 +274,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
       await Future.wait([
         if (teacherId != null)
           SupabaseStudentRepository()
-              .getStudentsForTeacher(
-                teacherId,
-                subjectId: offeringId,
-              )
+              .getStudentsForTeacher(teacherId, subjectId: offeringId)
               .then((students) {
                 if (!mounted) return;
                 final uniqueMap = <String, UserModel>{};
@@ -417,6 +419,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
       _handleExternalGradebookRefresh,
     );
     _sheetSaveTimer?.cancel();
+    _cooldownTimer?.cancel();
     final offeringId = _currentSubjectData?['id']?.toString();
     if (offeringId != null && _selectedTerm > 0) {
       unawaited(
@@ -542,8 +545,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         AppModals.showWarningDialog(
           context: context,
           title: 'Linked to Classwork',
-          message:
-              'This Highest Possible Score (HPS) was set by a Classwork item and cannot be deleted directly from the Gradebook. To remove it, delete the activity from the Classwork tab.',
+          message: 'This Highest Possible Score (HPS) was set by a Classwork item and cannot be deleted directly from the Gradebook. To remove it, delete the activity from the Classwork tab.',
         );
         _hpsRevision.value++;
         return;
@@ -562,8 +564,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         AppModals.showWarningDialog(
           context: context,
           title: 'Cannot Delete HPS',
-          message:
-              'Cannot delete this Highest Possible Score (HPS) because one or more students already have recorded scores in this column. Clear the student scores first before removing the HPS.',
+          message: 'Cannot delete this Highest Possible Score (HPS) because one or more students already have recorded scores in this column. Clear the student scores first before removing the HPS.',
         );
         _hpsRevision.value++;
         return;
@@ -801,12 +802,16 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
       }
       if (attemptUpserts.isNotEmpty) {
         try {
-          await client.from('assessment_attempts').upsert(
+          await client
+              .from('assessment_attempts')
+              .upsert(
                 attemptUpserts,
                 onConflict: 'assessment_id,student_id,attempt_number',
               );
         } catch (attErr) {
-          debugPrint('Notice syncing gradebook scores to assessment_attempts: $attErr');
+          debugPrint(
+            'Notice syncing gradebook scores to assessment_attempts: $attErr',
+          );
         }
       }
     } catch (e) {
@@ -816,6 +821,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
 
   Map<String, dynamic> _buildPersistedTermGrade(String studentId, int term) {
     final initialGrade = _initialGrade(studentId, term: term);
+    final isPub = _termPublished[term] ?? false;
     if (initialGrade == null) {
       return {
         'student_id': studentId,
@@ -823,6 +829,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         'transmuted_grade': 0,
         'remarks': 'Incomplete',
         'is_finalized': false,
+        'is_published': isPub,
       };
     }
     final termGrade = DepEdGradingEngine.transmuteDO15(initialGrade);
@@ -832,6 +839,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
       'transmuted_grade': termGrade,
       'remarks': DepEdGradingEngine.getRemarks(termGrade),
       'is_finalized': false,
+      'is_published': isPub,
     };
   }
 
@@ -871,6 +879,15 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
           .select('id, assessment_type, grading_category')
           .eq('subject_offering_id', offeringId)
           .eq('is_archived', false);
+      final termGradesPublishedFuture = client
+          .from('term_grades')
+          .select('term_number, is_published')
+          .eq('subject_offering_id', offeringId);
+      final offeringFinalFuture = client
+          .from('subject_offerings')
+          .select('is_final_grade_published')
+          .eq('id', offeringId)
+          .maybeSingle();
 
       final results = await Future.wait([
         Future.wait([
@@ -883,12 +900,32 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         ]),
         classworkFuture.catchError((_) => []),
         digitalAssessmentsFuture.catchError((_) => []),
+        termGradesPublishedFuture.catchError((_) => []),
+        offeringFinalFuture.catchError((_) => null),
       ]);
 
       if (!mounted || request != _sheetLoadRequest) return;
-      final sheets = results[0];
+      final sheets = results[0] as List;
       final classworkData = results[1] as List? ?? [];
       final digitalData = results[2] as List? ?? [];
+      final termGradesPublishedData = results[3] as List? ?? [];
+      final offeringFinalData = results[4] as Map<String, dynamic>?;
+
+      final Map<int, bool> loadedTermPublished = {1: false, 2: false, 3: false};
+      for (final row in termGradesPublishedData) {
+        if (row is Map) {
+          final tNum = (row['term_number'] as num?)?.toInt();
+          final isPub = row['is_published'] == true;
+          if (tNum != null && isPub) {
+            loadedTermPublished[tNum] = true;
+          }
+        }
+      }
+      _termPublished
+        ..clear()
+        ..addAll(loadedTermPublished);
+      _isFinalGradePublished =
+          offeringFinalData?['is_final_grade_published'] == true;
 
       final offMatch = _teacherSubjects.firstWhere(
         (s) => s['id']?.toString() == offeringId,
@@ -1340,17 +1377,14 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
 
                   // Spreadsheet content
                   Expanded(
-                    child: (_isLoadingSubjects ||
+                    child:
+                        (_isLoadingSubjects ||
                             _isRefreshingGradebookContent ||
                             ((_isLoadingStudents || _isLoadingSheets) &&
                                 !_loadedOfferingIds.contains(
                                   _currentSubjectData?['id']?.toString() ?? '',
                                 )))
-                        ? _buildGradebookSkeleton(
-                            theme,
-                            isDark,
-                            borderColor,
-                          )
+                        ? _buildGradebookSkeleton(theme, isDark, borderColor)
                         : Stack(
                             children: [
                               if (_selectedTerm == 0)
@@ -1655,7 +1689,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         '${hour.toString().padLeft(2, '0')}:${_refreshedAt.minute.toString().padLeft(2, '0')} $period';
 
     return Tooltip(
-      message: 'Refresh gradebook scores and HPS synced from Classwork submissions',
+      message:
+          'Refresh gradebook scores and HPS synced from Classwork submissions',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -2715,13 +2750,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         children: isLeft
             ? [
                 _headerCell(numW, '', text, bg),
-                _headerCell(
-                  nameW,
-                  '',
-                  text,
-                  bg,
-                  align: Alignment.centerLeft,
-                ),
+                _headerCell(nameW, '', text, bg, align: Alignment.centerLeft),
               ]
             : [
                 // WW
@@ -3073,8 +3102,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
     const numW = 30.0;
 
     final hpsBg = isDark ? const Color(0xFF1E3A5F) : const Color(0xFFE0ECFF);
-    final hpsComputedBg =
-        isDark ? const Color(0xFF162A45) : const Color(0xFFD2E3FC);
+    final hpsComputedBg = isDark
+        ? const Color(0xFF162A45)
+        : const Color(0xFFD2E3FC);
 
     List<Widget> buildHpsCols(
       String category,
@@ -3185,8 +3215,20 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                 ...buildHpsCols('ww', _wwColumns, AppTheme.catBlue, wwWeight),
                 ...buildHpsCols('pt', _ptColumns, AppTheme.catGreen, ptWeight),
                 ...buildHpsCols('ex', exColumns, AppTheme.catOrange, exWeight),
-                _computedCell(computedW, '', hpsComputedBg, cellText, borderColor),
-                _computedCell(computedW, '', hpsComputedBg, cellText, borderColor),
+                _computedCell(
+                  computedW,
+                  '',
+                  hpsComputedBg,
+                  cellText,
+                  borderColor,
+                ),
+                _computedCell(
+                  computedW,
+                  '',
+                  hpsComputedBg,
+                  cellText,
+                  borderColor,
+                ),
               ],
       ),
     );
@@ -3271,8 +3313,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         final isFirst = idx == 0;
         final isAlt = idx.isOdd;
         final rowBg = isAlt ? altRowBg : cellBg;
-        final emptyComputedBg =
-            isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+        final emptyComputedBg = isDark
+            ? const Color(0xFF1E293B)
+            : const Color(0xFFF1F5F9);
         return Container(
           height: 32,
           decoration: BoxDecoration(
@@ -3328,19 +3371,59 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                       (_) => _emptyGridCell(colW, rowBg, borderColor, cellText),
                     ),
                     if (_wwColumns < maxCategoryColumns)
-                      _emptyGridCell(colW, emptyComputedBg, borderColor, cellText),
-                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
-                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
-                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
+                      _emptyGridCell(
+                        colW,
+                        emptyComputedBg,
+                        borderColor,
+                        cellText,
+                      ),
+                    _emptyGridCell(
+                      computedW,
+                      emptyComputedBg,
+                      borderColor,
+                      cellText,
+                    ),
+                    _emptyGridCell(
+                      computedW,
+                      emptyComputedBg,
+                      borderColor,
+                      cellText,
+                    ),
+                    _emptyGridCell(
+                      computedW,
+                      emptyComputedBg,
+                      borderColor,
+                      cellText,
+                    ),
                     ...List.generate(
                       _ptColumns,
                       (_) => _emptyGridCell(colW, rowBg, borderColor, cellText),
                     ),
                     if (_ptColumns < maxCategoryColumns)
-                      _emptyGridCell(colW, emptyComputedBg, borderColor, cellText),
-                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
-                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
-                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
+                      _emptyGridCell(
+                        colW,
+                        emptyComputedBg,
+                        borderColor,
+                        cellText,
+                      ),
+                    _emptyGridCell(
+                      computedW,
+                      emptyComputedBg,
+                      borderColor,
+                      cellText,
+                    ),
+                    _emptyGridCell(
+                      computedW,
+                      emptyComputedBg,
+                      borderColor,
+                      cellText,
+                    ),
+                    _emptyGridCell(
+                      computedW,
+                      emptyComputedBg,
+                      borderColor,
+                      cellText,
+                    ),
                     ...List.generate(
                       exColumns,
                       (_) => _emptyGridCell(colW, rowBg, borderColor, cellText),
@@ -3354,10 +3437,30 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                         cellText,
                       ),
                     ),
-                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
-                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
-                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
-                    _emptyGridCell(computedW, emptyComputedBg, borderColor, cellText),
+                    _emptyGridCell(
+                      computedW,
+                      emptyComputedBg,
+                      borderColor,
+                      cellText,
+                    ),
+                    _emptyGridCell(
+                      computedW,
+                      emptyComputedBg,
+                      borderColor,
+                      cellText,
+                    ),
+                    _emptyGridCell(
+                      computedW,
+                      emptyComputedBg,
+                      borderColor,
+                      cellText,
+                    ),
+                    _emptyGridCell(
+                      computedW,
+                      emptyComputedBg,
+                      borderColor,
+                      cellText,
+                    ),
                   ],
           ),
         );
@@ -3456,7 +3559,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                 );
               }
               if (category != 'ex' && count < maxCategoryColumns) {
-                cells.add(_emptyGridCell(colW, computedBg, borderColor, cellText));
+                cells.add(
+                  _emptyGridCell(colW, computedBg, borderColor, cellText),
+                );
               }
               return cells;
             }
@@ -3732,6 +3837,445 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
   }
 
   // ====================================================================
+  // PUBLISH / UNPUBLISH GRADES
+  // ====================================================================
+  void _triggerCooldown() {
+    _cooldownTimer?.cancel();
+    _cooldownSeconds = 5;
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        if (_cooldownSeconds > 1) {
+          _cooldownSeconds--;
+        } else {
+          _cooldownSeconds = 0;
+          timer.cancel();
+        }
+      });
+    });
+  }
+
+  Future<void> _togglePublish() async {
+    if (_isPublishing || _cooldownSeconds > 0) return;
+    final offeringId = _currentSubjectData?['id']?.toString();
+    if (offeringId == null || offeringId.isEmpty) {
+      AppTopToast.error(
+        context,
+        'No active subject offering selected.',
+      );
+      return;
+    }
+
+    final isTermGrade = _selectedTerm > 0;
+    final currentlyPublished = isTermGrade
+        ? (_termPublished[_selectedTerm] ?? false)
+        : _isFinalGradePublished;
+    final willPublish = !currentlyPublished;
+
+    final confirmed = await _showPublishConfirmDialog(
+      willPublish: willPublish,
+      term: _selectedTerm,
+    );
+    if (confirmed != true) return;
+
+    _triggerCooldown();
+    setState(() => _isPublishing = true);
+
+    try {
+      final client = SupabaseService().client;
+      if (isTermGrade) {
+        final termNumber = _selectedTerm;
+        final termRows = [
+          for (final student in _students)
+            {
+              ..._buildPersistedTermGrade(student.id, termNumber),
+              'is_published': willPublish,
+              'subject_offering_id': offeringId,
+              'term_number': termNumber,
+            },
+        ];
+        if (termRows.isNotEmpty) {
+          await client
+              .from('term_grades')
+              .upsert(
+                termRows,
+                onConflict: 'student_id,subject_offering_id,term_number',
+              );
+        }
+        await client
+            .from('term_grades')
+            .update({'is_published': willPublish})
+            .eq('subject_offering_id', offeringId)
+            .eq('term_number', termNumber);
+
+        if (mounted) {
+          setState(() {
+            _termPublished[termNumber] = willPublish;
+          });
+        }
+      } else {
+        await client
+            .from('subject_offerings')
+            .update({'is_final_grade_published': willPublish})
+            .eq('id', offeringId);
+
+        if (mounted) {
+          setState(() {
+            _isFinalGradePublished = willPublish;
+          });
+        }
+      }
+
+      AppDataCache.instance.invalidatePrefix('student_dashboard_');
+      AppDataCache.instance.invalidatePrefix('parent_child_grades_');
+      AppDataCache.instance.invalidatePrefix('student_grades_');
+
+      if (mounted) {
+        final targetDesc = isTermGrade
+            ? 'Term $_selectedTerm grades'
+            : 'Final grades';
+        AppTopToast.success(
+          context,
+          '$targetDesc successfully ${willPublish ? "published" : "unpublished"}!',
+        );
+      }
+    } catch (e) {
+      debugPrint('Error toggling grade publish status: $e');
+      if (mounted) {
+        AppTopToast.error(
+          context,
+          'Failed to update publication status: $e',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPublishing = false);
+      }
+    }
+  }
+
+  Future<bool?> _showPublishConfirmDialog({
+    required bool willPublish,
+    required int term,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final termDesc = term == 0
+        ? 'Consolidated Final Grades'
+        : 'Term $term Grades';
+    final offeringDesc = [
+      ?_selectedSubject,
+      if (_selectedSection != null) '($_selectedSection)',
+    ].join(' ');
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          backgroundColor: isDark ? theme.colorScheme.surface : Colors.white,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: willPublish
+                              ? const Color(0xFF059669)
+                                    .withValues(alpha: isDark ? 0.2 : 0.1)
+                              : const Color(0xFFD97706)
+                                    .withValues(alpha: isDark ? 0.2 : 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          willPublish ? LucideIcons.globe : LucideIcons.eyeOff,
+                          size: 20,
+                          color: willPublish
+                              ? (isDark
+                                    ? const Color(0xFF34D399)
+                                    : const Color(0xFF059669))
+                              : (isDark
+                                    ? const Color(0xFFFBBF24)
+                                    : const Color(0xFFD97706)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              willPublish
+                                  ? (term == 0
+                                        ? 'Publish Final Grades'
+                                        : 'Publish Term $term Grades')
+                                  : (term == 0
+                                        ? 'Unpublish Final Grades'
+                                        : 'Unpublish Term $term Grades'),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (offeringDesc.isNotEmpty)
+                              Text(
+                                offeringDesc,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.5)
+                          : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant.withValues(
+                          alpha: 0.4,
+                        ),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSummaryItem(
+                          label: 'Target',
+                          value: termDesc,
+                          theme: theme,
+                          isDark: isDark,
+                        ),
+                        const SizedBox(height: 10),
+                        _buildSummaryItem(
+                          label: 'Audience Impact',
+                          value: willPublish
+                              ? 'Enrolled students and linked parents will immediately see their calculated grades.'
+                              : 'Grades will be hidden from student and parent portals.',
+                          theme: theme,
+                          isDark: isDark,
+                        ),
+                        const SizedBox(height: 10),
+                        _buildSummaryItem(
+                          label: 'Note',
+                          value:
+                              'You can adjust scores and re-publish anytime.',
+                          theme: theme,
+                          isDark: isDark,
+                          isMuted: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 10),
+                      FilledButton.icon(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        icon: Icon(
+                          willPublish ? LucideIcons.globe : LucideIcons.eyeOff,
+                          size: 16,
+                        ),
+                        label: Text(
+                          willPublish ? 'Confirm Publish' : 'Confirm Unpublish',
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: willPublish
+                              ? const Color(0xFF059669)
+                              : const Color(0xFFD97706),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSummaryItem({
+    required String label,
+    required String value,
+    required ThemeData theme,
+    required bool isDark,
+    bool isMuted = false,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 110,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface.withValues(
+                alpha: isDark ? 0.8 : 0.7,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isMuted ? FontWeight.normal : FontWeight.w500,
+              color: isMuted
+                  ? theme.colorScheme.onSurfaceVariant
+                  : theme.colorScheme.onSurface,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPublishButton(ThemeData theme, bool isDark) {
+    final isTermGrade = _selectedTerm > 0;
+    final isPublished = isTermGrade
+        ? (_termPublished[_selectedTerm] ?? false)
+        : _isFinalGradePublished;
+    final inCooldown = _cooldownSeconds > 0;
+    final isDisabled =
+        _isPublishing || inCooldown || _currentSubjectData == null;
+
+    final String label;
+    if (_isPublishing) {
+      label = isPublished ? 'Unpublishing...' : 'Publishing...';
+    } else if (inCooldown) {
+      label = 'Please wait (${_cooldownSeconds}s)...';
+    } else if (isPublished) {
+      label = isTermGrade
+          ? 'Unpublish Term $_selectedTerm'
+          : 'Unpublish Final Grades';
+    } else {
+      label = isTermGrade
+          ? 'Publish Term $_selectedTerm'
+          : 'Publish Final Grades';
+    }
+
+    final IconData icon = _isPublishing || inCooldown
+        ? Icons.hourglass_top_rounded
+        : (isPublished ? LucideIcons.eyeOff : LucideIcons.globe);
+
+    final Color accentColor = isPublished
+        ? const Color(0xFFD97706)
+        : const Color(0xFF059669);
+
+    final Color effectiveFg = isDisabled
+        ? (isDark ? Colors.white38 : AppTheme.catSlate)
+        : (isPublished
+              ? (isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))
+              : (isDark ? const Color(0xFF34D399) : const Color(0xFF059669)));
+
+    final Color effectiveBg = isDisabled
+        ? (isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04))
+        : accentColor.withValues(alpha: isDark ? 0.18 : 0.08);
+
+    final Border effectiveBorder = isDisabled
+        ? Border.all(color: (isDark ? Colors.white12 : Colors.black12))
+        : Border.all(
+            color: accentColor.withValues(alpha: isDark ? 0.45 : 0.35),
+          );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Tooltip(
+        message: isPublished
+            ? 'Currently visible to students & parents. Click to hide.'
+            : 'Currently hidden from students & parents. Click to publish.',
+        child: InkWell(
+          onTap: isDisabled ? null : _togglePublish,
+          borderRadius: BorderRadius.circular(6),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: effectiveBg,
+              borderRadius: BorderRadius.circular(6),
+              border: effectiveBorder,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isPublishing)
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(effectiveFg),
+                    ),
+                  )
+                else
+                  Icon(icon, size: 13, color: effectiveFg),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: effectiveFg,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ====================================================================
   // TERM TABS (Bottom)
   // ====================================================================
   Widget _buildTermTabs(ThemeData theme, bool isDark, Color borderColor) {
@@ -3757,51 +4301,65 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
       ),
       child: Row(
         children: [
-          const SizedBox(width: 12),
-          ...tabs.map((tab) {
-            final term = tab['term'] as int;
-            final isSelected = _selectedTerm == term;
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  const SizedBox(width: 12),
+                  ...tabs.map((tab) {
+                    final term = tab['term'] as int;
+                    final isSelected = _selectedTerm == term;
 
-            return Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: InkWell(
-                onTap: () => unawaited(_changeTerm(term)),
-                borderRadius: BorderRadius.circular(6),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? (tab['color'] as Color)
-                        : (tab['color'] as Color).withValues(
-                            alpha: isDark ? 0.15 : 0.1,
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: InkWell(
+                        onTap: () => unawaited(_changeTerm(term)),
+                        borderRadius: BorderRadius.circular(6),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
                           ),
-                    borderRadius: BorderRadius.circular(6),
-                    border: isSelected
-                        ? null
-                        : Border.all(
-                            color: (tab['color'] as Color).withValues(
-                              alpha: 0.3,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? (tab['color'] as Color)
+                                : (tab['color'] as Color).withValues(
+                                    alpha: isDark ? 0.15 : 0.1,
+                                  ),
+                            borderRadius: BorderRadius.circular(6),
+                            border: isSelected
+                                ? null
+                                : Border.all(
+                                    color: (tab['color'] as Color).withValues(
+                                      alpha: 0.3,
+                                    ),
+                                  ),
+                          ),
+                          child: Text(
+                            tab['label'] as String,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark
+                                        ? Colors.white70
+                                        : (tab['color'] as Color)),
                             ),
                           ),
-                  ),
-                  child: Text(
-                    tab['label'] as String,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected
-                          ? Colors.white
-                          : (isDark ? Colors.white70 : (tab['color'] as Color)),
-                    ),
-                  ),
-                ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
               ),
-            );
-          }),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildPublishButton(theme, isDark),
+          const SizedBox(width: 12),
         ],
       ),
     );

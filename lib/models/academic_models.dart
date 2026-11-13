@@ -322,6 +322,18 @@ class ActivityModel {
       sBytes = (json['file_size_bytes'] as num?)?.toInt();
     }
 
+    if ((attName == null || attName.trim().isEmpty) &&
+        sPath != null &&
+        sPath.trim().isNotEmpty) {
+      final lastPart = sPath.split('/').last;
+      final underscoreIdx = lastPart.indexOf('_');
+      if (underscoreIdx != -1 && underscoreIdx + 1 < lastPart.length) {
+        attName = lastPart.substring(underscoreIdx + 1);
+      } else {
+        attName = lastPart;
+      }
+    }
+
     List<String>? parsedTargetStudentIds;
     if (json['target_student_ids'] != null) {
       parsedTargetStudentIds = (json['target_student_ids'] as List)

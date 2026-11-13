@@ -1,4 +1,5 @@
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
 
 import 'dart:async';
 
@@ -182,13 +183,31 @@ class SubjectRepository {
         'is_archived': false,
       };
       if (existingOffering == null) {
+        String? insertedOfferingId;
         try {
-          await _client.from('subject_offerings').insert(offeringData);
+          final res = await _client
+              .from('subject_offerings')
+              .insert(offeringData)
+              .select('id')
+              .maybeSingle();
+          insertedOfferingId = res?['id']?.toString();
         } on PostgrestException catch (error) {
           if (!_isMissingTermMetadata(error)) rethrow;
           final legacyData = Map<String, dynamic>.from(offeringData)
             ..removeWhere((key, _) => _termMetadataColumns.contains(key));
-          await _client.from('subject_offerings').insert(legacyData);
+          final res = await _client
+              .from('subject_offerings')
+              .insert(legacyData)
+              .select('id')
+              .maybeSingle();
+          insertedOfferingId = res?['id']?.toString();
+        }
+        if (insertedOfferingId != null && insertedOfferingId.isNotEmpty) {
+          unawaited(
+            SupabaseLearningMaterialRepository.instance
+                .ensureDefaultTermFolders(insertedOfferingId)
+                .catchError((_) {}),
+          );
         }
       } else {
         try {
@@ -1882,13 +1901,31 @@ class SubjectRepository {
           'is_archived': false,
         };
 
+        String? newOfferingId;
         try {
-          await _client.from('subject_offerings').insert(newOfferingData);
+          final res = await _client
+              .from('subject_offerings')
+              .insert(newOfferingData)
+              .select('id')
+              .maybeSingle();
+          newOfferingId = res?['id']?.toString();
         } on PostgrestException catch (error) {
           if (!_isMissingTermMetadata(error)) rethrow;
           final legacy = Map<String, dynamic>.from(newOfferingData)
             ..removeWhere((k, _) => _termMetadataColumns.contains(k));
-          await _client.from('subject_offerings').insert(legacy);
+          final res = await _client
+              .from('subject_offerings')
+              .insert(legacy)
+              .select('id')
+              .maybeSingle();
+          newOfferingId = res?['id']?.toString();
+        }
+        if (newOfferingId != null && newOfferingId.isNotEmpty) {
+          unawaited(
+            SupabaseLearningMaterialRepository.instance
+                .ensureDefaultTermFolders(newOfferingId)
+                .catchError((_) {}),
+          );
         }
       }
     }

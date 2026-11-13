@@ -329,3 +329,36 @@ void pickWebFilePlatform({
     input.click();
   } catch (_) {}
 }
+
+void sendWebKeepaliveSessionEndPlatform({
+  required String supabaseUrl,
+  required String supabaseAnonKey,
+  required String sessionId,
+  required String logoutAtIso,
+  required int durationSeconds,
+}) {
+  try {
+    if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty || sessionId.isEmpty) {
+      return;
+    }
+    final cleanBase = supabaseUrl.endsWith('/')
+        ? supabaseUrl.substring(0, supabaseUrl.length - 1)
+        : supabaseUrl;
+    final url =
+        '$cleanBase/rest/v1/user_session_logs?id=eq.$sessionId&is_active=eq.true';
+    final body =
+        '{"is_active":false,"logout_reason":"terminated","logout_at":"$logoutAtIso","last_active_at":"$logoutAtIso","duration_seconds":$durationSeconds}';
+
+    html.window.fetch(url, {
+      'method': 'PATCH',
+      'keepalive': true,
+      'headers': {
+        'apikey': supabaseAnonKey,
+        'Authorization': 'Bearer $supabaseAnonKey',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      'body': body,
+    });
+  } catch (_) {}
+}

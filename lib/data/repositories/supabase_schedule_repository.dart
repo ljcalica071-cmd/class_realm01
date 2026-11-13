@@ -193,103 +193,187 @@ class SupabaseScheduleRepository implements ScheduleRepository {
       }
 
       final response = await query.order('day_of_week').order('start_time');
-      final list = <ScheduleModel>[];
-
-      // Extract unique teacher IDs to batch-fetch teacher names
-      final teacherIds = (response as List)
-          .map(
-            (r) =>
-                ((r['subject_offerings'] as Map?)?['teacher_id'])?.toString(),
-          )
-          .whereType<String>()
-          .where((id) => id.isNotEmpty)
-          .toSet()
-          .toList();
-
-      final teacherNameMap = <String, String>{};
-      if (teacherIds.isNotEmpty) {
-        try {
-          final profilesRes = await _client
-              .from('teacher_profiles')
-              .select('teacher_id, first_name, last_name, gender')
-              .inFilter('teacher_id', teacherIds);
-
-          for (final tp in profilesRes as List) {
-            final tId = tp['teacher_id']?.toString() ?? '';
-            final fn = tp['first_name']?.toString().trim() ?? '';
-            final ln = tp['last_name']?.toString().trim() ?? '';
-            final full = '$fn $ln'.trim();
-            final g = tp['gender']?.toString().trim().toLowerCase();
-            final prefix = (g == 'female' || g == 'f')
-                ? "Ma'am "
-                : (g == 'male' || g == 'm')
-                ? "Sir "
-                : "";
-            if (tId.isNotEmpty && full.isNotEmpty) {
-              teacherNameMap[tId] = '$prefix$full';
-            }
-          }
-        } catch (_) {}
-      }
-
-      for (final row in response) {
-        final offering =
-            row['subject_offerings'] as Map<String, dynamic>? ?? {};
-        final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
-        final sec = offering['sections'] as Map<String, dynamic>? ?? {};
-
-        // Strictly ignore any schedules belonging to archived offerings or subjects
-        if (row['is_active'] == false ||
-            offering['is_archived'] == true ||
-            sub['is_archived'] == true) {
-          continue;
-        }
-
-        final subName = sub['subject_name']?.toString() ?? 'Subject';
-        final secName = sec['section_name']?.toString() ?? 'Section';
-
-        if (section != null && section.isNotEmpty && secName != section) {
-          continue;
-        }
-
-        final dayIndex = row['day_of_week'] is int
-            ? row['day_of_week'] as int
-            : int.tryParse(row['day_of_week']?.toString() ?? '1') ?? 1;
-
-        final tId = offering['teacher_id']?.toString();
-        final teacherName = tId != null ? teacherNameMap[tId] : null;
-
-        list.add(
-          ScheduleModel(
-            id: row['id'].toString(),
-            subject: subName,
-            section: secName,
-            room: row['room']?.toString() ?? '',
-            dayOfWeek: ScheduleModel.dayFromIndex(dayIndex),
-            startTime: ScheduleModel.formatTime24to12(
-              row['start_time']?.toString() ?? '08:00:00',
-            ),
-            endTime: ScheduleModel.formatTime24to12(
-              row['end_time']?.toString() ?? '09:00:00',
-            ),
-            sectionId: sec['id']?.toString() ?? secName,
-            subjectId: sub['id']?.toString(),
-            teacherId: tId,
-            gradeLevel: sub['grade_level'] is int
-                ? sub['grade_level'] as int
-                : null,
-            wwWeight: (offering['ww_weight'] as num?)?.toDouble() ?? 20.0,
-            ptWeight: (offering['pt_weight'] as num?)?.toDouble() ?? 50.0,
-            exWeight: (offering['ex_weight'] as num?)?.toDouble() ?? 30.0,
-            teacherName: teacherName,
-          ),
-        );
-      }
-
-      return list;
+      final rows = response as List;
+      final teacherNameMap = await _fetchTeacherNameMap(rows);
+      return _mapScheduleRows(rows, teacherNameMap, section: section);
     } catch (_) {
       return [];
     }
+  }
+
+  /// Get active schedules strictly for the student's enrolled subject offerings.
+  @override
+  Future<List<ScheduleModel>> getSchedulesForStudent(
+    String studentId, {
+    List<String>? offeringIds,
+  }) async {
+    try {
+      final List<String> activeOfferingIds;
+      if (offeringIds != null && offeringIds.isNotEmpty) {
+        activeOfferingIds = offeringIds
+            .map((id) => id.trim())
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList();
+      } else {
+        final trimmedStudentId = studentId.trim();
+        if (trimmedStudentId.isEmpty) {
+          return [];
+        }
+
+        final enrollResp = await _client
+            .from('student_enrollments')
+            .select('''
+              subject_offering_id,
+              subject_offerings!inner (
+                is_archived,
+                subjects!inner ( is_archived )
+              )
+            ''')
+            .eq('student_id', trimmedStudentId)
+            .ilike('status', 'enrolled')
+            .eq('subject_offerings.is_archived', false)
+            .eq('subject_offerings.subjects.is_archived', false);
+
+        activeOfferingIds = (enrollResp as List)
+            .map((r) => r['subject_offering_id']?.toString().trim())
+            .whereType<String>()
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList();
+      }
+
+      if (activeOfferingIds.isEmpty) {
+        return [];
+      }
+
+      final response = await _client
+          .from('teacher_schedule')
+          .select('''
+            id, day_of_week, start_time, end_time, room, is_active,
+            subject_offerings!inner (
+              id, teacher_id, ww_weight, pt_weight, ex_weight, is_archived,
+              subjects!inner ( id, subject_name, grade_level, is_archived ),
+              sections ( id, section_name, grade_level )
+            )
+          ''')
+          .inFilter('subject_offering_id', activeOfferingIds)
+          .eq('is_active', true)
+          .eq('subject_offerings.is_archived', false)
+          .eq('subject_offerings.subjects.is_archived', false)
+          .order('day_of_week')
+          .order('start_time');
+
+      final rows = response as List;
+      final teacherNameMap = await _fetchTeacherNameMap(rows);
+      return _mapScheduleRows(rows, teacherNameMap);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Batch-fetches formatted teacher display names for schedule rows.
+  Future<Map<String, String>> _fetchTeacherNameMap(List<dynamic> rows) async {
+    final teacherIds = rows
+        .map(
+          (r) => ((r['subject_offerings'] as Map?)?['teacher_id'])?.toString(),
+        )
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    final teacherNameMap = <String, String>{};
+    if (teacherIds.isEmpty) {
+      return teacherNameMap;
+    }
+
+    try {
+      final profilesRes = await _client
+          .from('teacher_profiles')
+          .select('teacher_id, first_name, last_name, gender')
+          .inFilter('teacher_id', teacherIds);
+
+      for (final tp in profilesRes as List) {
+        final tId = tp['teacher_id']?.toString() ?? '';
+        final fn = tp['first_name']?.toString().trim() ?? '';
+        final ln = tp['last_name']?.toString().trim() ?? '';
+        final full = '$fn $ln'.trim();
+        final g = tp['gender']?.toString().trim().toLowerCase();
+        final prefix = (g == 'female' || g == 'f')
+            ? "Ma'am "
+            : (g == 'male' || g == 'm')
+            ? "Sir "
+            : "";
+        if (tId.isNotEmpty && full.isNotEmpty) {
+          teacherNameMap[tId] = '$prefix$full';
+        }
+      }
+    } catch (_) {}
+
+    return teacherNameMap;
+  }
+
+  /// Maps raw `teacher_schedule` rows into [ScheduleModel] instances.
+  List<ScheduleModel> _mapScheduleRows(
+    List<dynamic> rows,
+    Map<String, String> teacherNameMap, {
+    String? section,
+  }) {
+    final list = <ScheduleModel>[];
+    for (final row in rows) {
+      final offering = row['subject_offerings'] as Map<String, dynamic>? ?? {};
+      final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
+      final sec = offering['sections'] as Map<String, dynamic>? ?? {};
+
+      // Strictly ignore any schedules belonging to archived offerings or subjects
+      if (row['is_active'] == false ||
+          offering['is_archived'] == true ||
+          sub['is_archived'] == true) {
+        continue;
+      }
+
+      final subName = sub['subject_name']?.toString() ?? 'Subject';
+      final secName = sec['section_name']?.toString() ?? 'Section';
+
+      if (section != null && section.isNotEmpty && secName != section) {
+        continue;
+      }
+
+      final dayIndex = row['day_of_week'] is int
+          ? row['day_of_week'] as int
+          : int.tryParse(row['day_of_week']?.toString() ?? '1') ?? 1;
+
+      final tId = offering['teacher_id']?.toString();
+      final teacherName = tId != null ? teacherNameMap[tId] : null;
+
+      list.add(
+        ScheduleModel(
+          id: row['id'].toString(),
+          subject: subName,
+          section: secName,
+          room: row['room']?.toString() ?? '',
+          dayOfWeek: ScheduleModel.dayFromIndex(dayIndex),
+          startTime: ScheduleModel.formatTime24to12(
+            row['start_time']?.toString() ?? '08:00:00',
+          ),
+          endTime: ScheduleModel.formatTime24to12(
+            row['end_time']?.toString() ?? '09:00:00',
+          ),
+          sectionId: sec['id']?.toString() ?? secName,
+          subjectId: sub['id']?.toString(),
+          teacherId: tId,
+          gradeLevel: sub['grade_level'] is int
+              ? sub['grade_level'] as int
+              : null,
+          wwWeight: (offering['ww_weight'] as num?)?.toDouble() ?? 20.0,
+          ptWeight: (offering['pt_weight'] as num?)?.toDouble() ?? 50.0,
+          exWeight: (offering['ex_weight'] as num?)?.toDouble() ?? 30.0,
+          teacherName: teacherName,
+        ),
+      );
+    }
+    return list;
   }
 
   /// Comprehensive clash detection

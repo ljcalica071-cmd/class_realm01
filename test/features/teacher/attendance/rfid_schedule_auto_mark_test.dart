@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/supabase_attendance_repository.dart';
 

@@ -3,7 +3,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/features/admin/sub_features/activity_analytics/widgets/admin_activity_analytics_tab.dart';
 
 /// Deprecated prototype tab. Use [AdminActivityAnalyticsTab] instead.
-@deprecated
+@Deprecated('Use AdminActivityAnalyticsTab instead.')
 class AdminStatisticsTab extends StatelessWidget {
   final List<UserModel>? teachers;
   final List<UserModel>? students;

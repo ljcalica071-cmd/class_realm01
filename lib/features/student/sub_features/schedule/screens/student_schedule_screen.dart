@@ -39,12 +39,16 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
     });
 
     try {
-      final section =
-          widget.dashboardData?.student.departmentOrSection ??
-          AuthRepository.instance.currentUser?.departmentOrSection;
-      final rows = await SupabaseScheduleRepository.instance.getSchedules(
-        section: section,
-      );
+      final currentUser = AuthRepository.instance.currentUser;
+      final studentId =
+          (widget.dashboardData?.student.studentId ??
+                  widget.dashboardData?.student.id ??
+                  currentUser?.studentId ??
+                  currentUser?.id ??
+                  '')
+              .trim();
+      final rows = await SupabaseScheduleRepository.instance
+          .getSchedulesForStudent(studentId);
       if (!mounted) return;
       setState(() {
         _schedules = rows;

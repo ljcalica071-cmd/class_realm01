@@ -8,8 +8,6 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/admin_repository.dart';
 import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
-import 'package:class_realm/widgets/common/app_date_picker_field.dart';
-import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -29,8 +27,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   bool _hasInitialLoaded = false;
   bool _isSwitchingFilter = false;
   int _loadSequence = 0;
-  String _activeFilter = 'today'; // 'today', 'week', 'month', 'custom', 'all'
-  DateTime? _selectedCustomDate;
+  String _activeFilter = 'today'; // 'today', 'week', 'month', 'all'
   int _currentHistoryPage = 1;
   static const int _historyItemsPerPage = 10;
   String? _selectedTeacherId; // null = all teachers
@@ -59,14 +56,16 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
     // 1. Permanent canonical assignments for primary teachers
     if (nameLower.contains('naruto') || idLower.contains('naruto')) {
-      _cachedTeacherColors[teacherId] = _teacherColorPalette[0]; // Always Emerald Green
+      _cachedTeacherColors[teacherId] =
+          _teacherColorPalette[0]; // Always Emerald Green
       return _teacherColorPalette[0];
     }
     if (nameLower.contains('calantina') ||
         nameLower.contains('jhon') ||
         idLower.contains('calantina') ||
         idLower.contains('jhon')) {
-      _cachedTeacherColors[teacherId] = _teacherColorPalette[1]; // Always Purple
+      _cachedTeacherColors[teacherId] =
+          _teacherColorPalette[1]; // Always Purple
       return _teacherColorPalette[1];
     }
     if (nameLower.contains('rex') ||
@@ -78,11 +77,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
     // 2. Persistent storage in AppDataCache
     try {
-      final savedRegistry =
-          AppDataCache.instance.getCached<Map<String, dynamic>>(
-        'admin_teacher_color_registry',
-        (raw) => Map<String, dynamic>.from(raw as Map),
-      );
+      final savedRegistry = AppDataCache.instance
+          .getCached<Map<String, dynamic>>(
+            'admin_teacher_color_registry',
+            (raw) => Map<String, dynamic>.from(raw as Map),
+          );
       if (savedRegistry != null && savedRegistry.containsKey(teacherId)) {
         final idx = (savedRegistry[teacherId] as num).toInt();
         final color = _teacherColorPalette[idx % _teacherColorPalette.length];
@@ -102,18 +101,19 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         break;
       }
     }
-    assignedColor ??= _teacherColorPalette[
-        teacherId.hashCode.abs() % _teacherColorPalette.length];
+    assignedColor ??=
+        _teacherColorPalette[teacherId.hashCode.abs() %
+            _teacherColorPalette.length];
 
     _cachedTeacherColors[teacherId] = assignedColor;
 
     try {
       final savedRegistry =
           AppDataCache.instance.getCached<Map<String, dynamic>>(
-                'admin_teacher_color_registry',
-                (raw) => Map<String, dynamic>.from(raw as Map),
-              ) ??
-              <String, dynamic>{};
+            'admin_teacher_color_registry',
+            (raw) => Map<String, dynamic>.from(raw as Map),
+          ) ??
+          <String, dynamic>{};
       savedRegistry[teacherId] = assignedIdx;
       unawaited(
         AppDataCache.instance.setCache(
@@ -216,22 +216,13 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         });
   }
 
-  String _getCacheKey() => _getCacheKeyFor(_activeFilter, _selectedCustomDate);
-
-  String _getCacheKeyFor(String filter, DateTime? customDate) {
-    if (filter == 'custom' && customDate != null) {
-      final d = customDate;
-      return 'custom_${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-    }
-    return filter;
-  }
+  String _getCacheKey() => _activeFilter;
 
   void _switchFilter(String key) {
     if (_activeFilter == key) return;
 
-    final nextCacheKey = _getCacheKeyFor(key, _selectedCustomDate);
-    final cachedLogs = _sessionLogsCache[nextCacheKey];
-    final cachedWorkloads = _workloadCache[nextCacheKey];
+    final cachedLogs = _sessionLogsCache[key];
+    final cachedWorkloads = _workloadCache[key];
 
     setState(() {
       _activeFilter = key;
@@ -243,7 +234,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         }
         _isSwitchingFilter = false;
       } else {
-        final restored = _restoreCachedData(nextCacheKey);
+        final restored = _restoreCachedData(key);
         if (!restored) {
           // Do not leak old filter's logs into new filter's timeline
           _sessionLogs = [];
@@ -313,7 +304,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   }) async {
     final targetFilter = expectedFilter ?? _activeFilter;
     final thisSequence = ++_loadSequence;
-    final cacheKey = _getCacheKeyFor(targetFilter, _selectedCustomDate);
+    final cacheKey = targetFilter;
 
     if (isFilterSwitch && !_sessionLogsCache.containsKey(cacheKey)) {
       _restoreCachedData(cacheKey);
@@ -364,10 +355,6 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
           ? DateTime(now.year + 1, 1, 1)
           : DateTime(now.year, now.month + 1, 1);
       endDate = nextMonth.subtract(const Duration(days: 1));
-    } else if (targetFilter == 'custom' && _selectedCustomDate != null) {
-      final d = _selectedCustomDate!;
-      startDate = DateTime(d.year, d.month, d.day);
-      endDate = DateTime(d.year, d.month, d.day);
     }
 
     try {
@@ -404,7 +391,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
       final wasInitial = !_hasInitialLoaded;
       // Discard stale in-flight responses if user already clicked another filter
-      if (mounted && thisSequence == _loadSequence && _activeFilter == targetFilter) {
+      if (mounted &&
+          thisSequence == _loadSequence &&
+          _activeFilter == targetFilter) {
         setState(() {
           _sessionLogs = logs;
           _workloadSummaries = workloads;
@@ -416,7 +405,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         unawaited(_prewarmAllFilters());
       }
     } catch (_) {
-      if (mounted && thisSequence == _loadSequence && _activeFilter == targetFilter) {
+      if (mounted &&
+          thisSequence == _loadSequence &&
+          _activeFilter == targetFilter) {
         setState(() {
           _hasInitialLoaded = true;
           _isSwitchingFilter = false;
@@ -431,7 +422,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     final filtersToPrewarm = ['week', 'month', 'all'];
     for (final filter in filtersToPrewarm) {
       if (!mounted) return;
-      final cacheKey = _getCacheKeyFor(filter, null);
+      final cacheKey = filter;
       if (_sessionLogsCache.containsKey(cacheKey)) continue;
 
       // Try restoring from persistent cache first
@@ -488,75 +479,6 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     }
   }
 
-  Future<void> _pickCustomDate() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final minDate = DateTime(2026, 1, 1);
-
-    // Front-end constraint: Future dates are strictly disabled by lastDate: today
-    final picked = await showAppDatePickerDialog(
-      context,
-      initialDate: _selectedCustomDate ?? today,
-      firstDate: minDate,
-      lastDate: today,
-      title: 'Select Activity Date',
-      icon: LucideIcons.calendar,
-      showAge: false,
-    );
-
-    if (picked == null) return;
-
-    // Strict validation: No future dates allowed
-    if (picked.isAfter(today)) {
-      if (mounted) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Invalid Date',
-          message: 'Future dates cannot be selected for activity analytics.',
-        );
-      }
-      return;
-    }
-
-    // Strict validation: Year 2025 and below are blocked
-    if (picked.year < 2026) {
-      if (mounted) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Invalid Date',
-          message: 'Teacher activity records start from the year 2026.',
-        );
-      }
-      return;
-    }
-
-    final customKey =
-        'custom_${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-    final cachedLogs = _sessionLogsCache[customKey];
-    final cachedWorkloads = _workloadCache[customKey];
-
-    setState(() {
-      _activeFilter = 'custom';
-      _selectedCustomDate = picked;
-      _currentHistoryPage = 1;
-      if (cachedLogs != null) {
-        _sessionLogs = cachedLogs;
-        if (cachedWorkloads != null) {
-          _workloadSummaries = cachedWorkloads;
-        }
-        _isSwitchingFilter = false;
-      } else {
-        final restored = _restoreCachedData(customKey);
-        if (!restored) {
-          _sessionLogs = [];
-        }
-        _isSwitchingFilter = !restored;
-      }
-    });
-
-    _loadData(isFilterSwitch: true, expectedFilter: 'custom');
-  }
-
   String _formatTimestamp(DateTime dt) {
     final localDt = dt.toLocal();
     final hour = localDt.hour % 12 == 0 ? 12 : localDt.hour % 12;
@@ -600,23 +522,6 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     return '';
   }
 
-  static String _shortWeekday(int weekday) {
-    const days = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    if (weekday >= 1 && weekday <= 7) return days[weekday];
-    return '';
-  }
-
-  static String _formatTooltipDuration(int totalSeconds) {
-    if (totalSeconds <= 0) return '00h 00m';
-    final h = totalSeconds ~/ 3600;
-    final m = (totalSeconds % 3600) ~/ 60;
-    final s = totalSeconds % 60;
-    if (h == 0 && m == 0) {
-      return '${s.toString().padLeft(2, '0')}s';
-    }
-    return '${h.toString().padLeft(2, '0')}h ${m.toString().padLeft(2, '0')}m';
-  }
-
   List<_TeacherInfo> _getTeacherInfoList() {
     final teachersMap = <String, _TeacherInfo>{};
 
@@ -654,9 +559,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       if (aIsNaruto && !bIsNaruto) return -1;
       if (!aIsNaruto && bIsNaruto) return 1;
 
-      final aIsJhon = a.name.toLowerCase().contains('jhon') ||
+      final aIsJhon =
+          a.name.toLowerCase().contains('jhon') ||
           a.name.toLowerCase().contains('calantina');
-      final bIsJhon = b.name.toLowerCase().contains('jhon') ||
+      final bIsJhon =
+          b.name.toLowerCase().contains('jhon') ||
           b.name.toLowerCase().contains('calantina');
       if (aIsJhon && !bIsJhon) return -1;
       if (!aIsJhon && bIsJhon) return 1;
@@ -678,13 +585,11 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     }
 
     if (_activeFilter == 'all') {
-      return 'Historical timeline across all recorded session dates';
+      return 'Cumulative faculty engagement breakdown across all records';
     } else if (_activeFilter == 'month') {
-      return 'Daily faculty usage breakdown this month (${_shortMonth(DateTime.now().month)})';
+      return 'Weekly faculty engagement breakdown this month (${_shortMonth(DateTime.now().month)})';
     } else if (_activeFilter == 'week') {
-      return 'Daily faculty usage breakdown this week (Monday – Sunday)';
-    } else if (_activeFilter == 'custom' && _selectedCustomDate != null) {
-      return 'Hourly faculty usage on ${_formatDate(_selectedCustomDate!)}';
+      return 'Daily faculty engagement breakdown this week (Monday – Sunday)';
     }
     return 'Real-time hourly faculty activity and usage today';
   }
@@ -716,7 +621,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         tooltip: 'Filter by Teacher',
         offset: const Offset(0, 36),
         onSelected: (String? teacherId) {
-          setState(() => _selectedTeacherId = (teacherId == null || teacherId == '__ALL_FACULTY__') ? null : teacherId);
+          setState(
+            () => _selectedTeacherId =
+                (teacherId == null || teacherId == '__ALL_FACULTY__')
+                ? null
+                : teacherId,
+          );
         },
         itemBuilder: (context) => [
           PopupMenuItem<String?>(
@@ -842,47 +752,146 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
   static const int _maxDailyDurationSeconds = 86400; // 24h strict daily ceiling
 
-  /// Clamps a single session's duration so it never exceeds the remaining seconds
-  /// in its login calendar day or 24 hours (86,400s).
-  static int _effectiveSessionSeconds(UserSessionLog log, DateTime currentNow) {
-    int sessionSec = log.durationSeconds;
-    if (log.isActive) {
-      final activeSec = currentNow.difference(log.loginAt).inSeconds;
-      if (activeSec > sessionSec) sessionSec = activeSec;
-    }
-    if (sessionSec < 0) sessionSec = 0;
+  /// Computes the accurate local [start, end] interval for a single session log.
+  /// - Active sessions advance in real-time up to [currentNow] (capped at +30m if stale).
+  /// - Closed sessions clamp to recorded duration and +30m inactivity bound, and never bleed past midnight.
+  static DateTimeRange _effectiveSessionInterval(
+    UserSessionLog log,
+    DateTime currentNow,
+  ) {
+    final start = log.loginAt.toLocal();
+    final nowLocal = currentNow.toLocal();
+    DateTime end;
 
-    // A session logged on a calendar day cannot exceed the time remaining until midnight of that day
-    final localLogin = log.loginAt.toLocal();
-    final nextMidnight = DateTime(
-      localLogin.year,
-      localLogin.month,
-      localLogin.day + 1,
-    );
-    final maxSecondsInLoginDay = nextMidnight.difference(localLogin).inSeconds;
-    if (maxSecondsInLoginDay > 0 && sessionSec > maxSecondsInLoginDay) {
-      sessionSec = maxSecondsInLoginDay;
+    if (log.isActive) {
+      final lastActiveLocal = log.lastActiveAt.toLocal();
+      if (nowLocal.difference(lastActiveLocal).inMinutes > 35) {
+        end = lastActiveLocal.add(const Duration(minutes: 30));
+      } else {
+        end = nowLocal;
+      }
+    } else {
+      end = (log.logoutAt ?? log.lastActiveAt).toLocal();
+      if (log.durationSeconds > 0) {
+        final durEnd = start.add(Duration(seconds: log.durationSeconds));
+        if (durEnd.isBefore(end)) {
+          end = durEnd;
+        }
+      }
+      final lastActiveLocal = log.lastActiveAt.toLocal();
+      final maxInactivityEnd = lastActiveLocal.add(const Duration(minutes: 30));
+      if (end.isAfter(maxInactivityEnd) &&
+          (log.logoutReason == 'inactivity' ||
+              log.logoutReason == 'terminated')) {
+        end = maxInactivityEnd;
+      }
     }
-    return sessionSec.clamp(0, _maxDailyDurationSeconds);
+
+    final nextMidnight = DateTime(start.year, start.month, start.day + 1);
+    if (end.isAfter(nextMidnight)) {
+      end = nextMidnight;
+    }
+    if (end.isBefore(start)) {
+      end = start;
+    }
+    return DateTimeRange(start: start, end: end);
   }
 
-  /// Calculates total usage seconds across logs while strictly enforcing a max of
-  /// 24 hours (86,400s) per teacher per calendar day across all filters.
+  /// Merges overlapping or adjacent [DateTimeRange] intervals so parallel/duplicate
+  /// sessions are never double-counted.
+  static List<DateTimeRange> _mergeIntervals(List<DateTimeRange> rawIntervals) {
+    final valid = rawIntervals.where((r) => r.end.isAfter(r.start)).toList();
+    if (valid.isEmpty) return const [];
+    valid.sort((a, b) => a.start.compareTo(b.start));
+
+    final merged = <DateTimeRange>[valid.first];
+    for (int i = 1; i < valid.length; i++) {
+      final current = valid[i];
+      final last = merged.last;
+      if (!current.start.isAfter(last.end)) {
+        final newEnd = current.end.isAfter(last.end) ? current.end : last.end;
+        merged[merged.length - 1] = DateTimeRange(
+          start: last.start,
+          end: newEnd,
+        );
+      } else {
+        merged.add(current);
+      }
+    }
+    return merged;
+  }
+
+  /// Returns merged non-overlapping intervals for a single teacher on [dayDate].
+  static List<DateTimeRange> _getTeacherMergedDayIntervals(
+    List<UserSessionLog> teacherLogs,
+    DateTime dayDate,
+    DateTime currentNow,
+  ) {
+    final dayStart = DateTime(dayDate.year, dayDate.month, dayDate.day);
+    final dayEnd = dayStart.add(const Duration(days: 1));
+    final raw = <DateTimeRange>[];
+
+    for (final log in teacherLogs) {
+      final interval = _effectiveSessionInterval(log, currentNow);
+      if (!interval.end.isAfter(dayStart) || !interval.start.isBefore(dayEnd)) {
+        continue;
+      }
+      final clippedStart = interval.start.isBefore(dayStart)
+          ? dayStart
+          : interval.start;
+      final clippedEnd = interval.end.isAfter(dayEnd) ? dayEnd : interval.end;
+      if (clippedEnd.isAfter(clippedStart)) {
+        raw.add(DateTimeRange(start: clippedStart, end: clippedEnd));
+      }
+    }
+    return _mergeIntervals(raw);
+  }
+
+  /// Calculates exact union seconds for a single teacher on [dayDate] (max 24h).
+  static int _calculateTeacherDaySeconds(
+    List<UserSessionLog> teacherLogs,
+    DateTime dayDate,
+    DateTime currentNow,
+  ) {
+    final merged = _getTeacherMergedDayIntervals(
+      teacherLogs,
+      dayDate,
+      currentNow,
+    );
+    int total = 0;
+    for (final r in merged) {
+      total += r.duration.inSeconds;
+    }
+    return total.clamp(0, _maxDailyDurationSeconds);
+  }
+
+  /// Calculates total usage seconds across logs using per-teacher interval union
+  /// while strictly enforcing a max of 24 hours (86,400s) per teacher per calendar day.
   static int _calculateCappedTotalSeconds(
     List<UserSessionLog> logs,
     DateTime currentNow,
   ) {
-    final Map<String, int> dailyTeacherTotals = {};
+    if (logs.isEmpty) return 0;
+    final byTeacherAndDay = <String, List<DateTimeRange>>{};
+
     for (final s in logs) {
-      final localLogin = s.loginAt.toLocal();
-      final dayKey =
-          '${s.userId}_${localLogin.year}-${localLogin.month}-${localLogin.day}';
-      final sec = _effectiveSessionSeconds(s, currentNow);
-      final currentTotal = dailyTeacherTotals[dayKey] ?? 0;
-      dailyTeacherTotals[dayKey] =
-          (currentTotal + sec).clamp(0, _maxDailyDurationSeconds);
+      final interval = _effectiveSessionInterval(s, currentNow);
+      if (!interval.end.isAfter(interval.start)) continue;
+      final d = interval.start;
+      final key = '${s.userId}_${d.year}-${d.month}-${d.day}';
+      byTeacherAndDay.putIfAbsent(key, () => <DateTimeRange>[]).add(interval);
     }
-    return dailyTeacherTotals.values.fold<int>(0, (sum, val) => sum + val);
+
+    int grandTotal = 0;
+    for (final intervals in byTeacherAndDay.values) {
+      final merged = _mergeIntervals(intervals);
+      int daySec = 0;
+      for (final r in merged) {
+        daySec += r.duration.inSeconds;
+      }
+      grandTotal += daySec.clamp(0, _maxDailyDurationSeconds);
+    }
+    return grandTotal;
   }
 
   @override
@@ -896,7 +905,6 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       return _buildSkeletonLoading(context, isDark);
     }
 
-    final currentNow = DateTime.now();
     final effectiveDisplayLogs = _selectedTeacherId != null
         ? _sessionLogs.where((s) => s.userId == _selectedTeacherId).toList()
         : _sessionLogs;
@@ -909,71 +917,85 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     final totalTrackedTeachers = _selectedTeacherId != null
         ? 1
         : (_workloadSummaries.isNotEmpty
-            ? _workloadSummaries.length
-            : math.max(activeNowCount, 1));
-    final totalDurationSeconds = _calculateCappedTotalSeconds(
-      effectiveDisplayLogs,
-      currentNow,
-    );
+              ? _workloadSummaries.length
+              : math.max(activeNowCount, 1));
 
-    return Stack(
-      children: [
-        SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header & Filter Bar
-              _buildHeaderAndFilters(context, isDark),
-              const SizedBox(height: 22),
+    return LayoutBuilder(
+      builder: (context, outerConstraints) {
+        final screenW = outerConstraints.maxWidth;
+        final double outerPadding = screenW < 600
+            ? 14.0
+            : (screenW < 900 ? 18.0 : 24.0);
 
-              // KPI Metric Cards
-              _buildMetricCardsRow(
-                context,
-                isDark,
-                activeNowCount,
-                totalTrackedTeachers,
-                totalDurationSeconds,
-              ),
-              const SizedBox(height: 24),
+        return Stack(
+          children: [
+            SingleChildScrollView(
+              padding: EdgeInsets.all(outerPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header & Filter Bar
+                  _buildHeaderAndFilters(context, isDark),
+                  SizedBox(height: screenW < 600 ? 16 : 22),
 
-              // Visual Analytics Charts Row (Curve Chart & Donut Chart - inspired by Pic 4)
-              _buildAnalyticsChartsRow(
-                context,
-                isDark,
-                activeNowCount,
-                totalTrackedTeachers,
-              ),
-              const SizedBox(height: 28),
+                  // KPI Metric Cards (live-updated via _tickerNotifier)
+                  ValueListenableBuilder<DateTime>(
+                    valueListenable: _tickerNotifier,
+                    builder: (context, liveNow, _) {
+                      final liveTotalSeconds = _calculateCappedTotalSeconds(
+                        effectiveDisplayLogs,
+                        liveNow,
+                      );
+                      return _buildMetricCardsRow(
+                        context,
+                        isDark,
+                        activeNowCount,
+                        totalTrackedTeachers,
+                        liveTotalSeconds,
+                      );
+                    },
+                  ),
+                  SizedBox(height: screenW < 600 ? 18 : 24),
 
-              // Teacher Workload & Total Usage Summary Cards
-              _buildTeacherWorkloadSection(context, isDark),
-              const SizedBox(height: 28),
+                  // Visual Analytics Charts Row (Session Timeline + 1h Bars on Today/Custom, Curve Chart on Week/Month/All)
+                  _buildAnalyticsChartsRow(
+                    context,
+                    isDark,
+                    activeNowCount,
+                    totalTrackedTeachers,
+                  ),
+                  SizedBox(height: screenW < 600 ? 20 : 28),
 
-              // Live Teacher Session Logs Table
-              _buildSessionLogsSection(context, isDark),
-            ],
-          ),
-        ),
+                  // Teacher Workload & Total Usage Summary Cards
+                  _buildTeacherWorkloadSection(context, isDark),
+                  SizedBox(height: screenW < 600 ? 20 : 28),
 
-        // Subtle top progress bar when switching filters (No screen flash / destruction)
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: AnimatedOpacity(
-            opacity: _isSwitchingFilter ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 200),
-            child: LinearProgressIndicator(
-              minHeight: 3,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                theme.colorScheme.primary,
+                  // Live Teacher Session Logs Table / Responsive Cards
+                  _buildSessionLogsSection(context, isDark),
+                ],
               ),
             ),
-          ),
-        ),
-      ],
+
+            // Subtle top progress bar when switching filters (No screen flash / destruction)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: AnimatedOpacity(
+                opacity: _isSwitchingFilter ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: LinearProgressIndicator(
+                  minHeight: 3,
+                  backgroundColor: Colors.transparent,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -983,16 +1005,10 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
   Widget _buildHeaderAndFilters(BuildContext context, bool isDark) {
     final theme = Theme.of(context);
 
-    String customDateLabel = 'Select Date';
-    if (_selectedCustomDate != null) {
-      final d = _selectedCustomDate!;
-      customDateLabel =
-          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-    }
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 800;
+        final isNarrow = constraints.maxWidth < 820;
+        final isMobile = constraints.maxWidth < 520;
 
         final headerText = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1001,17 +1017,19 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
               children: [
                 Icon(
                   LucideIcons.chartColumn,
-                  size: 22,
+                  size: isMobile ? 20 : 22,
                   color: theme.colorScheme.primary,
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  'Teacher Activity & Analytics Hub',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
-                    letterSpacing: -0.3,
+                Expanded(
+                  child: Text(
+                    'Teacher Activity & Analytics Hub',
+                    style: TextStyle(
+                      fontSize: isMobile ? 18 : 22,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                      letterSpacing: -0.3,
+                    ),
                   ),
                 ),
               ],
@@ -1020,7 +1038,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             Text(
               'Track how long teachers use the system and view their class workloads.',
               style: TextStyle(
-                fontSize: 13.5,
+                fontSize: isMobile ? 12.5 : 13.5,
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
               ),
             ),
@@ -1028,6 +1046,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         );
 
         final filterBar = Container(
+          width: isMobile ? double.infinity : null,
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
             borderRadius: BorderRadius.circular(12),
@@ -1043,7 +1062,6 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
               _buildFilterButton('Today', 'today'),
               _buildFilterButton('This Week', 'week'),
               _buildFilterButton('This Month', 'month'),
-              _buildDateFilterButton(customDateLabel, 'custom'),
               _buildFilterButton('All Records', 'all'),
             ],
           ),
@@ -1052,7 +1070,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
         if (isNarrow) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [headerText, const SizedBox(height: 16), filterBar],
+            children: [headerText, const SizedBox(height: 14), filterBar],
           );
         }
 
@@ -1107,60 +1125,22 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     );
   }
 
-  Widget _buildDateFilterButton(String label, String key) {
-    final isSelected = _activeFilter == key;
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
-    return InkWell(
-      onTap: _pickCustomDate,
-      borderRadius: BorderRadius.circular(8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? theme.colorScheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              LucideIcons.calendar,
-              size: 14,
-              color: isSelected
-                  ? Colors.white
-                  : (isDark ? Colors.white70 : const Color(0xFF475569)),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected
-                    ? Colors.white
-                    : (isDark ? Colors.white70 : const Color(0xFF475569)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   // =========================================================================
   // Overview KPI Metric Cards
   // =========================================================================
+  String _getMetricFilterSubtitle() {
+    if (_activeFilter == 'today') {
+      return 'Recorded today';
+    } else if (_activeFilter == 'week') {
+      return 'This week (Mon - Sun)';
+    } else if (_activeFilter == 'month') {
+      return 'This month (${_shortMonth(DateTime.now().month)})';
+    }
+    return 'All recorded sessions';
+  }
+
   Widget _buildMetricCardsRow(
     BuildContext context,
     bool isDark,
@@ -1169,26 +1149,22 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     int totalDurationSeconds,
   ) {
     final theme = Theme.of(context);
-
-    String filterSubtitle;
-    if (_activeFilter == 'today') {
-      filterSubtitle = 'Recorded today';
-    } else if (_activeFilter == 'week') {
-      filterSubtitle = 'This week (Mon - Sun)';
-    } else if (_activeFilter == 'month') {
-      filterSubtitle = 'This month (${_shortMonth(DateTime.now().month)})';
-    } else if (_activeFilter == 'custom' && _selectedCustomDate != null) {
-      filterSubtitle = 'Date: ${_formatDate(_selectedCustomDate!)}';
-    } else {
-      filterSubtitle = 'All recorded sessions';
-    }
+    final filterSubtitle = _getMetricFilterSubtitle();
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 900;
-        final cardWidth = isNarrow
-            ? (constraints.maxWidth - 12) / 2
-            : (constraints.maxWidth - 36) / 3;
+        final maxW = constraints.maxWidth;
+        final bool isMobile = maxW < 560;
+        final bool isTablet = maxW >= 560 && maxW < 900;
+
+        final double cardWidth;
+        if (isMobile) {
+          cardWidth = maxW;
+        } else if (isTablet) {
+          cardWidth = (maxW - 12) / 2;
+        } else {
+          cardWidth = (maxW - 24) / 3;
+        }
 
         return Wrap(
           spacing: 12,
@@ -1216,7 +1192,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
               ),
             ),
             SizedBox(
-              width: cardWidth,
+              width: isTablet ? maxW : cardWidth,
               child: _buildMetricCard(
                 title: 'Total Usage Duration',
                 value: _formatHumanReadableTotal(totalDurationSeconds),
@@ -1387,105 +1363,164 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     final theme = Theme.of(context);
 
     final currentCacheKey = _getCacheKey();
-    final bool isFilterDataReady = _sessionLogsCache.containsKey(currentCacheKey);
+    final bool isFilterDataReady = _sessionLogsCache.containsKey(
+      currentCacheKey,
+    );
     final bool showGraphLoader = _isSwitchingFilter && !isFilterDataReady;
+    final bool isTodayTimeline = _activeFilter == 'today';
 
-    // Prepare chart series data based on active filter and teacher selection
-    final seriesList = showGraphLoader ? <_TeacherSeries>[] : _generateChartData();
+    final allTeachers = _getTeacherInfoList();
+    final List<_TeacherInfo> targetTeachers = _selectedTeacherId != null
+        ? (allTeachers
+                  .where((t) => t.id == _selectedTeacherId)
+                  .toList()
+                  .isNotEmpty
+              ? allTeachers.where((t) => t.id == _selectedTeacherId).toList()
+              : allTeachers)
+        : allTeachers;
+    final List<UserSessionLog> relevantLogs = _selectedTeacherId != null
+        ? _sessionLogs.where((s) => s.userId == _selectedTeacherId).toList()
+        : _sessionLogs;
 
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: AppTheme.catBlue.withValues(
-                    alpha: isDark ? 0.2 : 0.1,
+    return LayoutBuilder(
+      builder: (context, cardConstraints) {
+        final isCompactHeader = cardConstraints.maxWidth < 540;
+        final cardPad = cardConstraints.maxWidth < 540 ? 15.0 : 22.0;
+
+        final titleBlock = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppTheme.catBlue.withValues(alpha: isDark ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                LucideIcons.activity,
+                size: 16,
+                color: AppTheme.catBlue,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Faculty Engagement & System Usage',
+                    style: TextStyle(
+                      fontSize: isCompactHeader ? 14.5 : 15.5,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  LucideIcons.activity,
-                  size: 16,
-                  color: AppTheme.catBlue,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Faculty Engagement & System Usage',
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onSurface,
-                      ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _getChartSubtitle(),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white54 : const Color(0xFF64748B),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      _getChartSubtitle(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? Colors.white54
-                            : const Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              _buildTeacherFilterMenu(context, isDark),
+            ),
+          ],
+        );
+
+        return Container(
+          padding: EdgeInsets.all(cardPad),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
             ],
           ),
-          const SizedBox(height: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isCompactHeader) ...[
+                titleBlock,
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _buildTeacherFilterMenu(context, isDark),
+                ),
+              ] else
+                Row(
+                  children: [
+                    Expanded(child: titleBlock),
+                    const SizedBox(width: 12),
+                    _buildTeacherFilterMenu(context, isDark),
+                  ],
+                ),
+              const SizedBox(height: 18),
 
-          // Custom Curve Chart with smooth entrance animation or clean in-graph loading state
-          SizedBox(
-            height: 260,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 240),
-              child: showGraphLoader
-                  ? _buildGraphLoadingPlaceholder(theme, isDark)
-                  : _TeacherActivityCurveChart(
-                      key: ValueKey(
-                        'chart_${_activeFilter}_${_selectedTeacherId}_${_selectedCustomDate?.toIso8601String()}',
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                child: showGraphLoader
+                    ? _buildGraphLoadingPlaceholder(theme, isDark)
+                    : isTodayTimeline
+                    ? ValueListenableBuilder<DateTime>(
+                        key: ValueKey(
+                          'timeline_${_activeFilter}_$_selectedTeacherId',
+                        ),
+                        valueListenable: _tickerNotifier,
+                        builder: (context, liveNow, _) {
+                          return _TeacherSessionTimelineAndHourlyView(
+                            teachers: targetTeachers,
+                            logs: relevantLogs,
+                            targetDate: liveNow,
+                            isToday: true,
+                            currentNow: liveNow,
+                            isDark: isDark,
+                            selectedTeacherId: _selectedTeacherId,
+                            onTeacherSelected: (teacherId) {
+                              setState(
+                                () => _selectedTeacherId =
+                                    _selectedTeacherId == teacherId
+                                    ? null
+                                    : teacherId,
+                              );
+                            },
+                          );
+                        },
+                      )
+                    : _TeacherEngagementBarChart(
+                        key: ValueKey(
+                          'barchart_${_activeFilter}_$_selectedTeacherId',
+                        ),
+                        activeFilter: _activeFilter,
+                        teachers: targetTeachers,
+                        logs: relevantLogs,
+                        currentNow: DateTime.now(),
+                        isDark: isDark,
+                        selectedTeacherId: _selectedTeacherId,
+                        onTeacherSelected: (teacherId) {
+                          setState(
+                            () => _selectedTeacherId =
+                                _selectedTeacherId == teacherId
+                                ? null
+                                : teacherId,
+                          );
+                        },
                       ),
-                      seriesList: seriesList,
-                      isDark: isDark,
-                      activeFilter: _activeFilter,
-                      selectedTeacherId: _selectedTeacherId,
-                      selectedCustomDate: _selectedCustomDate,
-                      onTeacherSelected: (teacherId) {
-                        setState(() => _selectedTeacherId = teacherId);
-                      },
-                    ),
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1498,36 +1533,29 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
             ? Colors.white.withValues(alpha: 0.02)
             : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+        ),
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _ChartGridPlaceholderPainter(isDark: isDark),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LoadingAnimationWidget.staggeredDotsWave(
+              color: theme.colorScheme.primary,
+              size: 32,
             ),
-          ),
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LoadingAnimationWidget.staggeredDotsWave(
-                  color: theme.colorScheme.primary,
-                  size: 32,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Loading activity analytics...',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 12),
+            Text(
+              'Loading activity analytics...',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white54 : const Color(0xFF64748B),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1543,275 +1571,6 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       activeNowCount: activeNowCount,
       totalTrackedTeachers: totalTrackedTeachers,
     );
-  }
-
-  // =========================================================================
-  // Chart Data Generation (Multi-Teacher & All-Records Aware)
-  // =========================================================================
-  List<_TeacherSeries> _generateChartData() {
-    final currentNow = DateTime.now();
-    final allTeachers = _getTeacherInfoList();
-
-    // Determine target teachers to plot
-    final List<_TeacherInfo> targetTeachers;
-    if (_selectedTeacherId != null) {
-      final matched = allTeachers
-          .where((t) => t.id == _selectedTeacherId)
-          .toList();
-      targetTeachers = matched.isNotEmpty ? matched : allTeachers;
-    } else {
-      targetTeachers = allTeachers;
-    }
-
-    // Filter session logs for target teachers if single teacher selected
-    final List<UserSessionLog> relevantLogs;
-    if (_selectedTeacherId != null) {
-      relevantLogs = _sessionLogs
-          .where((s) => s.userId == _selectedTeacherId)
-          .toList();
-    } else {
-      relevantLogs = _sessionLogs;
-    }
-
-    if (_activeFilter == 'all') {
-      // Collect sorted unique dates across relevant logs
-      final allDatesSet = <DateTime>{};
-      for (final log in relevantLogs) {
-        allDatesSet.add(
-          DateTime(
-            log.loginAt.year,
-            log.loginAt.month,
-            log.loginAt.day,
-          ),
-        );
-      }
-      final sortedDates = allDatesSet.toList()..sort((a, b) => a.compareTo(b));
-
-      List<DateTime> displayDates;
-      if (sortedDates.isEmpty) {
-        displayDates = List.generate(
-          7,
-          (i) => DateTime(
-            currentNow.year,
-            currentNow.month,
-            currentNow.day,
-          ).subtract(Duration(days: 6 - i)),
-        );
-      } else if (sortedDates.length == 1) {
-        final singleDate = sortedDates.first;
-        displayDates = List.generate(
-          7,
-          (i) => singleDate.subtract(Duration(days: 6 - i)),
-        );
-      } else {
-        final firstDate = sortedDates.first;
-        final lastDate = sortedDates.last;
-        final spanDays = lastDate.difference(firstDate).inDays;
-        if (spanDays <= 14) {
-          // Generate continuous calendar days so the timeline does not skip dates
-          displayDates = List.generate(
-            spanDays + 1,
-            (i) => firstDate.add(Duration(days: i)),
-          );
-        } else if (sortedDates.length > 10) {
-          displayDates = sortedDates.sublist(sortedDates.length - 10);
-        } else {
-          displayDates = sortedDates;
-        }
-      }
-
-      return targetTeachers.map((teacher) {
-        final teacherLogs = relevantLogs
-            .where((s) => s.userId == teacher.id)
-            .toList();
-        final points = displayDates.map((date) {
-          int sec = 0;
-          for (final log in teacherLogs) {
-            if (log.loginAt.year == date.year &&
-                log.loginAt.month == date.month &&
-                log.loginAt.day == date.day) {
-              sec += _effectiveSessionSeconds(log, currentNow);
-            }
-          }
-          // Strictly enforce 24h (86,400s) daily ceiling per teacher
-          sec = sec.clamp(0, _maxDailyDurationSeconds);
-          final hoursVal = (sec / 3600.0).clamp(0.0, 24.0);
-          final dateLabel = '${_shortMonth(date.month)} ${date.day}';
-          return _ChartPoint(
-            label: dateLabel,
-            value: hoursVal,
-            totalSeconds: sec,
-            teacherId: teacher.id,
-            teacherName: teacher.name,
-            date: date,
-          );
-        }).toList();
-
-        return _TeacherSeries(
-          teacherId: teacher.id,
-          teacherName: teacher.name,
-          color: teacher.color,
-          points: points,
-        );
-      }).toList();
-    }
-
-    if (_activeFilter == 'month') {
-      final totalDays = DateTime(currentNow.year, currentNow.month + 1, 0).day;
-      final upToDay = currentNow.day.clamp(1, totalDays);
-      final displayDates = List.generate(
-        upToDay,
-        (i) => DateTime(currentNow.year, currentNow.month, i + 1),
-      );
-
-      return targetTeachers.map((teacher) {
-        final teacherLogs = relevantLogs
-            .where((s) => s.userId == teacher.id)
-            .toList();
-        final points = displayDates.map((dayDate) {
-          int sec = 0;
-          for (final log in teacherLogs) {
-            if (log.loginAt.year == dayDate.year &&
-                log.loginAt.month == dayDate.month &&
-                log.loginAt.day == dayDate.day) {
-              sec += _effectiveSessionSeconds(log, currentNow);
-            }
-          }
-          sec = sec.clamp(0, _maxDailyDurationSeconds);
-          final hoursVal = (sec / 3600.0).clamp(0.0, 24.0);
-          final dateLabel = '${_shortMonth(dayDate.month)} ${dayDate.day}';
-          return _ChartPoint(
-            label: dateLabel,
-            value: hoursVal,
-            totalSeconds: sec,
-            teacherId: teacher.id,
-            teacherName: teacher.name,
-            date: dayDate,
-          );
-        }).toList();
-
-        return _TeacherSeries(
-          teacherId: teacher.id,
-          teacherName: teacher.name,
-          color: teacher.color,
-          points: points,
-        );
-      }).toList();
-    }
-
-    if (_activeFilter == 'week') {
-      final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      final monday = DateTime(
-        currentNow.year,
-        currentNow.month,
-        currentNow.day,
-      ).subtract(Duration(days: currentNow.weekday - 1));
-
-      return targetTeachers.map((teacher) {
-        final teacherLogs = relevantLogs
-            .where((s) => s.userId == teacher.id)
-            .toList();
-        final points = List.generate(7, (weekdayIdx) {
-          final dayDate = monday.add(Duration(days: weekdayIdx));
-          int sec = 0;
-          for (final log in teacherLogs) {
-            // Strictly match the EXACT calendar date of this week
-            if (log.loginAt.year == dayDate.year &&
-                log.loginAt.month == dayDate.month &&
-                log.loginAt.day == dayDate.day) {
-              sec += _effectiveSessionSeconds(log, currentNow);
-            }
-          }
-          // Strictly enforce 24h (86,400s) daily ceiling per teacher
-          sec = sec.clamp(0, _maxDailyDurationSeconds);
-          final hoursVal = (sec / 3600.0).clamp(0.0, 24.0);
-          return _ChartPoint(
-            label: '${days[weekdayIdx]} ${dayDate.day}',
-            value: hoursVal,
-            totalSeconds: sec,
-            teacherId: teacher.id,
-            teacherName: teacher.name,
-            date: dayDate,
-          );
-        });
-
-        return _TeacherSeries(
-          teacherId: teacher.id,
-          teacherName: teacher.name,
-          color: teacher.color,
-          points: points,
-        );
-      }).toList();
-    }
-
-    // Hourly buckets (8 AM to 6 PM) for 'today' and 'custom'
-    final targetDate = _activeFilter == 'custom' && _selectedCustomDate != null
-        ? _selectedCustomDate!
-        : currentNow;
-    final targetDay = DateTime(targetDate.year, targetDate.month, targetDate.day);
-    final hours = ['8 AM', '10 AM', '12 PM', '2 PM', '4 PM', '6 PM'];
-    final hourBuckets = [8, 10, 12, 14, 16, 18];
-
-    return targetTeachers.map((teacher) {
-      final teacherLogs = relevantLogs
-          .where((s) => s.userId == teacher.id)
-          .toList();
-      int remainingDayBudget = _maxDailyDurationSeconds;
-      final points = List.generate(6, (i) {
-        int sec = 0;
-        final bucketHour = hourBuckets[i];
-        final nextBucketHour = i < hourBuckets.length - 1
-            ? hourBuckets[i + 1]
-            : 24;
-
-        for (final log in teacherLogs) {
-          final logDay = DateTime(
-            log.loginAt.year,
-            log.loginAt.month,
-            log.loginAt.day,
-          );
-          if (logDay != targetDay) continue;
-
-          final h = log.loginAt.hour;
-          bool inBucket = false;
-          if (i == 0 && h < hourBuckets[0]) {
-            inBucket = true;
-          } else if (i == hourBuckets.length - 1 && h >= hourBuckets.last) {
-            inBucket = true;
-          } else if (h >= bucketHour && h < nextBucketHour) {
-            inBucket = true;
-          }
-
-          if (inBucket) {
-            sec += _effectiveSessionSeconds(log, currentNow);
-          }
-        }
-
-        // Enforce 24h daily ceiling across all buckets of the day
-        sec = sec.clamp(0, remainingDayBudget);
-        remainingDayBudget = (remainingDayBudget - sec).clamp(
-          0,
-          _maxDailyDurationSeconds,
-        );
-
-        final hoursVal = (sec / 3600.0).clamp(0.0, 24.0);
-        return _ChartPoint(
-          label: hours[i],
-          value: hoursVal,
-          totalSeconds: sec,
-          teacherId: teacher.id,
-          teacherName: teacher.name,
-          date: targetDay,
-        );
-      });
-
-      return _TeacherSeries(
-        teacherId: teacher.id,
-        teacherName: teacher.name,
-        color: teacher.color,
-        points: points,
-      );
-    }).toList();
   }
 
   // =========================================================================
@@ -1868,10 +1627,12 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                   final sortedSummaries =
                       List<TeacherWorkloadSummary>.from(_workloadSummaries)
                         ..sort((a, b) {
-                          final aIsNaruto =
-                              a.teacherName.toLowerCase().contains('naruto');
-                          final bIsNaruto =
-                              b.teacherName.toLowerCase().contains('naruto');
+                          final aIsNaruto = a.teacherName
+                              .toLowerCase()
+                              .contains('naruto');
+                          final bIsNaruto = b.teacherName
+                              .toLowerCase()
+                              .contains('naruto');
                           if (aIsNaruto && !bIsNaruto) return -1;
                           if (!aIsNaruto && bIsNaruto) return 1;
 
@@ -1887,168 +1648,171 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                           return a.teacherName.compareTo(b.teacherName);
                         });
 
-                  return Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: sortedSummaries.map((w) {
-                    final teacherSessions = _sessionLogs
-                        .where((s) => s.userId == w.teacherId)
-                        .toList();
+                  return LayoutBuilder(
+                    builder: (context, wlConstraints) {
+                      final maxW = wlConstraints.maxWidth;
+                      final double itemWidth;
+                      if (maxW < 580) {
+                        itemWidth = maxW;
+                      } else if (maxW < 880) {
+                        itemWidth = (maxW - 12) / 2;
+                      } else {
+                        itemWidth = 280;
+                      }
 
-                    return Container(
-                      width: 280,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF0F172A)
-                            : const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: w.isActiveNow
-                              ? AppTheme.catGreen.withValues(alpha: 0.6)
-                              : (isDark
-                                    ? Colors.white10
-                                    : const Color(0xFFE2E8F0)),
-                          width: w.isActiveNow ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              if (w.isActiveNow)
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  margin: const EdgeInsets.only(right: 6),
-                                  decoration: const BoxDecoration(
-                                    color: AppTheme.catGreen,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              Expanded(
-                                child: Text(
-                                  w.teacherName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13.5,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Subjects Handled:',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.6,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                '${w.totalSubjectsCount}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Sections Handled:',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.6,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                '${w.totalSectionsCount}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 16),
-                          ValueListenableBuilder<DateTime>(
-                            valueListenable: _tickerNotifier,
-                            builder: (context, currentNow, _) {
-                              int totalSecs = 0;
-                              for (final s in teacherSessions) {
-                                if (s.isActive) {
-                                  final elapsed = currentNow
-                                      .difference(s.loginAt)
-                                      .inSeconds;
-                                  totalSecs += (elapsed > 0
-                                      ? elapsed
-                                      : s.durationSeconds);
-                                } else {
-                                  totalSecs += s.durationSeconds;
-                                }
-                              }
+                      return Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: sortedSummaries.map((w) {
+                          final teacherSessions = _sessionLogs
+                              .where((s) => s.userId == w.teacherId)
+                              .toList();
 
-                              String periodLabel;
-                              if (_activeFilter == 'today') {
-                                periodLabel = 'Today Usage:';
-                              } else if (_activeFilter == 'week') {
-                                periodLabel = 'This Week Usage:';
-                              } else if (_activeFilter == 'month') {
-                                periodLabel = 'This Month Usage:';
-                              } else if (_activeFilter == 'custom' &&
-                                  _selectedCustomDate != null) {
-                                periodLabel = 'Date Usage:';
-                              } else {
-                                periodLabel = 'Total Usage:';
-                              }
+                          return Container(
+                            width: itemWidth,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF0F172A)
+                                  : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: w.isActiveNow
+                                    ? AppTheme.catGreen.withValues(alpha: 0.6)
+                                    : (isDark
+                                          ? Colors.white10
+                                          : const Color(0xFFE2E8F0)),
+                                width: w.isActiveNow ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (w.isActiveNow)
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        margin: const EdgeInsets.only(right: 6),
+                                        decoration: const BoxDecoration(
+                                          color: AppTheme.catGreen,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    Expanded(
+                                      child: Text(
+                                        w.teacherName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13.5,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Subjects Handled:',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.6),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${w.totalSubjectsCount}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Sections Handled:',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.6),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${w.totalSectionsCount}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 16),
+                                ValueListenableBuilder<DateTime>(
+                                  valueListenable: _tickerNotifier,
+                                  builder: (context, currentNow, _) {
+                                    final totalSecs =
+                                        _calculateCappedTotalSeconds(
+                                          teacherSessions,
+                                          currentNow,
+                                        );
 
-                              return Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    periodLabel,
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      color: theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.6),
-                                    ),
-                                  ),
-                                  Text(
-                                    AdminRepository.formatHumanReadableDuration(
-                                      totalSecs,
-                                    ),
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11.5,
-                                      color: totalSecs > 0
-                                          ? AppTheme.catGreen
-                                          : theme.colorScheme.primary,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                );
-              }(),
+                                    String periodLabel;
+                                    if (_activeFilter == 'today') {
+                                      periodLabel = 'Today Usage:';
+                                    } else if (_activeFilter == 'week') {
+                                      periodLabel = 'This Week Usage:';
+                                    } else if (_activeFilter == 'month') {
+                                      periodLabel = 'This Month Usage:';
+                                    } else {
+                                      periodLabel = 'Total Usage:';
+                                    }
+
+                                    return Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          periodLabel,
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.6),
+                                          ),
+                                        ),
+                                        Text(
+                                          AdminRepository.formatHumanReadableDuration(
+                                            totalSecs,
+                                          ),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11.5,
+                                            color: totalSecs > 0
+                                                ? AppTheme.catGreen
+                                                : theme.colorScheme.primary,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  );
+                }(),
         ),
       ],
     );
@@ -2161,218 +1925,416 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                     ValueListenableBuilder<DateTime>(
                       valueListenable: _tickerNotifier,
                       builder: (context, currentNow, _) {
-                        return Table(
-                          columnWidths: const {
-                            0: FlexColumnWidth(2.0),
-                            1: FlexColumnWidth(1.1),
-                            2: FlexColumnWidth(1.3),
-                            3: FlexColumnWidth(1.3),
-                            4: FlexColumnWidth(1.6),
-                            5: FlexColumnWidth(1.7),
-                          },
-                          children: [
-                            // Header Row
-                            TableRow(
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? const Color(0xFF0F172A)
-                                    : const Color(0xFFF8FAFC),
-                              ),
-                              children: const [
-                                _TableHeaderCell('Teacher Name'),
-                                _TableHeaderCell('Date'),
-                                _TableHeaderCell('Time In'),
-                                _TableHeaderCell('Time Out'),
-                                _TableHeaderCell('Logout Method'),
-                                _TableHeaderCell('Time Spent in System'),
-                              ],
-                            ),
-                            // Data Rows for Current Page
-                            ...pageLogs.map((log) {
-                              final isLive = log.isActive;
-                              int elapsedSeconds = log.durationSeconds;
-                              if (isLive) {
-                                elapsedSeconds = currentNow
-                                    .difference(log.loginAt)
-                                    .inSeconds;
-                                if (elapsedSeconds < 0) elapsedSeconds = 0;
-                              }
+                        return LayoutBuilder(
+                          builder: (context, tableConstraints) {
+                            final isCompactTable =
+                                tableConstraints.maxWidth < 720;
 
-                              return TableRow(
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      color: isDark
-                                          ? Colors.white10
-                                          : const Color(0xFFE2E8F0),
+                            if (isCompactTable) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: pageLogs.map((log) {
+                                  final isLive = log.isActive;
+                                  final interval = _effectiveSessionInterval(
+                                    log,
+                                    currentNow,
+                                  );
+                                  final elapsedSeconds =
+                                      interval.duration.inSeconds;
+
+                                  return Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: isDark
+                                              ? Colors.white10
+                                              : const Color(0xFFE2E8F0),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                children: [
-                                  // Teacher Name
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
-                                    ),
-                                    child: Row(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        if (isLive)
-                                          Container(
-                                            width: 8,
-                                            height: 8,
-                                            margin: const EdgeInsets.only(
-                                              right: 8,
+                                        Row(
+                                          children: [
+                                            if (isLive)
+                                              Container(
+                                                width: 8,
+                                                height: 8,
+                                                margin: const EdgeInsets.only(
+                                                  right: 8,
+                                                ),
+                                                decoration: const BoxDecoration(
+                                                  color: AppTheme.catGreen,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                            Expanded(
+                                              child: Text(
+                                                log.teacherName ??
+                                                    'Teacher (${log.userId})',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 13.5,
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurface,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
-                                            decoration: const BoxDecoration(
-                                              color: AppTheme.catGreen,
-                                              shape: BoxShape.circle,
+                                            const SizedBox(width: 8),
+                                            isLive
+                                                ? Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: AppTheme.catGreen
+                                                          .withValues(
+                                                            alpha: 0.12,
+                                                          ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            6,
+                                                          ),
+                                                    ),
+                                                    child: const Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        SizedBox(
+                                                          width: 6,
+                                                          height: 6,
+                                                          child: DecoratedBox(
+                                                            decoration:
+                                                                BoxDecoration(
+                                                                  color: AppTheme
+                                                                      .catGreen,
+                                                                  shape: BoxShape
+                                                                      .circle,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        SizedBox(width: 5),
+                                                        Text(
+                                                          'Online Now',
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color: AppTheme
+                                                                .catGreen,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  )
+                                                : _buildLogoutReasonBadge(
+                                                    log.logoutReason,
+                                                    isDark,
+                                                  ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 16,
+                                          runSpacing: 4,
+                                          children: [
+                                            Text(
+                                              'Date: ${_formatDate(log.sessionDate)}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: isDark
+                                                    ? Colors.white70
+                                                    : const Color(0xFF475569),
+                                              ),
                                             ),
-                                          ),
-                                        Expanded(
-                                          child: Text(
-                                            log.teacherName ??
-                                                'Teacher (${log.userId})',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 13,
-                                              color:
-                                                  theme.colorScheme.onSurface,
+                                            Text(
+                                              'In: ${_formatTimestamp(interval.start)}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: isDark
+                                                    ? Colors.white70
+                                                    : const Color(0xFF475569),
+                                              ),
                                             ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                            Text(
+                                              isLive
+                                                  ? 'Out: —'
+                                                  : 'Out: ${_formatTimestamp(interval.end)}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: isDark
+                                                    ? Colors.white70
+                                                    : const Color(0xFF475569),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'Time Spent in System:',
+                                              style: TextStyle(
+                                                fontSize: 11.5,
+                                                color: isDark
+                                                    ? Colors.white54
+                                                    : const Color(0xFF64748B),
+                                              ),
+                                            ),
+                                            Text(
+                                              AdminRepository.formatHumanReadableDuration(
+                                                elapsedSeconds,
+                                              ),
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontFamily: 'monospace',
+                                                fontSize: 12.5,
+                                                color: isLive
+                                                    ? AppTheme.catGreen
+                                                    : theme.colorScheme.primary,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
+                                  );
+                                }).toList(),
+                              );
+                            }
+
+                            return Table(
+                              columnWidths: const {
+                                0: FlexColumnWidth(2.0),
+                                1: FlexColumnWidth(1.1),
+                                2: FlexColumnWidth(1.3),
+                                3: FlexColumnWidth(1.3),
+                                4: FlexColumnWidth(1.6),
+                                5: FlexColumnWidth(1.7),
+                              },
+                              children: [
+                                // Header Row
+                                TableRow(
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF0F172A)
+                                        : const Color(0xFFF8FAFC),
                                   ),
-                                  // Date
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
+                                  children: const [
+                                    _TableHeaderCell('Teacher Name'),
+                                    _TableHeaderCell('Date'),
+                                    _TableHeaderCell('Time In'),
+                                    _TableHeaderCell('Time Out'),
+                                    _TableHeaderCell('Logout Method'),
+                                    _TableHeaderCell('Time Spent in System'),
+                                  ],
+                                ),
+                                // Data Rows for Current Page
+                                ...pageLogs.map((log) {
+                                  final isLive = log.isActive;
+                                  final interval = _effectiveSessionInterval(
+                                    log,
+                                    currentNow,
+                                  );
+                                  final elapsedSeconds =
+                                      interval.duration.inSeconds;
+
+                                  return TableRow(
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: isDark
+                                              ? Colors.white10
+                                              : const Color(0xFFE2E8F0),
+                                        ),
+                                      ),
                                     ),
-                                    child: Text(
-                                      _formatDate(log.sessionDate),
-                                      style: const TextStyle(fontSize: 12.5),
-                                    ),
-                                  ),
-                                  // Login Time
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
-                                    ),
-                                    child: Text(
-                                      _formatTimestamp(log.loginAt),
-                                      style: const TextStyle(fontSize: 12.5),
-                                    ),
-                                  ),
-                                  // Logout Time
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
-                                    ),
-                                    child: isLive
-                                        ? Text(
-                                            '—',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: isDark
-                                                  ? Colors.white38
-                                                  : const Color(0xFF94A3B8),
+                                    children: [
+                                      // Teacher Name
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            if (isLive)
+                                              Container(
+                                                width: 8,
+                                                height: 8,
+                                                margin: const EdgeInsets.only(
+                                                  right: 8,
+                                                ),
+                                                decoration: const BoxDecoration(
+                                                  color: AppTheme.catGreen,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                            Expanded(
+                                              child: Text(
+                                                log.teacherName ??
+                                                    'Teacher (${log.userId})',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 13,
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurface,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
-                                          )
-                                        : Text(
-                                            _formatTimestamp(
-                                              log.effectiveLogoutAt,
-                                            ),
-                                            style: const TextStyle(
-                                              fontSize: 12.5,
-                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Date
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                        child: Text(
+                                          _formatDate(log.sessionDate),
+                                          style: const TextStyle(
+                                            fontSize: 12.5,
                                           ),
-                                  ),
-                                  // Logout Method
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 10,
-                                    ),
-                                    child: isLive
-                                        ? Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.catGreen
-                                                  .withValues(alpha: 0.12),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Container(
-                                                  width: 6,
-                                                  height: 6,
-                                                  decoration:
-                                                      const BoxDecoration(
+                                        ),
+                                      ),
+                                      // Login Time
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                        child: Text(
+                                          _formatTimestamp(interval.start),
+                                          style: const TextStyle(
+                                            fontSize: 12.5,
+                                          ),
+                                        ),
+                                      ),
+                                      // Logout Time
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                        child: isLive
+                                            ? Text(
+                                                '—',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDark
+                                                      ? Colors.white38
+                                                      : const Color(0xFF94A3B8),
+                                                ),
+                                              )
+                                            : Text(
+                                                _formatTimestamp(interval.end),
+                                                style: const TextStyle(
+                                                  fontSize: 12.5,
+                                                ),
+                                              ),
+                                      ),
+                                      // Logout Method
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 10,
+                                        ),
+                                        child: isLive
+                                            ? Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.catGreen
+                                                      .withValues(alpha: 0.12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Container(
+                                                      width: 6,
+                                                      height: 6,
+                                                      decoration:
+                                                          const BoxDecoration(
+                                                            color: AppTheme
+                                                                .catGreen,
+                                                            shape:
+                                                                BoxShape.circle,
+                                                          ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    const Text(
+                                                      'Online Now',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                         color:
                                                             AppTheme.catGreen,
-                                                        shape: BoxShape.circle,
                                                       ),
+                                                    ),
+                                                  ],
                                                 ),
-                                                SizedBox(width: 6),
-                                                Text(
-                                                  'Online Now',
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: AppTheme.catGreen,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          )
-                                        : _buildLogoutReasonBadge(
-                                            log.logoutReason,
-                                            isDark,
+                                              )
+                                            : _buildLogoutReasonBadge(
+                                                log.logoutReason,
+                                                isDark,
+                                              ),
+                                      ),
+                                      // Duration Ticker
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                        child: Text(
+                                          AdminRepository.formatHumanReadableDuration(
+                                            elapsedSeconds,
                                           ),
-                                  ),
-                                  // Duration Ticker
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
-                                    ),
-                                    child: Text(
-                                      AdminRepository.formatHumanReadableDuration(
-                                        elapsedSeconds,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontFamily: 'monospace',
+                                            fontSize: 13,
+                                            color: isLive
+                                                ? AppTheme.catGreen
+                                                : theme.colorScheme.primary,
+                                          ),
+                                        ),
                                       ),
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontFamily: 'monospace',
-                                        fontSize: 13,
-                                        color: isLive
-                                            ? AppTheme.catGreen
-                                            : theme.colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }),
-                          ],
+                                    ],
+                                  );
+                                }),
+                              ],
+                            );
+                          },
                         );
                       },
                     ),
 
-                    // Bottom Container: Entry count and pagination (Styled like Teacher Management)
+                    // Bottom Container: Entry count and pagination (Responsive across mobile/tablet/desktop)
                     Container(
-                      height: 52,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: isDark
                             ? const Color(0xFF1E293B)
@@ -2385,13 +2347,16 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                           ),
                         ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        runSpacing: 8,
                         children: [
                           Text(
                             'Showing ${totalLogs == 0 ? 0 : startIndex + 1} to $endIndex of $totalLogs entries',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w500,
                               color: isDark
                                   ? const Color(0xFF94A3B8)
@@ -2399,7 +2364,9 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
                             ),
                           ),
                           if (totalPages > 1)
-                            Row(
+                            Wrap(
+                              spacing: 2,
+                              runSpacing: 4,
                               children: [
                                 _buildPageButton(
                                   'First',
@@ -2552,171 +2519,228 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
     final borderColor = isDark ? Colors.white10 : const Color(0xFFE2E8F0);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header Skeleton
-          _SkeletonShimmer(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        final isNarrow = maxW < 850;
+        final isMobile = maxW < 560;
+        final pad = isMobile ? 14.0 : 24.0;
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(pad),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Skeleton
+              _SkeletonShimmer(
+                child: isNarrow
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _skeletonBar(
+                            width: math.min(280, maxW - 32),
+                            height: 24,
+                            borderRadius: 8,
+                            isDark: isDark,
+                          ),
+                          const SizedBox(height: 8),
+                          _skeletonBar(
+                            width: math.min(360, maxW - 32),
+                            height: 14,
+                            borderRadius: 6,
+                            isDark: isDark,
+                          ),
+                          const SizedBox(height: 14),
+                          _skeletonBar(
+                            width: math.min(280, maxW - 32),
+                            height: 38,
+                            borderRadius: 10,
+                            isDark: isDark,
+                          ),
+                        ],
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _skeletonBar(
+                                width: 300,
+                                height: 24,
+                                borderRadius: 8,
+                                isDark: isDark,
+                              ),
+                              const SizedBox(height: 8),
+                              _skeletonBar(
+                                width: 400,
+                                height: 14,
+                                borderRadius: 6,
+                                isDark: isDark,
+                              ),
+                            ],
+                          ),
+                          _skeletonBar(
+                            width: 280,
+                            height: 38,
+                            borderRadius: 10,
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
+              ),
+              const SizedBox(height: 24),
+
+              // Overview KPI Cards Skeleton
+              if (isMobile)
                 Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _skeletonBar(
-                      width: 300,
-                      height: 24,
-                      borderRadius: 8,
-                      isDark: isDark,
+                    _buildMetricCardSkeleton(cardBg, borderColor, isDark),
+                    const SizedBox(height: 12),
+                    _buildMetricCardSkeleton(cardBg, borderColor, isDark),
+                    const SizedBox(height: 12),
+                    _buildMetricCardSkeleton(cardBg, borderColor, isDark),
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricCardSkeleton(
+                        cardBg,
+                        borderColor,
+                        isDark,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    _skeletonBar(
-                      width: 400,
-                      height: 14,
-                      borderRadius: 6,
-                      isDark: isDark,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildMetricCardSkeleton(
+                        cardBg,
+                        borderColor,
+                        isDark,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildMetricCardSkeleton(
+                        cardBg,
+                        borderColor,
+                        isDark,
+                      ),
                     ),
                   ],
                 ),
-                _skeletonBar(
-                  width: 280,
-                  height: 38,
-                  borderRadius: 10,
-                  isDark: isDark,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-          // Overview KPI Cards Skeleton
-          Row(
-            children: [
-              Expanded(
-                child: _buildMetricCardSkeleton(cardBg, borderColor, isDark),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildMetricCardSkeleton(cardBg, borderColor, isDark),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildMetricCardSkeleton(cardBg, borderColor, isDark),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Charts Skeleton Row
-          Row(
-            children: [
-              Expanded(
-                flex: 6,
-                child: Container(
-                  height: 240,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: borderColor),
-                    boxShadow: isDark
-                        ? []
-                        : [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+              // Charts Skeleton Row
+              if (isNarrow)
+                Column(
+                  children: [
+                    Container(
+                      height: 240,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: _SkeletonShimmer(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _skeletonBar(
+                              width: math.min(220, maxW - 80),
+                              height: 16,
+                              isDark: isDark,
+                            ),
+                            const SizedBox(height: 20),
+                            Expanded(
+                              child: _skeletonBar(
+                                width: double.infinity,
+                                height: double.infinity,
+                                isDark: isDark,
+                              ),
                             ),
                           ],
-                  ),
-                  child: _SkeletonShimmer(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _skeletonBar(width: 220, height: 16, isDark: isDark),
-                        const SizedBox(height: 20),
-                        Expanded(
-                          child: _skeletonBar(
-                            width: double.infinity,
-                            height: double.infinity,
-                            isDark: isDark,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      height: 200,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Center(
+                        child: _SkeletonShimmer(
+                          child: _skeletonCircle(size: 130, isDark: isDark),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 6,
+                      child: Container(
+                        height: 240,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: _SkeletonShimmer(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _skeletonBar(
+                                width: 220,
+                                height: 16,
+                                isDark: isDark,
+                              ),
+                              const SizedBox(height: 20),
+                              Expanded(
+                                child: _skeletonBar(
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  isDark: isDark,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 4,
-                child: Container(
-                  height: 240,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: borderColor),
-                    boxShadow: isDark
-                        ? []
-                        : [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                  ),
-                  child: Center(
-                    child: _SkeletonShimmer(
-                      child: _skeletonCircle(size: 130, isDark: isDark),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 4,
+                      child: Container(
+                        height: 240,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Center(
+                          child: _SkeletonShimmer(
+                            child: _skeletonCircle(size: 130, isDark: isDark),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ),
             ],
           ),
-          const SizedBox(height: 28),
-
-          // Workload Telemetry Cards Skeleton
-          _SkeletonShimmer(
-            child: _skeletonBar(
-              width: 280,
-              height: 18,
-              borderRadius: 6,
-              isDark: isDark,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: borderColor),
-              boxShadow: isDark
-                  ? []
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-            ),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: List.generate(
-                3,
-                (_) => _buildWorkloadCardSkeleton(isDark),
-              ),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -2794,52 +2818,1123 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
       ),
     );
   }
+}
 
-  static Widget _buildWorkloadCardSkeleton(bool isDark) {
-    return Container(
-      width: 280,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
-        ),
-      ),
-      child: _SkeletonShimmer(
-        child: Column(
+// =========================================================================
+// Real-Time Gantt Session Timeline + 1-Hour Split Bar Mini-Chart
+// (Used for 'Today' and 'Select Date' filters)
+// =========================================================================
+class _TimelineSessionBarData {
+  final String sessionId;
+  final String teacherId;
+  final String teacherName;
+  final Color color;
+  final DateTime start;
+  final DateTime end;
+  final bool isActive;
+  final String logoutReason;
+
+  const _TimelineSessionBarData({
+    required this.sessionId,
+    required this.teacherId,
+    required this.teacherName,
+    required this.color,
+    required this.start,
+    required this.end,
+    required this.isActive,
+    required this.logoutReason,
+  });
+
+  int get durationSeconds => math.max(0, end.difference(start).inSeconds);
+}
+
+class _TeacherSessionTimelineAndHourlyView extends StatefulWidget {
+  final List<_TeacherInfo> teachers;
+  final List<UserSessionLog> logs;
+  final DateTime targetDate;
+  final bool isToday;
+  final DateTime currentNow;
+  final bool isDark;
+  final String? selectedTeacherId;
+  final ValueChanged<String?>? onTeacherSelected;
+
+  const _TeacherSessionTimelineAndHourlyView({
+    required this.teachers,
+    required this.logs,
+    required this.targetDate,
+    required this.isToday,
+    required this.currentNow,
+    required this.isDark,
+    this.selectedTeacherId,
+    this.onTeacherSelected,
+  });
+
+  @override
+  State<_TeacherSessionTimelineAndHourlyView> createState() =>
+      _TeacherSessionTimelineAndHourlyViewState();
+}
+
+class _TeacherSessionTimelineAndHourlyViewState
+    extends State<_TeacherSessionTimelineAndHourlyView> {
+  String? _selectedBarId;
+  int? _hoveredHour;
+
+  static String _formatHourTick(int hour) {
+    final h = hour % 24;
+    if (h == 0) return '12 AM';
+    if (h == 12) return '12 PM';
+    if (h < 12) return '$h AM';
+    return '${h - 12} PM';
+  }
+
+  static String _formatTimeShort(DateTime dt) {
+    final local = dt.toLocal();
+    final h = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final ampm = local.hour >= 12 ? 'PM' : 'AM';
+    final m = local.minute.toString().padLeft(2, '0');
+    final s = local.second.toString().padLeft(2, '0');
+    return '$h:$m:$s $ampm';
+  }
+
+  static String _formatCompactDuration(int seconds) {
+    if (seconds <= 0) return '0m';
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    final s = seconds % 60;
+    if (h > 0) return '${h}h ${m.toString().padLeft(2, '0')}m';
+    if (m > 0) return '${m}m ${s.toString().padLeft(2, '0')}s';
+    return '${s}s';
+  }
+
+  static String _statusLabel(bool isActive, String reason) {
+    if (isActive) return 'Online Now';
+    switch (reason) {
+      case 'manual':
+        return 'Manual Logout';
+      case 'inactivity':
+      case 'inactivity_timeout':
+        return 'Inactivity (30m)';
+      default:
+        return 'Terminated';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dayStart = DateTime(
+      widget.targetDate.year,
+      widget.targetDate.month,
+      widget.targetDate.day,
+    );
+    final dayEnd = dayStart.add(const Duration(days: 1));
+    final nowLocal = widget.currentNow.toLocal();
+
+    // Build session bars per teacher for targetDate
+    final Map<String, List<_TimelineSessionBarData>> teacherBars = {};
+    final Map<String, List<DateTimeRange>> teacherMergedIntervals = {};
+    final Map<String, int> teacherTotalSeconds = {};
+    final Map<String, bool> teacherOnlineMap = {};
+    final List<_TimelineSessionBarData> allBars = [];
+
+    DateTime? earliestStart;
+    DateTime? latestEnd;
+
+    for (final teacher in widget.teachers) {
+      final tLogs = widget.logs.where((l) => l.userId == teacher.id).toList();
+      final bars = <_TimelineSessionBarData>[];
+      final rawRanges = <DateTimeRange>[];
+      bool isOnline = false;
+
+      for (final log in tLogs) {
+        final interval =
+            _AdminActivityAnalyticsTabState._effectiveSessionInterval(
+              log,
+              widget.currentNow,
+            );
+        if (!interval.end.isAfter(dayStart) ||
+            !interval.start.isBefore(dayEnd)) {
+          continue;
+        }
+        final clippedStart = interval.start.isBefore(dayStart)
+            ? dayStart
+            : interval.start;
+        final clippedEnd = interval.end.isAfter(dayEnd) ? dayEnd : interval.end;
+        if (!clippedEnd.isAfter(clippedStart) && !log.isActive) continue;
+
+        if (log.isActive) isOnline = true;
+        rawRanges.add(DateTimeRange(start: clippedStart, end: clippedEnd));
+
+        final bar = _TimelineSessionBarData(
+          sessionId: log.id,
+          teacherId: teacher.id,
+          teacherName: teacher.name,
+          color: teacher.color,
+          start: clippedStart,
+          end: clippedEnd,
+          isActive: log.isActive,
+          logoutReason: log.logoutReason ?? 'terminated',
+        );
+        bars.add(bar);
+        allBars.add(bar);
+
+        if (earliestStart == null || clippedStart.isBefore(earliestStart)) {
+          earliestStart = clippedStart;
+        }
+        if (latestEnd == null || clippedEnd.isAfter(latestEnd)) {
+          latestEnd = clippedEnd;
+        }
+      }
+
+      bars.sort((a, b) => a.start.compareTo(b.start));
+      final merged = _AdminActivityAnalyticsTabState._mergeIntervals(rawRanges);
+      int totalSec = 0;
+      for (final r in merged) {
+        totalSec += r.duration.inSeconds;
+      }
+
+      teacherBars[teacher.id] = bars;
+      teacherMergedIntervals[teacher.id] = merged;
+      teacherTotalSeconds[teacher.id] = totalSec.clamp(0, 86400);
+      teacherOnlineMap[teacher.id] = isOnline;
+    }
+
+    // Dynamic startHour and endHour
+    int startHour;
+    int endHour;
+    if (earliestStart != null && latestEnd != null) {
+      startHour = earliestStart.hour;
+      final rawEndHour = widget.isToday
+          ? math.max(latestEnd.hour + 1, nowLocal.hour + 1)
+          : (latestEnd.minute > 0 || latestEnd.second > 0
+                ? latestEnd.hour + 1
+                : latestEnd.hour + 1);
+      endHour = rawEndHour.clamp(startHour + 4, 24);
+      if (endHour - startHour < 4) {
+        startHour = math.max(0, endHour - 4);
+      }
+    } else {
+      if (widget.isToday) {
+        endHour = (nowLocal.hour + 1).clamp(4, 24);
+        startHour = math.max(0, endHour - 6);
+      } else {
+        startHour = 7;
+        endHour = 17;
+      }
+    }
+
+    final axisStart = DateTime(
+      dayStart.year,
+      dayStart.month,
+      dayStart.day,
+      startHour,
+    );
+    final axisEnd = dayStart.add(Duration(hours: endHour));
+    final totalAxisSeconds = math.max(
+      3600,
+      axisEnd.difference(axisStart).inSeconds,
+    );
+    final hourCount = math.max(1, endHour - startHour);
+
+    _TimelineSessionBarData? activeTooltipBar;
+    if (_selectedBarId != null) {
+      for (final b in allBars) {
+        if (b.sessionId == _selectedBarId) {
+          activeTooltipBar = b;
+          break;
+        }
+      }
+    }
+    activeTooltipBar ??= allBars.isNotEmpty ? allBars.last : null;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        final isMobile = maxW < 540;
+        final double nameColW = isMobile ? 104.0 : 148.0;
+        final double totalColW = isMobile ? 64.0 : 78.0;
+        final double availableTrackW = math.max(
+          180.0,
+          maxW - nameColW - totalColW - 20,
+        );
+        final double minTrackW = math.max(availableTrackW, hourCount * 46.0);
+
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _skeletonBar(width: 140, height: 14, isDark: isDark),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // Section 1 Header: Live Session Timeline
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
+              runSpacing: 6,
               children: [
-                _skeletonBar(width: 100, height: 12, isDark: isDark),
-                _skeletonBar(width: 24, height: 12, isDark: isDark),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      LucideIcons.clock,
+                      size: 13.5,
+                      color: widget.isDark
+                          ? Colors.white70
+                          : const Color(0xFF475569),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      widget.isToday
+                          ? 'Live Session Timeline (Login → Logout / Now)'
+                          : 'Session Timeline (Login → Logout)',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: widget.isDark
+                            ? Colors.white
+                            : const Color(0xFF1E293B),
+                      ),
+                    ),
+                  ],
+                ),
+                // Legend for bar end types
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 4,
+                  children: [
+                    _buildLegendIndicator(
+                      color: AppTheme.catGreen,
+                      label: 'Online Now ▶',
+                      isDark: widget.isDark,
+                    ),
+                    _buildLegendIndicator(
+                      color: const Color(0xFF3B82F6),
+                      label: 'Manual Logout',
+                      isDark: widget.isDark,
+                    ),
+                    _buildLegendIndicator(
+                      color: const Color(0xFFF59E0B),
+                      label: 'Inactivity',
+                      isDark: widget.isDark,
+                    ),
+                    _buildLegendIndicator(
+                      color: const Color(0xFF64748B),
+                      label: 'Terminated',
+                      isDark: widget.isDark,
+                    ),
+                  ],
+                ),
               ],
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _skeletonBar(width: 100, height: 12, isDark: isDark),
-                _skeletonBar(width: 24, height: 12, isDark: isDark),
-              ],
+            const SizedBox(height: 10),
+
+            // Interactive Selected/Hovered Session Details Banner
+            if (activeTooltipBar != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: activeTooltipBar.color.withValues(
+                    alpha: widget.isDark ? 0.14 : 0.08,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: activeTooltipBar.color.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: activeTooltipBar.color,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          activeTooltipBar.teacherName,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: widget.isDark
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'In: ${_formatTimeShort(activeTooltipBar.start)} → ${activeTooltipBar.isActive ? 'Online Now' : 'Out: ${_formatTimeShort(activeTooltipBar.end)}'}',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: widget.isDark
+                            ? Colors.white70
+                            : const Color(0xFF334155),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: activeTooltipBar.color.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        AdminRepository.formatHumanReadableDuration(
+                          activeTooltipBar.durationSeconds,
+                        ),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'monospace',
+                          color: activeTooltipBar.color,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '• ${_statusLabel(activeTooltipBar.isActive, activeTooltipBar.logoutReason)}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: activeTooltipBar.isActive
+                            ? AppTheme.catGreen
+                            : (widget.isDark
+                                  ? Colors.white60
+                                  : const Color(0xFF475569)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Horizontally scrollable timeline container on small screens, full width on large screens
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: nameColW + minTrackW + totalColW + 16,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Time Axis Header Row
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: nameColW,
+                          child: Text(
+                            'Faculty',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: widget.isDark
+                                  ? Colors.white54
+                                  : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: minTrackW,
+                          height: 22,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              for (int i = 0; i <= hourCount; i++)
+                                Positioned(
+                                  left:
+                                      (i / hourCount) * minTrackW -
+                                      (i == 0 ? 0 : (i == hourCount ? 34 : 17)),
+                                  top: 2,
+                                  child: Text(
+                                    _formatHourTick(startHour + i),
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: widget.isDark
+                                          ? Colors.white54
+                                          : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ),
+                              if (widget.isToday &&
+                                  nowLocal.isAfter(axisStart) &&
+                                  nowLocal.isBefore(axisEnd))
+                                Positioned(
+                                  left:
+                                      ((nowLocal
+                                                      .difference(axisStart)
+                                                      .inSeconds /
+                                                  totalAxisSeconds)
+                                              .clamp(0.0, 1.0) *
+                                          minTrackW) -
+                                      16,
+                                  top: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.catGreen,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'NOW',
+                                      style: TextStyle(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: totalColW,
+                          child: Text(
+                            'Total',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: widget.isDark
+                                  ? Colors.white54
+                                  : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Teacher Gantt Rows
+                    ...widget.teachers.map((teacher) {
+                      final bars = teacherBars[teacher.id] ?? const [];
+                      final totalSec = teacherTotalSeconds[teacher.id] ?? 0;
+                      final isOnline = teacherOnlineMap[teacher.id] == true;
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          children: [
+                            // Left: Teacher Name + Online Indicator
+                            SizedBox(
+                              width: nameColW,
+                              child: InkWell(
+                                onTap: () =>
+                                    widget.onTeacherSelected?.call(teacher.id),
+                                borderRadius: BorderRadius.circular(6),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 9,
+                                      height: 9,
+                                      decoration: BoxDecoration(
+                                        color: teacher.color,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            teacher.name,
+                                            style: TextStyle(
+                                              fontSize: isMobile ? 11.5 : 12.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: widget.isDark
+                                                  ? Colors.white
+                                                  : const Color(0xFF1E293B),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (isOnline)
+                                            const Text(
+                                              '● Online Now',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.catGreen,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+
+                            // Middle: Gantt Session Track
+                            Container(
+                              width: minTrackW,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: widget.isDark
+                                    ? const Color(0xFF0F172A)
+                                    : const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: widget.isDark
+                                      ? Colors.white10
+                                      : const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  // Vertical hour grid lines
+                                  for (int i = 1; i < hourCount; i++)
+                                    Positioned(
+                                      left: (i / hourCount) * minTrackW,
+                                      top: 0,
+                                      bottom: 0,
+                                      child: Container(
+                                        width: 1,
+                                        color: widget.isDark
+                                            ? Colors.white.withValues(
+                                                alpha: 0.06,
+                                              )
+                                            : const Color(0xFFE2E8F0),
+                                      ),
+                                    ),
+
+                                  // Empty state label if no session today
+                                  if (bars.isEmpty)
+                                    Center(
+                                      child: Text(
+                                        'No session recorded',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          color: widget.isDark
+                                              ? Colors.white24
+                                              : const Color(0xFF94A3B8),
+                                        ),
+                                      ),
+                                    ),
+
+                                  // Session interval bars
+                                  ...bars.map((bar) {
+                                    final startRatio =
+                                        (bar.start
+                                                    .difference(axisStart)
+                                                    .inSeconds /
+                                                totalAxisSeconds)
+                                            .clamp(0.0, 1.0);
+                                    final endRatio =
+                                        (bar.end
+                                                    .difference(axisStart)
+                                                    .inSeconds /
+                                                totalAxisSeconds)
+                                            .clamp(0.0, 1.0);
+                                    final leftPx = startRatio * minTrackW;
+                                    final widthPx = math.max(
+                                      8.0,
+                                      (endRatio - startRatio) * minTrackW,
+                                    );
+                                    final isSelected =
+                                        activeTooltipBar?.sessionId ==
+                                        bar.sessionId;
+
+                                    Color endCapColor = bar.color;
+                                    if (!bar.isActive) {
+                                      if (bar.logoutReason == 'inactivity') {
+                                        endCapColor = const Color(0xFFF59E0B);
+                                      } else if (bar.logoutReason ==
+                                          'terminated') {
+                                        endCapColor = const Color(0xFF64748B);
+                                      }
+                                    }
+
+                                    return Positioned(
+                                      left: leftPx.clamp(
+                                        0.0,
+                                        math.max(0.0, minTrackW - 8.0),
+                                      ),
+                                      top: 4,
+                                      bottom: 4,
+                                      width: math.min(
+                                        widthPx,
+                                        math.max(8.0, minTrackW - leftPx),
+                                      ),
+                                      child: MouseRegion(
+                                        cursor: SystemMouseCursors.click,
+                                        onEnter: (_) {
+                                          setState(
+                                            () =>
+                                                _selectedBarId = bar.sessionId,
+                                          );
+                                        },
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            setState(
+                                              () => _selectedBarId =
+                                                  bar.sessionId,
+                                            );
+                                          },
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                              milliseconds: 150,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: bar.color.withValues(
+                                                alpha:
+                                                    bar.logoutReason ==
+                                                            'terminated' &&
+                                                        !bar.isActive
+                                                    ? 0.72
+                                                    : 0.92,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: isSelected
+                                                    ? (widget.isDark
+                                                          ? Colors.white
+                                                          : const Color(
+                                                              0xFF0F172A,
+                                                            ))
+                                                    : endCapColor,
+                                                width: isSelected ? 1.6 : 1.0,
+                                              ),
+                                              boxShadow:
+                                                  bar.isActive || isSelected
+                                                  ? [
+                                                      BoxShadow(
+                                                        color: bar.color
+                                                            .withValues(
+                                                              alpha: 0.35,
+                                                            ),
+                                                        blurRadius: 6,
+                                                        offset: const Offset(
+                                                          0,
+                                                          1,
+                                                        ),
+                                                      ),
+                                                    ]
+                                                  : null,
+                                            ),
+                                            child: Align(
+                                              alignment: Alignment.centerRight,
+                                              child: bar.isActive
+                                                  ? const Padding(
+                                                      padding: EdgeInsets.only(
+                                                        right: 2,
+                                                      ),
+                                                      child: Icon(
+                                                        Icons
+                                                            .play_arrow_rounded,
+                                                        size: 13,
+                                                        color: Colors.white,
+                                                      ),
+                                                    )
+                                                  : Container(
+                                                      width: 4,
+                                                      decoration: BoxDecoration(
+                                                        color: endCapColor,
+                                                        borderRadius:
+                                                            const BorderRadius.horizontal(
+                                                              right:
+                                                                  Radius.circular(
+                                                                    4,
+                                                                  ),
+                                                            ),
+                                                      ),
+                                                    ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+
+                                  // Live "Now" vertical indicator line
+                                  if (widget.isToday &&
+                                      nowLocal.isAfter(axisStart) &&
+                                      nowLocal.isBefore(axisEnd))
+                                    Positioned(
+                                      left:
+                                          (nowLocal
+                                                      .difference(axisStart)
+                                                      .inSeconds /
+                                                  totalAxisSeconds)
+                                              .clamp(0.0, 1.0) *
+                                          minTrackW,
+                                      top: -2,
+                                      bottom: -2,
+                                      child: Container(
+                                        width: 1.5,
+                                        color: AppTheme.catGreen,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+
+                            // Right: Total union duration for this teacher today
+                            SizedBox(
+                              width: totalColW,
+                              child: Text(
+                                _formatCompactDuration(totalSec),
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontSize: isMobile ? 11.5 : 12,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'monospace',
+                                  color: isOnline
+                                      ? AppTheme.catGreen
+                                      : (totalSec > 0
+                                            ? (widget.isDark
+                                                  ? Colors.white
+                                                  : const Color(0xFF0F172A))
+                                            : (widget.isDark
+                                                  ? Colors.white38
+                                                  : const Color(0xFF94A3B8))),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+            Divider(
+              height: 1,
+              color: widget.isDark ? Colors.white10 : const Color(0xFFE2E8F0),
             ),
             const SizedBox(height: 12),
-            _skeletonBar(width: double.infinity, height: 1, isDark: isDark),
-            const SizedBox(height: 12),
+
+            // Section 2: 1-Hour Split Bar Mini-Chart (Minutes per Hour, Max 60m)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _skeletonBar(width: 90, height: 11, isDark: isDark),
-                _skeletonBar(width: 50, height: 11, isDark: isDark),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      LucideIcons.chartBar,
+                      size: 13.5,
+                      color: widget.isDark
+                          ? Colors.white70
+                          : const Color(0xFF475569),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Hourly Usage Breakdown (Minutes per Hour · Max 60m)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: widget.isDark
+                            ? Colors.white
+                            : const Color(0xFF1E293B),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_hoveredHour != null)
+                  Text(
+                    '${_formatHourTick(_hoveredHour!)} – ${_formatHourTick(_hoveredHour! + 1)}',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.catBlue,
+                    ),
+                  ),
               ],
+            ),
+            const SizedBox(height: 10),
+
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: math.max(maxW, hourCount * 54.0 + 42.0),
+                height: 126,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Y-Axis Labels (60m, 30m, 0m)
+                    SizedBox(
+                      width: 34,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 22, top: 4),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '60m',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: widget.isDark
+                                    ? Colors.white38
+                                    : const Color(0xFF94A3B8),
+                              ),
+                            ),
+                            Text(
+                              '30m',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: widget.isDark
+                                    ? Colors.white38
+                                    : const Color(0xFF94A3B8),
+                              ),
+                            ),
+                            Text(
+                              '0m',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: widget.isDark
+                                    ? Colors.white38
+                                    : const Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // 1-Hour Buckets
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: List.generate(hourCount, (idx) {
+                          final h = startHour + idx;
+                          final slotStart = dayStart.add(Duration(hours: h));
+                          final slotEnd = dayStart.add(Duration(hours: h + 1));
+                          final isHoveredSlot = _hoveredHour == h;
+
+                          // Compute exact minutes per teacher in [slotStart, slotEnd)
+                          final slotTeacherMinutes =
+                              <({Color color, String name, double minutes})>[];
+                          for (final teacher in widget.teachers) {
+                            final merged =
+                                teacherMergedIntervals[teacher.id] ?? const [];
+                            int secInHour = 0;
+                            for (final r in merged) {
+                              final oStart = r.start.isAfter(slotStart)
+                                  ? r.start
+                                  : slotStart;
+                              final oEnd = r.end.isBefore(slotEnd)
+                                  ? r.end
+                                  : slotEnd;
+                              if (oEnd.isAfter(oStart)) {
+                                secInHour += oEnd.difference(oStart).inSeconds;
+                              }
+                            }
+                            final mins = (secInHour / 60.0).clamp(0.0, 60.0);
+                            slotTeacherMinutes.add((
+                              color: teacher.color,
+                              name: teacher.name,
+                              minutes: mins,
+                            ));
+                          }
+
+                          final tooltipLines = slotTeacherMinutes
+                              .where((e) => e.minutes >= 0.1)
+                              .map(
+                                (e) =>
+                                    '${e.name}: ${e.minutes >= 1 ? '${e.minutes.round()}m' : '<1m'}',
+                              )
+                              .join('\n');
+
+                          return Expanded(
+                            child: MouseRegion(
+                              onEnter: (_) => setState(() => _hoveredHour = h),
+                              onExit: (_) =>
+                                  setState(() => _hoveredHour = null),
+                              child: Tooltip(
+                                message: tooltipLines.isEmpty
+                                    ? '${_formatHourTick(h)}: 0m'
+                                    : '${_formatHourTick(h)} – ${_formatHourTick(h + 1)}\n$tooltipLines',
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 2,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isHoveredSlot
+                                        ? (widget.isDark
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.04,
+                                                )
+                                              : const Color(0xFFF1F5F9))
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Expanded(
+                                        child: Stack(
+                                          alignment: Alignment.bottomCenter,
+                                          children: [
+                                            // Horizontal reference lines (60m top, 30m middle, 0m bottom)
+                                            Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Container(
+                                                  height: 1,
+                                                  color: widget.isDark
+                                                      ? Colors.white10
+                                                      : const Color(0xFFE2E8F0),
+                                                ),
+                                                Container(
+                                                  height: 1,
+                                                  color: widget.isDark
+                                                      ? Colors.white10
+                                                      : const Color(0xFFE2E8F0),
+                                                ),
+                                                Container(
+                                                  height: 1,
+                                                  color: widget.isDark
+                                                      ? Colors.white12
+                                                      : const Color(0xFFCBD5E1),
+                                                ),
+                                              ],
+                                            ),
+                                            // Teacher bars for this hour
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 2,
+                                                  ),
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.end,
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: slotTeacherMinutes.map((
+                                                  entry,
+                                                ) {
+                                                  final ratio =
+                                                      (entry.minutes / 60.0)
+                                                          .clamp(0.0, 1.0);
+                                                  return Expanded(
+                                                    child: Padding(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 1,
+                                                          ),
+                                                      child: FractionallySizedBox(
+                                                        heightFactor:
+                                                            entry.minutes > 0
+                                                            ? math.max(
+                                                                0.06,
+                                                                ratio,
+                                                              )
+                                                            : 0.0,
+                                                        alignment: Alignment
+                                                            .bottomCenter,
+                                                        child: Container(
+                                                          decoration: BoxDecoration(
+                                                            color: entry.color,
+                                                            borderRadius:
+                                                                const BorderRadius.vertical(
+                                                                  top:
+                                                                      Radius.circular(
+                                                                        3,
+                                                                      ),
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                }).toList(),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        _formatHourTick(h),
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: isHoveredSlot
+                                              ? FontWeight.bold
+                                              : FontWeight.w500,
+                                          color: isHoveredSlot
+                                              ? AppTheme.catBlue
+                                              : (widget.isDark
+                                                    ? Colors.white54
+                                                    : const Color(0xFF64748B)),
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildLegendIndicator({
+    required Color color,
+    required String label,
+    required bool isDark,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
         ),
-      ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w500,
+            color: isDark ? Colors.white60 : const Color(0xFF64748B),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2858,895 +3953,878 @@ class _TeacherInfo {
   });
 }
 
-class _ChartPoint {
-  final String label;
-  final double value;
-  final int totalSeconds;
-  final String? teacherId;
-  final String? teacherName;
-  final DateTime? date;
+// =========================================================================
+// Faculty Engagement Bar Chart & Leaderboard for Week, Month, and All Records
+// =========================================================================
 
-  const _ChartPoint({
-    required this.label,
-    required this.value,
-    this.totalSeconds = 0,
-    this.teacherId,
-    this.teacherName,
-    this.date,
-  });
-}
-
-class _TeacherSeries {
-  final String teacherId;
-  final String teacherName;
-  final Color color;
-  final List<_ChartPoint> points;
-
-  const _TeacherSeries({
-    required this.teacherId,
-    required this.teacherName,
-    required this.color,
-    required this.points,
-  });
-}
-
-class _TeacherActivityCurveChart extends StatefulWidget {
-  final List<_ChartPoint> points;
+class _TeacherEngagementBarChart extends StatefulWidget {
+  final String activeFilter; // 'week', 'month', 'all'
+  final List<_TeacherInfo> teachers;
+  final List<UserSessionLog> logs;
+  final DateTime currentNow;
   final bool isDark;
-  final Color lineColor;
-  final List<_TeacherSeries> seriesList;
-  final String activeFilter;
   final String? selectedTeacherId;
-  final DateTime? selectedCustomDate;
   final ValueChanged<String?>? onTeacherSelected;
 
-  const _TeacherActivityCurveChart({
+  const _TeacherEngagementBarChart({
     super.key,
+    required this.activeFilter,
+    required this.teachers,
+    required this.logs,
+    required this.currentNow,
     required this.isDark,
-    this.seriesList = const [],
-    this.activeFilter = 'today',
     this.selectedTeacherId,
-    this.selectedCustomDate,
     this.onTeacherSelected,
-  }) : points = const [],
-       lineColor = AppTheme.catGreen;
+  });
 
   @override
-  State<_TeacherActivityCurveChart> createState() =>
-      _TeacherActivityCurveChartState();
+  State<_TeacherEngagementBarChart> createState() =>
+      _TeacherEngagementBarChartState();
 }
 
-class _TeacherActivityCurveChartState extends State<_TeacherActivityCurveChart>
-    with TickerProviderStateMixin {
-  int? _hoveredPointIndex;
-  int? _hoveredSeriesIndex;
-  late final AnimationController _hoverAnimController;
-  late final Animation<double> _scaleAnimation;
-  late final AnimationController _entranceAnimController;
-  late final Animation<double> _entranceAnimation;
+class _TeacherEngagementBarChartState
+    extends State<_TeacherEngagementBarChart> {
+  int? _hoveredGroupIndex;
+  String? _hoveredTeacherId;
 
-  @override
-  void initState() {
-    super.initState();
-    _entranceAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
-    _entranceAnimation = CurvedAnimation(
-      parent: _entranceAnimController,
-      curve: Curves.easeOutCubic,
-    );
-    _entranceAnimController.forward();
-
-    _hoverAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 240),
-    );
-    _scaleAnimation = CurvedAnimation(
-      parent: _hoverAnimController,
-      curve: Curves.easeOutBack,
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant _TeacherActivityCurveChart oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Trigger entrance animation only when user changes filter, custom date, or selected teacher
-    final filterChanged = oldWidget.activeFilter != widget.activeFilter ||
-        oldWidget.selectedTeacherId != widget.selectedTeacherId ||
-        oldWidget.selectedCustomDate != widget.selectedCustomDate;
-
-    // Or if transition was from completely empty data to populated data
-    final wasEmpty = oldWidget.seriesList.isEmpty ||
-        (oldWidget.seriesList.isNotEmpty &&
-            oldWidget.seriesList.first.points.isEmpty);
-    final isNowNotEmpty = widget.seriesList.isNotEmpty &&
-        widget.seriesList.first.points.isNotEmpty;
-
-    if (filterChanged || (wasEmpty && isNowNotEmpty)) {
-      _hoveredPointIndex = null;
-      _hoveredSeriesIndex = null;
-      _entranceAnimController.forward(from: 0.0);
+  String _formatDuration(int seconds) {
+    if (seconds <= 0) return '0m';
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    if (hours > 0) {
+      return minutes > 0 ? '${hours}h ${minutes}m' : '${hours}h';
     }
+    return '${minutes}m';
   }
 
-  @override
-  void dispose() {
-    _entranceAnimController.dispose();
-    _hoverAnimController.dispose();
-    super.dispose();
+  String _formatExactDuration(int seconds) {
+    if (seconds <= 0) return '0 minutes';
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    final secs = seconds % 60;
+    if (hours > 0) {
+      return minutes > 0 ? '$hours hrs $minutes mins' : '$hours hrs';
+    }
+    if (minutes > 0) {
+      return '$minutes mins';
+    }
+    return '$secs secs';
   }
 
   @override
   Widget build(BuildContext context) {
-    final effectiveSeries = widget.seriesList.isNotEmpty
-        ? widget.seriesList
-        : (widget.points.isNotEmpty
-              ? [
-                  _TeacherSeries(
-                    teacherId: 'default',
-                    teacherName: 'Faculty',
-                    color: widget.lineColor,
-                    points: widget.points,
-                  ),
-                ]
-              : <_TeacherSeries>[]);
+    final isDark = widget.isDark;
 
-    if (effectiveSeries.isEmpty || effectiveSeries.first.points.isEmpty) {
-      return Container(
-        height: 230,
-        alignment: Alignment.center,
-        child: Text(
-          'No activity recorded for this period',
-          style: TextStyle(
-            fontSize: 12.5,
-            color: widget.isDark ? Colors.white38 : const Color(0xFF94A3B8),
+    if (widget.activeFilter == 'all') {
+      return _buildAllRecordsLeaderboard(context, isDark);
+    } else if (widget.activeFilter == 'month') {
+      return _buildMonthGroupedChart(context, isDark);
+    } else {
+      return _buildWeekGroupedChart(context, isDark);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Week View: Mon - Sun Grouped Columns
+  // ---------------------------------------------------------------------------
+  Widget _buildWeekGroupedChart(BuildContext context, bool isDark) {
+    final now = widget.currentNow;
+    final monday = DateTime(now.year, now.month, now.day).subtract(
+      Duration(days: now.weekday - 1),
+    );
+    final days = List.generate(7, (i) => monday.add(Duration(days: i)));
+    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    final activeTeachers = widget.selectedTeacherId != null
+        ? widget.teachers.where((t) => t.id == widget.selectedTeacherId).toList()
+        : widget.teachers;
+
+    // Build data per day
+    final dayGroups = <_EngagementBarGroup>[];
+    int maxGroupTotalSeconds = 0;
+
+    for (int i = 0; i < 7; i++) {
+      final day = days[i];
+      final teacherBars = <_TeacherBarValue>[];
+      int groupTotal = 0;
+
+      for (final teacher in activeTeachers) {
+        final tLogs = widget.logs.where((l) => l.userId == teacher.id).toList();
+        final sec = _AdminActivityAnalyticsTabState._calculateTeacherDaySeconds(
+          tLogs,
+          day,
+          now,
+        );
+        teacherBars.add(
+          _TeacherBarValue(
+            teacherId: teacher.id,
+            teacherName: teacher.name,
+            color: teacher.color,
+            seconds: sec,
           ),
+        );
+        groupTotal += sec;
+      }
+
+      if (groupTotal > maxGroupTotalSeconds) {
+        maxGroupTotalSeconds = groupTotal;
+      }
+
+      final isToday = day.year == now.year &&
+          day.month == now.month &&
+          day.day == now.day;
+
+      dayGroups.add(
+        _EngagementBarGroup(
+          label: dayNames[i],
+          subLabel: '${day.month}/${day.day}',
+          isHighlighted: isToday,
+          totalSeconds: groupTotal,
+          bars: teacherBars,
         ),
       );
     }
 
-    final pointsCount = effectiveSeries.first.points.length;
+    if (maxGroupTotalSeconds == 0) {
+      return _buildEmptyState(
+        isDark,
+        'No usage recorded this week',
+        'Faculty active sessions from Monday to Sunday will be displayed here.',
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              const leftPadding = 42.0;
-              const rightPadding = 18.0;
-              const topPadding = 20.0;
-              const bottomPadding = 26.0;
-
-              return MouseRegion(
-                onHover: (event) {
-                  final x = event.localPosition.dx;
-                  final y = event.localPosition.dy;
-                  final width = constraints.maxWidth;
-                  final height = constraints.maxHeight;
-
-                  // If mouse moves outside active plot region, clear hover immediately
-                  if (x < leftPadding - 16 ||
-                      x > width - rightPadding + 16 ||
-                      y < topPadding - 12 ||
-                      y > height - bottomPadding + 14) {
-                    if (_hoveredPointIndex != null) {
-                      setState(() {
-                        _hoveredPointIndex = null;
-                        _hoveredSeriesIndex = null;
-                      });
-                      _hoverAnimController.reverse();
-                    }
-                    return;
-                  }
-
-                  final innerWidth = width - leftPadding - rightPadding;
-                  final dxPerPoint = pointsCount > 1
-                      ? innerWidth / (pointsCount - 1)
-                      : innerWidth;
-
-                  final nearestPointIndex = ((x - leftPadding) / dxPerPoint)
-                      .round()
-                      .clamp(0, pointsCount - 1);
-
-                  // If multiple series, determine which series line is closest in Y
-                  int nearestSeriesIndex = 0;
-                  if (effectiveSeries.length > 1) {
-                    double minDiff = double.infinity;
-                    final chartHeight =
-                        constraints.maxHeight - topPadding - bottomPadding;
-                    double peakVal = 0.0;
-                    for (final s in effectiveSeries) {
-                      for (final p in s.points) {
-                        if (p.value > peakVal) peakVal = p.value;
-                      }
-                    }
-                    final double ceiling;
-                    if (peakVal <= 2.5) {
-                      ceiling = 3.0;
-                    } else if (peakVal <= 5.0) {
-                      ceiling = 6.0;
-                    } else if (peakVal <= 7.5) {
-                      ceiling = 9.0;
-                    } else if (peakVal <= 10.0) {
-                      ceiling = 12.0;
-                    } else if (peakVal <= 15.0) {
-                      ceiling = 18.0;
-                    } else {
-                      ceiling = 24.0;
-                    }
-
-                    for (int sIdx = 0; sIdx < effectiveSeries.length; sIdx++) {
-                      final p = effectiveSeries[sIdx].points[nearestPointIndex];
-                      final normalizedY = (p.value / ceiling).clamp(0.0, 1.0);
-                      final ptY = topPadding + chartHeight * (1.0 - normalizedY);
-                      final diff = (y - ptY).abs();
-                      if (diff < minDiff) {
-                        minDiff = diff;
-                        nearestSeriesIndex = sIdx;
-                      }
-                    }
-                  }
-
-                  if (_hoveredPointIndex != nearestPointIndex ||
-                      _hoveredSeriesIndex != nearestSeriesIndex) {
-                    setState(() {
-                      _hoveredPointIndex = nearestPointIndex;
-                      _hoveredSeriesIndex = nearestSeriesIndex;
-                    });
-                    _hoverAnimController.forward(from: 0.0);
-                  }
-                },
-                onExit: (_) {
-                  setState(() {
-                    _hoveredPointIndex = null;
-                    _hoveredSeriesIndex = null;
-                  });
-                  _hoverAnimController.reverse();
-                },
-                child: AnimatedBuilder(
-                  animation: Listenable.merge([
-                    _entranceAnimation,
-                    _scaleAnimation,
-                  ]),
-                  builder: (context, _) {
-                    return CustomPaint(
-                      size: Size.infinite,
-                      painter: _CurveChartPainter(
-                        seriesList: effectiveSeries,
-                        isDark: widget.isDark,
-                        lineColor: widget.lineColor,
-                        activeFilter: widget.activeFilter,
-                        hoveredPointIndex: _hoveredPointIndex,
-                        hoveredSeriesIndex: _hoveredSeriesIndex,
-                        hoverAnimValue: _scaleAnimation.value,
-                        entranceProgress: _entranceAnimation.value,
+        _buildLegendRow(isDark),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final double chartWidth = math.max(constraints.maxWidth, 560.0);
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: SizedBox(
+                width: chartWidth,
+                height: 290,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: List.generate(dayGroups.length, (index) {
+                    final group = dayGroups[index];
+                    return Expanded(
+                      child: _buildBarGroupColumn(
+                        group: group,
+                        groupIndex: index,
+                        maxTotalSeconds: maxGroupTotalSeconds,
+                        isDark: isDark,
                       ),
                     );
-                  },
+                  }),
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
-        // If there are 2 or more series, render interactive legend pills below
-        if (effectiveSeries.length > 1)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 6,
-              children: effectiveSeries.map((series) {
-                return InkWell(
-                  onTap: () => widget.onTeacherSelected?.call(series.teacherId),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: series.color.withValues(
-                        alpha: widget.isDark ? 0.14 : 0.08,
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Month View: 4-5 Weekly Buckets
+  // ---------------------------------------------------------------------------
+  Widget _buildMonthGroupedChart(BuildContext context, bool isDark) {
+    final now = widget.currentNow;
+    final totalDaysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    final activeTeachers = widget.selectedTeacherId != null
+        ? widget.teachers.where((t) => t.id == widget.selectedTeacherId).toList()
+        : widget.teachers;
+
+    // Define 4-5 bucket ranges
+    final buckets = <_MonthBucket>[
+      _MonthBucket(label: 'Week 1', rangeStr: 'Days 1–7', startDay: 1, endDay: 7),
+      _MonthBucket(label: 'Week 2', rangeStr: 'Days 8–14', startDay: 8, endDay: 14),
+      _MonthBucket(label: 'Week 3', rangeStr: 'Days 15–21', startDay: 15, endDay: 21),
+      _MonthBucket(label: 'Week 4', rangeStr: 'Days 22–28', startDay: 22, endDay: 28),
+    ];
+    if (totalDaysInMonth > 28) {
+      buckets.add(
+        _MonthBucket(
+          label: 'Week 5',
+          rangeStr: 'Days 29–$totalDaysInMonth',
+          startDay: 29,
+          endDay: totalDaysInMonth,
+        ),
+      );
+    }
+
+    final groups = <_EngagementBarGroup>[];
+    int maxGroupTotalSeconds = 0;
+
+    for (int b = 0; b < buckets.length; b++) {
+      final bucket = buckets[b];
+      final teacherBars = <_TeacherBarValue>[];
+      int groupTotal = 0;
+
+      for (final teacher in activeTeachers) {
+        final tLogs = widget.logs.where((l) => l.userId == teacher.id).toList();
+        int teacherBucketSeconds = 0;
+
+        for (int dayNum = bucket.startDay; dayNum <= bucket.endDay; dayNum++) {
+          final targetDate = DateTime(now.year, now.month, dayNum);
+          teacherBucketSeconds +=
+              _AdminActivityAnalyticsTabState._calculateTeacherDaySeconds(
+                tLogs,
+                targetDate,
+                now,
+              );
+        }
+
+        teacherBars.add(
+          _TeacherBarValue(
+            teacherId: teacher.id,
+            teacherName: teacher.name,
+            color: teacher.color,
+            seconds: teacherBucketSeconds,
+          ),
+        );
+        groupTotal += teacherBucketSeconds;
+      }
+
+      if (groupTotal > maxGroupTotalSeconds) {
+        maxGroupTotalSeconds = groupTotal;
+      }
+
+      final isCurrentBucket = now.day >= bucket.startDay && now.day <= bucket.endDay;
+
+      groups.add(
+        _EngagementBarGroup(
+          label: bucket.label,
+          subLabel: bucket.rangeStr,
+          isHighlighted: isCurrentBucket,
+          totalSeconds: groupTotal,
+          bars: teacherBars,
+        ),
+      );
+    }
+
+    if (maxGroupTotalSeconds == 0) {
+      return _buildEmptyState(
+        isDark,
+        'No usage recorded this month',
+        'Weekly teacher telemetry for ${_AdminActivityAnalyticsTabState._shortMonth(now.month)} ${now.year} will appear here.',
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLegendRow(isDark),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final double chartWidth = math.max(constraints.maxWidth, 500.0);
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: SizedBox(
+                width: chartWidth,
+                height: 290,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: List.generate(groups.length, (index) {
+                    final group = groups[index];
+                    return Expanded(
+                      child: _buildBarGroupColumn(
+                        group: group,
+                        groupIndex: index,
+                        maxTotalSeconds: maxGroupTotalSeconds,
+                        isDark: isDark,
                       ),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: series.color.withValues(alpha: 0.4),
+                    );
+                  }),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Bar Group Column Widget (for Week & Month)
+  // ---------------------------------------------------------------------------
+  Widget _buildBarGroupColumn({
+    required _EngagementBarGroup group,
+    required int groupIndex,
+    required int maxTotalSeconds,
+    required bool isDark,
+  }) {
+    final isHovered = _hoveredGroupIndex == groupIndex;
+    const double maxBarHeight = 180.0;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hoveredGroupIndex = groupIndex),
+      onExit: (_) => setState(() => _hoveredGroupIndex = null),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            // Top Badge: Total Duration
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: isHovered
+                    ? (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                _formatDuration(group.totalSeconds),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: group.totalSeconds > 0 ? FontWeight.w700 : FontWeight.w500,
+                  color: group.totalSeconds > 0
+                      ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                      : (isDark ? Colors.white30 : const Color(0xFF94A3B8)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Vertical Bar Container
+            Container(
+              height: maxBarHeight,
+              alignment: Alignment.bottomCenter,
+              child: group.totalSeconds == 0
+                  ? Container(
+                      width: 28,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: group.bars.map((bar) {
+                        final ratio = maxTotalSeconds > 0
+                            ? (bar.seconds / maxTotalSeconds).clamp(0.0, 1.0)
+                            : 0.0;
+                        final barH = math.max(ratio * maxBarHeight, 6.0);
+                        final isTeacherHovered = _hoveredTeacherId == bar.teacherId;
+
+                        return Tooltip(
+                          message:
+                              '${bar.teacherName}\n${_formatExactDuration(bar.seconds)}',
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: series.color,
-                            shape: BoxShape.circle,
+                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: bar.color.withValues(alpha: 0.6),
+                              width: 1.5,
+                            ),
                           ),
+                          child: InkWell(
+                            onTap: () {
+                              widget.onTeacherSelected?.call(bar.teacherId);
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            child: MouseRegion(
+                              onEnter: (_) =>
+                                  setState(() => _hoveredTeacherId = bar.teacherId),
+                              onExit: (_) =>
+                                  setState(() => _hoveredTeacherId = null),
+                              child: Container(
+                                width: group.bars.length == 1 ? 32 : 16,
+                                height: barH,
+                                margin: const EdgeInsets.symmetric(horizontal: 2),
+                                decoration: BoxDecoration(
+                                  color: bar.seconds > 0
+                                      ? (isTeacherHovered
+                                          ? bar.color
+                                          : bar.color.withValues(alpha: 0.85))
+                                      : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(5),
+                                  ),
+                                  boxShadow: isTeacherHovered && bar.seconds > 0
+                                      ? [
+                                          BoxShadow(
+                                            color: bar.color.withValues(alpha: 0.4),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, -2),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+            ),
+            const SizedBox(height: 10),
+
+            // Base Divider Line
+            Container(
+              height: 2,
+              decoration: BoxDecoration(
+                color: group.isHighlighted
+                    ? (isDark ? AppTheme.catGreen : const Color(0xFF16A34A))
+                    : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Column Labels
+            Text(
+              group.label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: group.isHighlighted ? FontWeight.w800 : FontWeight.w600,
+                color: group.isHighlighted
+                    ? (isDark ? AppTheme.catGreen : const Color(0xFF16A34A))
+                    : (isDark ? Colors.white70 : const Color(0xFF475569)),
+              ),
+            ),
+            Text(
+              group.subLabel,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // All Records View: Faculty Leaderboard & Cumulative Progress
+  // ---------------------------------------------------------------------------
+  Widget _buildAllRecordsLeaderboard(BuildContext context, bool isDark) {
+    final now = widget.currentNow;
+    final List<_TeacherLeaderboardEntry> entries = [];
+
+    int highestTotalSeconds = 0;
+
+    for (final teacher in widget.teachers) {
+      final tLogs = widget.logs.where((l) => l.userId == teacher.id).toList();
+      final totalSec = _AdminActivityAnalyticsTabState._calculateCappedTotalSeconds(
+        tLogs,
+        now,
+      );
+      if (totalSec > highestTotalSeconds) {
+        highestTotalSeconds = totalSec;
+      }
+      entries.add(
+        _TeacherLeaderboardEntry(
+          teacher: teacher,
+          totalSeconds: totalSec,
+          sessionCount: tLogs.length,
+        ),
+      );
+    }
+
+    // Sort descending by usage
+    entries.sort((a, b) => b.totalSeconds.compareTo(a.totalSeconds));
+
+    if (highestTotalSeconds == 0) {
+      return _buildEmptyState(
+        isDark,
+        'No historical usage records found',
+        'Teacher session activity will accumulate here over time.',
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLegendRow(isDark),
+        const SizedBox(height: 18),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isMultiCol = constraints.maxWidth >= 720;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: entries.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: isMultiCol ? 2 : 1,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+                mainAxisExtent: 104,
+              ),
+              itemBuilder: (context, index) {
+                final entry = entries[index];
+                final rank = index + 1;
+                final isSelected = widget.selectedTeacherId == entry.teacher.id;
+                final progressRatio = highestTotalSeconds > 0
+                    ? (entry.totalSeconds / highestTotalSeconds).clamp(0.0, 1.0)
+                    : 0.0;
+
+                return InkWell(
+                  onTap: () {
+                    widget.onTeacherSelected?.call(entry.teacher.id);
+                  },
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? entry.teacher.color.withValues(alpha: isDark ? 0.2 : 0.1)
+                          : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isSelected
+                            ? entry.teacher.color
+                            : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          series.teacherName,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.bold,
-                            color: series.color,
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            // Rank Badge
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                                  width: 1,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '#$rank',
+                                style: TextStyle(
+                                  color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF475569),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+
+                            // Teacher Avatar Initials
+                            Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: entry.teacher.color.withValues(alpha: 0.18),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: entry.teacher.color,
+                                  width: 1.5,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                entry.teacher.name.isNotEmpty
+                                    ? entry.teacher.name[0].toUpperCase()
+                                    : 'T',
+                                style: TextStyle(
+                                  color: entry.teacher.color,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+
+                            // Name & Sessions
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    entry.teacher.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  Text(
+                                    '${entry.sessionCount} total sessions',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+
+                            // Total Time Badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: entry.teacher.color.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    LucideIcons.clock,
+                                    size: 12,
+                                    color: entry.teacher.color,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    _formatDuration(entry.totalSeconds),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: entry.teacher.color,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        // Progress Bar
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: progressRatio,
+                            minHeight: 6,
+                            backgroundColor: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                            valueColor: AlwaysStoppedAnimation<Color>(entry.teacher.color),
                           ),
                         ),
                       ],
                     ),
                   ),
                 );
-              }).toList(),
-            ),
-          ),
+              },
+            );
+          },
+        ),
       ],
     );
   }
-}
 
-class _CurveChartPainter extends CustomPainter {
-  final List<_ChartPoint> points;
-  final bool isDark;
-  final Color lineColor;
-  final int? hoveredIndex;
-  final List<_TeacherSeries> seriesList;
-  final String activeFilter;
-  final int? hoveredPointIndex;
-  final int? hoveredSeriesIndex;
-  final double hoverAnimValue;
-  final double entranceProgress;
-
-  _CurveChartPainter({
-    required this.isDark,
-    this.lineColor = AppTheme.catGreen,
-    this.seriesList = const [],
-    this.activeFilter = 'today',
-    this.hoveredPointIndex,
-    this.hoveredSeriesIndex,
-    this.hoverAnimValue = 0.0,
-    this.entranceProgress = 1.0,
-  }) : hoveredIndex = null,
-       points = const [];
-
-  /// Generates a smooth natural curved path using Monotone Cubic Splines (Fritsch-Carlson)
-  /// to eliminate straight-line segments while preventing overshoot or dipping below zero.
-  static Path _buildSmoothCurvedPath(List<Offset> points) {
-    final path = Path();
-    if (points.isEmpty) return path;
-    path.moveTo(points.first.dx, points.first.dy);
-    if (points.length == 1) return path;
-
-    if (points.length == 2) {
-      final p0 = points[0];
-      final p1 = points[1];
-      final dx = (p1.dx - p0.dx) / 2;
-      path.cubicTo(p0.dx + dx, p0.dy, p1.dx - dx, p1.dy, p1.dx, p1.dy);
-      return path;
-    }
-
-    final n = points.length;
-    final deltas = List<double>.filled(n - 1, 0.0);
-    final m = List<double>.filled(n, 0.0);
-
-    for (int i = 0; i < n - 1; i++) {
-      final dx = points[i + 1].dx - points[i].dx;
-      deltas[i] = dx.abs() > 1e-6 ? (points[i + 1].dy - points[i].dy) / dx : 0.0;
-    }
-
-    m[0] = deltas[0];
-    m[n - 1] = deltas[n - 2];
-
-    for (int i = 1; i < n - 1; i++) {
-      if (deltas[i - 1] * deltas[i] <= 0) {
-        m[i] = 0;
-      } else {
-        m[i] = (deltas[i - 1] + deltas[i]) / 2;
-      }
-    }
-
-    for (int i = 0; i < n - 1; i++) {
-      if (deltas[i].abs() < 1e-6) {
-        m[i] = 0;
-        m[i + 1] = 0;
-      } else {
-        final a = m[i] / deltas[i];
-        final b = m[i + 1] / deltas[i];
-        final h = a * a + b * b;
-        if (h > 9.0) {
-          final t = 3.0 / math.sqrt(h);
-          m[i] = t * a * deltas[i];
-          m[i + 1] = t * b * deltas[i];
-        }
-      }
-    }
-
-    for (int i = 0; i < n - 1; i++) {
-      final p0 = points[i];
-      final p1 = points[i + 1];
-      final dx = p1.dx - p0.dx;
-      final cp1 = Offset(p0.dx + dx / 3, p0.dy + m[i] * dx / 3);
-      final cp2 = Offset(p1.dx - dx / 3, p1.dy - m[i + 1] * dx / 3);
-      path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p1.dx, p1.dy);
-    }
-
-    return path;
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final effectiveSeries = seriesList.isNotEmpty
-        ? seriesList
-        : (points.isNotEmpty
-              ? [
-                  _TeacherSeries(
-                    teacherId: 'default',
-                    teacherName: 'Faculty',
-                    color: lineColor,
-                    points: points,
-                  ),
-                ]
-              : <_TeacherSeries>[]);
-
-    if (effectiveSeries.isEmpty || effectiveSeries.first.points.isEmpty) return;
-
-    const leftPadding = 42.0;
-    const rightPadding = 18.0;
-    const bottomPadding = 26.0;
-    const topPadding = 20.0;
-    final chartHeight = size.height - bottomPadding - topPadding;
-    final innerWidth = size.width - leftPadding - rightPadding;
-    final baseY = size.height - bottomPadding;
-
-    double peakVal = 0.0;
-    for (final s in effectiveSeries) {
-      for (final p in s.points) {
-        if (p.value > peakVal) peakVal = p.value;
-      }
-    }
-    final double ceiling;
-    if (peakVal <= 2.5) {
-      ceiling = 3.0;
-    } else if (peakVal <= 5.0) {
-      ceiling = 6.0;
-    } else if (peakVal <= 7.5) {
-      ceiling = 9.0;
-    } else if (peakVal <= 10.0) {
-      ceiling = 12.0;
-    } else if (peakVal <= 15.0) {
-      ceiling = 18.0;
-    } else {
-      ceiling = 24.0;
-    }
-
-    // Horizontal grid lines and Y-axis level labels
-    final gridPaint = Paint()
-      ..color = isDark ? Colors.white10 : const Color(0xFFE2E8F0)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    final yAxisStyle = TextStyle(
-      fontSize: 10.5,
-      fontWeight: FontWeight.w600,
-      fontFamily: 'monospace',
-      color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
-    );
-
-    for (int i = 0; i <= 3; i++) {
-      final y = topPadding + (chartHeight / 3.0) * i;
-
-      // Draw grid line across the plot area
-      canvas.drawLine(
-        Offset(leftPadding, y),
-        Offset(size.width - rightPadding, y),
-        gridPaint,
-      );
-
-      // Y-axis scale value label (e.g. 12h, 8h, 4h, 0h)
-      final levelVal = ceiling * (1.0 - (i / 3.0));
-      final levelText = '${levelVal.round()}h';
-      final tpLevel = TextPainter(
-        text: TextSpan(text: levelText, style: yAxisStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tpLevel.paint(
-        canvas,
-        Offset(leftPadding - tpLevel.width - 8, y - tpLevel.height / 2),
-      );
-    }
-
-    final pointsCount = effectiveSeries.first.points.length;
-    final dx = pointsCount > 1 ? innerWidth / (pointsCount - 1) : innerWidth;
-
-    // Collect coordinates for every series with entrance animation applied
-    final allSeriesCoords = <List<Offset>>[];
-
-    for (int sIdx = 0; sIdx < effectiveSeries.length; sIdx++) {
-      final series = effectiveSeries[sIdx];
-      final pointCoords = <Offset>[];
-
-      for (int i = 0; i < pointsCount; i++) {
-        final x = leftPadding + (dx * i);
-        final normalizedY = (series.points[i].value / ceiling).clamp(0.0, 1.0);
-        final targetY = topPadding + chartHeight * (1.0 - normalizedY);
-        // Animate smoothly upward from baseY
-        final animatedY = baseY - (baseY - targetY) * entranceProgress;
-        pointCoords.add(Offset(x, animatedY));
-      }
-      allSeriesCoords.add(pointCoords);
-
-      if (pointCoords.isNotEmpty) {
-        // Natural smooth curved spline
-        final curvePath = _buildSmoothCurvedPath(pointCoords);
-
-        // Fill path under the curve
-        final fillPath = Path.from(curvePath);
-        fillPath.lineTo(pointCoords.last.dx, baseY);
-        fillPath.lineTo(pointCoords.first.dx, baseY);
-        fillPath.close();
-
-        // Gradient fill under curve with glassmorphic transparency
-        final gradientPaint = Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              series.color.withValues(
-                alpha: (isDark ? 0.28 : 0.16) * entranceProgress,
+  // ---------------------------------------------------------------------------
+  // Teacher Legend Row
+  // ---------------------------------------------------------------------------
+  Widget _buildLegendRow(bool isDark) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (widget.selectedTeacherId != null)
+          InkWell(
+            onTap: () => widget.onTeacherSelected?.call(null),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(8),
               ),
-              series.color.withValues(alpha: 0.0),
-            ],
-          ).createShader(
-            Rect.fromLTWH(leftPadding, topPadding, innerWidth, chartHeight),
-          );
-        canvas.drawPath(fillPath, gradientPaint);
-
-        // Curve stroke with smooth round cap & join
-        final strokePaint = Paint()
-          ..color = series.color.withValues(alpha: entranceProgress)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = effectiveSeries.length == 1 ? 3.0 : 2.5
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round;
-        canvas.drawPath(curvePath, strokePaint);
-      }
-    }
-
-    // Draw Points on each curve
-    for (int sIdx = 0; sIdx < effectiveSeries.length; sIdx++) {
-      final series = effectiveSeries[sIdx];
-      final coords = allSeriesCoords[sIdx];
-
-      for (int i = 0; i < coords.length; i++) {
-        final pt = coords[i];
-        final isHovered =
-            (hoveredPointIndex == i) && (hoveredSeriesIndex == sIdx);
-
-        if (isHovered && hoverAnimValue > 0) {
-          // Animated glowing ring on hover
-          final outerGlowRadius = 5.0 + (4.0 * hoverAnimValue);
-          canvas.drawCircle(
-            pt,
-            outerGlowRadius,
-            Paint()
-              ..color = series.color.withValues(alpha: 0.30 * hoverAnimValue),
-          );
-
-          // Center ring
-          canvas.drawCircle(
-            pt,
-            6.5,
-            Paint()..color = isDark ? const Color(0xFF1E293B) : Colors.white,
-          );
-          // Inner dot
-          canvas.drawCircle(pt, 4.5, Paint()..color = series.color);
-        } else {
-          // Normal point
-          canvas.drawCircle(
-            pt,
-            4.5,
-            Paint()..color = isDark ? const Color(0xFF1E293B) : Colors.white,
-          );
-          canvas.drawCircle(
-            pt,
-            3.0,
-            Paint()..color = series.color,
-          );
-        }
-      }
-    }
-
-    // CRITICAL: Details tooltip box appears ONLY when hovering cursor over a point!
-    // NO idle fallback to peak point!
-    final int? targetPointIdx = hoveredPointIndex;
-    final int targetSeriesIdx = hoveredSeriesIndex ?? 0;
-
-    if (targetPointIdx != null &&
-        targetSeriesIdx < effectiveSeries.length &&
-        targetSeriesIdx < allSeriesCoords.length &&
-        targetPointIdx < effectiveSeries[targetSeriesIdx].points.length &&
-        targetPointIdx < allSeriesCoords[targetSeriesIdx].length) {
-      final targetSeries = effectiveSeries[targetSeriesIdx];
-      final targetPoint = targetSeries.points[targetPointIdx];
-      final pt = allSeriesCoords[targetSeriesIdx][targetPointIdx];
-
-      final durationStr =
-          _AdminActivityAnalyticsTabState._formatTooltipDuration(
-            targetPoint.totalSeconds,
-          );
-
-      final teacherName = targetPoint.teacherName ?? targetSeries.teacherName;
-
-      // Text Painters
-      final nameSpan = TextSpan(
-        text: teacherName,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          color: isDark ? Colors.white : const Color(0xFF0F172A),
-        ),
-      );
-      final tpName = TextPainter(
-        text: nameSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
-
-      final timeSpan = TextSpan(
-        text: durationStr,
-        style: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w800,
-          fontFamily: 'monospace',
-          color: targetSeries.color,
-        ),
-      );
-      final tpTime = TextPainter(
-        text: timeSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
-
-      // Show the date label if available
-      TextPainter? tpDate;
-      String? dateText;
-      if (targetPoint.date != null) {
-        final d = targetPoint.date!;
-        dateText =
-            '${_AdminActivityAnalyticsTabState._shortWeekday(d.weekday)}, ${_AdminActivityAnalyticsTabState._shortMonth(d.month)} ${d.day}';
-      } else if (activeFilter == 'all') {
-        dateText = targetPoint.label;
-      }
-      if (dateText != null) {
-        tpDate = TextPainter(
-          text: TextSpan(
-            text: dateText,
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    LucideIcons.x,
+                    size: 12,
+                    color: isDark ? Colors.white70 : const Color(0xFF475569),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Clear Filter',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : const Color(0xFF475569),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-      }
-
-      double maxContentWidth = math.max(tpName.width, tpTime.width);
-      if (tpDate != null && tpDate.width > maxContentWidth) {
-        maxContentWidth = tpDate.width;
-      }
-
-      final badgeWidth = maxContentWidth + 24;
-      final badgeHeight =
-          tpName.height +
-          tpTime.height +
-          (tpDate != null ? tpDate.height + 4 : 0) +
-          16;
-
-      // Check whether tooltip fits comfortably above the point
-      final fitsAbove = (pt.dy - badgeHeight - 16) >= 0;
-      final badgeCenterY = fitsAbove
-          ? pt.dy - (badgeHeight / 2) - 12
-          : pt.dy + (badgeHeight / 2) + 12;
-
-      final badgeCenterX = pt.dx.clamp(
-        badgeWidth / 2 + 6,
-        size.width - badgeWidth / 2 - 6,
-      );
-
-      canvas.save();
-      canvas.translate(badgeCenterX, badgeCenterY);
-
-      // Smooth scale spring animation on hover
-      final scale = 0.85 + (0.15 * hoverAnimValue.clamp(0.0, 1.0));
-      canvas.scale(scale, scale);
-
-      final badgeRect = RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset.zero,
-          width: badgeWidth,
-          height: badgeHeight,
-        ),
-        const Radius.circular(10),
-      );
-
-      // Glassmorphism soft shadow
-      canvas.drawRRect(
-        badgeRect.shift(const Offset(0, 4)),
-        Paint()
-          ..color = Colors.black.withValues(alpha: isDark ? 0.45 : 0.12)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-      );
-
-      // Glowing halo matching teacher color
-      canvas.drawRRect(
-        badgeRect,
-        Paint()
-          ..color = targetSeries.color.withValues(
-            alpha: isDark ? 0.22 : 0.14,
-          )
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-      );
-
-      // Frosted glass background
-      canvas.drawRRect(
-        badgeRect,
-        Paint()
-          ..color = isDark
-              ? const Color(0xFF1E293B).withValues(alpha: 0.92)
-              : Colors.white.withValues(alpha: 0.95),
-      );
-
-      // Glowing border with teacher color
-      canvas.drawRRect(
-        badgeRect,
-        Paint()
-          ..color = targetSeries.color.withValues(alpha: 0.55)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2,
-      );
-
-      // Caret pointing towards circle dot
-      final caretPath = Path();
-      final caretX = (pt.dx - badgeCenterX).clamp(
-        -badgeWidth / 2 + 10,
-        badgeWidth / 2 - 10,
-      );
-      if (fitsAbove) {
-        caretPath.moveTo(caretX - 5, badgeHeight / 2);
-        caretPath.lineTo(caretX + 5, badgeHeight / 2);
-        caretPath.lineTo(caretX, badgeHeight / 2 + 5);
-      } else {
-        caretPath.moveTo(caretX - 5, -badgeHeight / 2);
-        caretPath.lineTo(caretX + 5, -badgeHeight / 2);
-        caretPath.lineTo(caretX, -badgeHeight / 2 - 5);
-      }
-      caretPath.close();
-
-      canvas.drawPath(
-        caretPath,
-        Paint()
-          ..color = isDark
-              ? const Color(0xFF1E293B).withValues(alpha: 0.92)
-              : Colors.white.withValues(alpha: 0.95),
-      );
-      canvas.drawPath(
-        caretPath,
-        Paint()
-          ..color = targetSeries.color.withValues(alpha: 0.55)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2,
-      );
-
-      // Paint texts inside badge
-      double currY = -badgeHeight / 2 + 7;
-      tpName.paint(canvas, Offset(-tpName.width / 2, currY));
-      currY += tpName.height + 2;
-
-      if (tpDate != null) {
-        tpDate.paint(canvas, Offset(-tpDate.width / 2, currY));
-        currY += tpDate.height + 2;
-      }
-
-      tpTime.paint(canvas, Offset(-tpTime.width / 2, currY));
-
-      canvas.restore();
-    }
-
-    // X-Axis Text Labels
-    final textStyle = TextStyle(
-      fontSize: 11,
-      color: isDark ? Colors.white60 : const Color(0xFF64748B),
-      fontWeight: FontWeight.w600,
+        ...widget.teachers.map((t) {
+          final isSelected = widget.selectedTeacherId == t.id;
+          return InkWell(
+            onTap: () => widget.onTeacherSelected?.call(isSelected ? null : t.id),
+            borderRadius: BorderRadius.circular(8),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? t.color.withValues(alpha: isDark ? 0.25 : 0.15)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isSelected
+                      ? t.color
+                      : (isDark ? Colors.white10 : const Color(0xFFCBD5E1)),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: t.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    t.name,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected
+                          ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                          : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
     );
-
-    final firstPoints = effectiveSeries.first.points;
-    final int step = pointsCount > 22
-        ? 4
-        : pointsCount > 13
-            ? 2
-            : 1;
-
-    for (int i = 0; i < firstPoints.length; i++) {
-      final isEdge = (i == 0 || i == firstPoints.length - 1);
-      if (!isEdge && (i % step != 0)) continue;
-
-      final x = leftPadding + (dx * i);
-      final tp = TextPainter(
-        text: TextSpan(text: firstPoints[i].label, style: textStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-
-      final drawX = (x - (tp.width / 2)).clamp(
-        leftPadding - 8,
-        size.width - rightPadding - tp.width + 8,
-      );
-
-      tp.paint(canvas, Offset(drawX, size.height - bottomPadding + 6));
-    }
   }
 
-  @override
-  bool shouldRepaint(covariant _CurveChartPainter oldDelegate) {
-    return oldDelegate.seriesList != seriesList ||
-        oldDelegate.points != points ||
-        oldDelegate.isDark != isDark ||
-        oldDelegate.hoveredPointIndex != hoveredPointIndex ||
-        oldDelegate.hoveredSeriesIndex != hoveredSeriesIndex ||
-        oldDelegate.hoverAnimValue != hoverAnimValue ||
-        oldDelegate.entranceProgress != entranceProgress ||
-        oldDelegate.activeFilter != activeFilter;
+  // ---------------------------------------------------------------------------
+  // Empty State Widget
+  // ---------------------------------------------------------------------------
+  Widget _buildEmptyState(bool isDark, String title, String subtitle) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              LucideIcons.barChart2,
+              size: 26,
+              color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white70 : const Color(0xFF334155),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
-class _ChartGridPlaceholderPainter extends CustomPainter {
-  final bool isDark;
+class _EngagementBarGroup {
+  final String label;
+  final String subLabel;
+  final bool isHighlighted;
+  final int totalSeconds;
+  final List<_TeacherBarValue> bars;
 
-  const _ChartGridPlaceholderPainter({required this.isDark});
+  const _EngagementBarGroup({
+    required this.label,
+    required this.subLabel,
+    required this.isHighlighted,
+    required this.totalSeconds,
+    required this.bars,
+  });
+}
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    const leftPadding = 42.0;
-    const rightPadding = 18.0;
-    const topPadding = 20.0;
-    const bottomPadding = 26.0;
-    final chartHeight = size.height - topPadding - bottomPadding;
+class _TeacherBarValue {
+  final String teacherId;
+  final String teacherName;
+  final Color color;
+  final int seconds;
 
-    final gridPaint = Paint()
-      ..color = isDark ? Colors.white10 : const Color(0xFFE2E8F0)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
+  const _TeacherBarValue({
+    required this.teacherId,
+    required this.teacherName,
+    required this.color,
+    required this.seconds,
+  });
+}
 
-    final yAxisStyle = TextStyle(
-      fontSize: 10.5,
-      fontWeight: FontWeight.w600,
-      fontFamily: 'monospace',
-      color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
-    );
+class _MonthBucket {
+  final String label;
+  final String rangeStr;
+  final int startDay;
+  final int endDay;
 
-    final levels = ['18h', '12h', '6h', '0h'];
-    for (int i = 0; i <= 3; i++) {
-      final y = topPadding + (chartHeight / 3.0) * i;
-      canvas.drawLine(
-        Offset(leftPadding, y),
-        Offset(size.width - rightPadding, y),
-        gridPaint,
-      );
+  const _MonthBucket({
+    required this.label,
+    required this.rangeStr,
+    required this.startDay,
+    required this.endDay,
+  });
+}
 
-      final tpLevel = TextPainter(
-        text: TextSpan(text: levels[i], style: yAxisStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tpLevel.paint(
-        canvas,
-        Offset(leftPadding - tpLevel.width - 8, y - tpLevel.height / 2),
-      );
-    }
-  }
+class _TeacherLeaderboardEntry {
+  final _TeacherInfo teacher;
+  final int totalSeconds;
+  final int sessionCount;
 
-  @override
-  bool shouldRepaint(covariant _ChartGridPlaceholderPainter oldDelegate) =>
-      oldDelegate.isDark != isDark;
+  const _TeacherLeaderboardEntry({
+    required this.teacher,
+    required this.totalSeconds,
+    required this.sessionCount,
+  });
 }
 
 // =========================================================================
@@ -3797,8 +4875,10 @@ class _TeacherActivityDonutCardState extends State<_TeacherActivityDonutCard>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final idleCount =
-        math.max(0, widget.totalTrackedTeachers - widget.activeNowCount);
+    final idleCount = math.max(
+      0,
+      widget.totalTrackedTeachers - widget.activeNowCount,
+    );
     final totalSafe = math.max(1, widget.totalTrackedTeachers);
     final onlinePct = widget.totalTrackedTeachers > 0
         ? ((widget.activeNowCount / widget.totalTrackedTeachers) * 100).round()
@@ -4031,15 +5111,15 @@ class _TeacherActivityDonutCardState extends State<_TeacherActivityDonutCard>
           color: isHovered
               ? color.withValues(alpha: isDark ? 0.16 : 0.08)
               : (isDark
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : const Color(0xFFF8FAFC)),
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : const Color(0xFFF8FAFC)),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isHovered
                 ? color.withValues(alpha: isDark ? 0.6 : 0.45)
                 : (isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : const Color(0xFFE2E8F0)),
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : const Color(0xFFE2E8F0)),
             width: isHovered ? 1.5 : 1.0,
           ),
           boxShadow: isHovered

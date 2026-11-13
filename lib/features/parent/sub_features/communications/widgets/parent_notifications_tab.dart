@@ -157,6 +157,20 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
 
   /// Filter notifications: only show notifications relevant to linked children (+ general announcements)
   List<AppNotificationModel> get _filteredNotifications {
+    final currentUser = AuthRepository.instance.currentUser;
+    if (currentUser != null) {
+      if (currentUser.isArchived ||
+          currentUser.status == AccountStatus.archived ||
+          currentUser.status == AccountStatus.deactivated) {
+        return [];
+      }
+      final isEligible = currentUser.status == AccountStatus.active ||
+          currentUser.status == AccountStatus.pendingFirstLogin;
+      if (!isEligible) {
+        return [];
+      }
+    }
+
     final childNames = _linkedChildren.map((c) => c.fullName.toLowerCase()).toList();
     final childFirstNames = _linkedChildren
         .map((c) => (c.firstName ?? '').toLowerCase())
@@ -176,6 +190,13 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
     }
 
     return _items.where((n) {
+      // Exclude announcements broadcasted before the parent account existed
+      if (currentUser?.createdAt != null && n.type.toLowerCase() == 'announcement') {
+        if (n.timestamp.isBefore(currentUser!.createdAt!)) {
+          return false;
+        }
+      }
+
       final title = n.title.toLowerCase();
       final body = n.message.toLowerCase();
       final fullText = '$title $body';

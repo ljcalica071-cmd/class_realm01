@@ -1047,25 +1047,11 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
             ),
           ],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                totalCount == 0
-                    ? 'Showing 0 of 0 logs'
-                    : 'Showing $startIndex–$endIndex of $totalCount logs',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 360;
+
+            final controls = Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Previous button
@@ -1075,8 +1061,10 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                       : null,
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isNarrow ? 7 : 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(6),
@@ -1096,18 +1084,20 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                               : theme.colorScheme.onSurface
                                   .withValues(alpha: 0.3),
                         ),
-                        const SizedBox(width: 3),
-                        Text(
-                          'Prev',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: _currentPage > 1
-                                ? theme.colorScheme.onSurface
-                                : theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.3),
+                        if (!isNarrow) ...[
+                          const SizedBox(width: 3),
+                          Text(
+                            'Prev',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: _currentPage > 1
+                                  ? theme.colorScheme.onSurface
+                                  : theme.colorScheme.onSurface
+                                      .withValues(alpha: 0.3),
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -1145,8 +1135,10 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                       : null,
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isNarrow ? 7 : 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(6),
@@ -1158,18 +1150,20 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          'Next',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: _currentPage < totalPages
-                                ? theme.colorScheme.onSurface
-                                : theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.3),
+                        if (!isNarrow) ...[
+                          Text(
+                            'Next',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: _currentPage < totalPages
+                                  ? theme.colorScheme.onSurface
+                                  : theme.colorScheme.onSurface
+                                      .withValues(alpha: 0.3),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 3),
+                          const SizedBox(width: 3),
+                        ],
                         Icon(
                           Icons.chevron_right_rounded,
                           size: 16,
@@ -1183,8 +1177,44 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                   ),
                 ),
               ],
-            ),
-          ],
+            );
+
+            final showingText = Text(
+              totalCount == 0
+                  ? 'Showing 0 of 0 logs'
+                  : (isNarrow
+                      ? '$startIndex–$endIndex of $totalCount'
+                      : 'Showing $startIndex–$endIndex of $totalCount logs'),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            );
+
+            if (constraints.maxWidth < 280) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  showingText,
+                  const SizedBox(height: 8),
+                  controls,
+                ],
+              );
+            }
+
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: showingText),
+                const SizedBox(width: 8),
+                controls,
+              ],
+            );
+          },
         ),
       ),
     );

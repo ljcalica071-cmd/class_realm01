@@ -113,14 +113,15 @@ class StudentAssessmentScreen extends StatefulWidget {
             .maybeSingle();
 
         if (rawAssess != null && rawAssess['is_archived'] != true) {
-          final qRows = (rawAssess['assessment_questions'] as List? ?? [])
-              .map((q) => Map<String, dynamic>.from(q as Map))
-              .toList()
-            ..sort(
-              (a, b) => ((a['position'] as num?) ?? 0).compareTo(
-                (b['position'] as num?) ?? 0,
-              ),
-            );
+          final qRows =
+              (rawAssess['assessment_questions'] as List? ?? [])
+                  .map((q) => Map<String, dynamic>.from(q as Map))
+                  .toList()
+                ..sort(
+                  (a, b) => ((a['position'] as num?) ?? 0).compareTo(
+                    (b['position'] as num?) ?? 0,
+                  ),
+                );
           final questions = qRows
               .map((q) => QuestionModel.fromSupabaseMap(q))
               .toList();
@@ -161,10 +162,12 @@ class StudentAssessmentScreen extends StatefulWidget {
 class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     with WidgetsBindingObserver {
   @visibleForTesting
-  void handleTeacherResetForTesting(String reason) => _handleTeacherReset(reason);
+  void handleTeacherResetForTesting(String reason) =>
+      _handleTeacherReset(reason);
 
   @visibleForTesting
-  void handleTeacherForceSubmitForTesting(String reason) => _handleTeacherForceSubmit(reason);
+  void handleTeacherForceSubmitForTesting(String reason) =>
+      _handleTeacherForceSubmit(reason);
 
   int _currentStep =
       0; // 0: Rules Acknowledgment, 1: Answering Questions, 2: Result Summary
@@ -626,15 +629,21 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 final details = rec['details']?.toString() ?? '';
                 if (ev == 'kicked') {
                   _handleDisqualified(
-                    details.isNotEmpty ? details : 'Violation of examination rules.',
+                    details.isNotEmpty
+                        ? details
+                        : 'Violation of examination rules.',
                   );
                 } else if (ev == 'reset' || ev == 'retake_authorized') {
                   _handleTeacherReset(
-                    details.isNotEmpty ? details : 'Instructor authorized fresh attempt.',
+                    details.isNotEmpty
+                        ? details
+                        : 'Instructor authorized fresh attempt.',
                   );
                 } else if (ev == 'force_submit') {
                   _handleTeacherForceSubmit(
-                    details.isNotEmpty ? details : 'Instructor finalized submission.',
+                    details.isNotEmpty
+                        ? details
+                        : 'Instructor finalized submission.',
                   );
                 }
               }
@@ -658,13 +667,9 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                     'This examination session was disqualified by your proctor.',
                   );
                 } else if (st == 'auto_submitted') {
-                  _handleTeacherForceSubmit(
-                    'Instructor finalized submission.',
-                  );
+                  _handleTeacherForceSubmit('Instructor finalized submission.');
                 } else if (st == 'reset') {
-                  _handleTeacherReset(
-                    'Instructor reset attempt.',
-                  );
+                  _handleTeacherReset('Instructor reset attempt.');
                 }
               }
             },
@@ -747,7 +752,11 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.restart_alt_rounded, color: AppTheme.catOrange, size: 22),
+            Icon(
+              Icons.restart_alt_rounded,
+              color: AppTheme.catOrange,
+              size: 22,
+            ),
             SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -771,7 +780,9 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               decoration: BoxDecoration(
                 color: AppTheme.catOrange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.catOrange.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: AppTheme.catOrange.withValues(alpha: 0.3),
+                ),
               ),
               child: const Row(
                 children: [
@@ -798,7 +809,9 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.catOrange,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: () {
               Navigator.of(ctx).pop();
@@ -809,7 +822,10 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 _startTimer();
               }
             },
-            child: const Text('Start Over Fresh', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Start Over Fresh',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -822,16 +838,16 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     _heartbeatTimer?.cancel();
     _offlineRetryTimer?.cancel();
 
-    AppTopToast.info(
-      context,
-      'Session auto-submitted by instructor: $reason',
-    );
+    AppTopToast.info(context, 'Session auto-submitted by instructor: $reason');
 
     _submitAssessment(autoSubmit: true);
   }
 
   @override
   void dispose() {
+    if (_currentStep == 1 && !_isSubmitting) {
+      _saveVault();
+    }
     _timer?.cancel();
     _heartbeatTimer?.cancel();
     _offlineRetryTimer?.cancel();
@@ -847,9 +863,14 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_currentStep == 1 && !_isSubmitting) {
       if (state == AppLifecycleState.paused ||
-          state == AppLifecycleState.inactive) {
+          state == AppLifecycleState.inactive ||
+          state == AppLifecycleState.hidden ||
+          state == AppLifecycleState.detached) {
         _saveVault();
-        _recordViolation('Tab/window focus lost (Backgrounded)');
+        if (state == AppLifecycleState.paused ||
+            state == AppLifecycleState.inactive) {
+          _recordViolation('Tab/window focus lost (Backgrounded)');
+        }
       } else if (state == AppLifecycleState.resumed) {
         _recordViolation('Returned to assessment');
         _checkConnectivityAndSessionStatus();
@@ -1001,216 +1022,249 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     // Persist attempt record, question responses, and submissions to Supabase
     if (_isSupabaseReady) {
       try {
-      final user = AuthRepository.instance.currentUser;
-      final studentId = user?.id ?? student.id;
-      final attemptStatus = autoSubmit ? 'auto_submitted' : 'submitted';
-      final client = SupabaseService().client;
+        final user = AuthRepository.instance.currentUser;
+        final studentId = user?.id ?? student.id;
+        final attemptStatus = autoSubmit ? 'auto_submitted' : 'submitted';
+        final client = SupabaseService().client;
 
-      // Verify assessment still exists in DB (stale-cache guard if teacher deleted it)
-      final existingAssess = await client
-          .from('digital_assessments')
-          .select(
-            'id, is_archived, subject_offering_id, assessment_type, grading_category',
-          )
-          .eq('id', widget.assessment.id)
-          .maybeSingle();
+        // Verify assessment still exists in DB (stale-cache guard if teacher deleted it)
+        final existingAssess = await client
+            .from('digital_assessments')
+            .select(
+              'id, is_archived, subject_offering_id, assessment_type, grading_category',
+            )
+            .eq('id', widget.assessment.id)
+            .maybeSingle();
 
-      if (existingAssess == null || existingAssess['is_archived'] == true) {
-        AppDataCache.instance.invalidatePrefix('student_dashboard_');
-        if (!mounted) return;
-        setState(() => _isSubmitting = false);
-        await AppModals.showWarningDialog(
-          context: context,
-          title: 'Assessment Unavailable',
-          message:
-              'This assessment has been removed by your teacher and can no longer accept submissions.',
-        );
-        if (mounted) {
-          Navigator.of(context).pop();
+        if (existingAssess == null || existingAssess['is_archived'] == true) {
+          AppDataCache.instance.invalidatePrefix('student_dashboard_');
+          if (!mounted) return;
+          setState(() => _isSubmitting = false);
+          await AppModals.showWarningDialog(
+            context: context,
+            title: 'Assessment Unavailable',
+            message: 'This assessment has been removed by your teacher and can no longer accept submissions.',
+          );
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+          return;
         }
+
+        final submittedUtc = DateTime.now().toUtc();
+        var startedUtc = (_startTime ?? DateTime.now()).toUtc();
+        if (startedUtc.isAfter(submittedUtc)) {
+          startedUtc = submittedUtc;
+        }
+
+        // 1. Upsert assessment_attempts with score_earned & conflict target
+        final attemptRes = await client
+            .from('assessment_attempts')
+            .upsert({
+              'assessment_id': widget.assessment.id,
+              'student_id': studentId,
+              'attempt_number': 1,
+              'status': attemptStatus,
+              'score_earned': scoreEarned,
+              'started_at': startedUtc.toIso8601String(),
+              'submitted_at': submittedUtc.toIso8601String(),
+            }, onConflict: 'assessment_id,student_id,attempt_number')
+            .select('id')
+            .maybeSingle();
+
+        final attemptId = attemptRes?['id']?.toString();
+
+        // 2. Persist individual question responses for review & item analysis
+        if (attemptId != null && attemptId.isNotEmpty) {
+          try {
+            await client
+                .from('assessment_responses')
+                .delete()
+                .eq('attempt_id', attemptId);
+
+            final responsesToInsert = <Map<String, dynamic>>[];
+            for (final q in _orderedQuestions) {
+              final studentAns = (_studentAnswers[q.id] ?? '').trim();
+              final isMatching =
+                  q.type == QuestionType.matching &&
+                  q.matchingPairs.isNotEmpty &&
+                  q.matchingPairs.entries.every(
+                    (pair) => studentAns.toLowerCase().contains(
+                      '${pair.key.toLowerCase()}=${pair.value.toLowerCase()}',
+                    ),
+                  );
+              final isCorrect =
+                  isMatching || q.matchesStudentAnswer(studentAns);
+              final pointsEarned = isCorrect ? q.points : 0.0;
+
+              responsesToInsert.add({
+                'attempt_id': attemptId,
+                'question_id': q.id,
+                'text_response': studentAns,
+                'is_correct': isCorrect,
+                'points_earned': pointsEarned,
+                'answered_at': submittedUtc.toIso8601String(),
+              });
+            }
+
+            if (responsesToInsert.isNotEmpty) {
+              try {
+                await client
+                    .from('assessment_responses')
+                    .insert(responsesToInsert);
+              } catch (insErr) {
+                // Fallback without text_response column in case schema lacks it
+                debugPrint('assessment_responses insert fallback: $insErr');
+                final fallbackRows = responsesToInsert
+                    .map(
+                      (r) => {
+                        'attempt_id': r['attempt_id'],
+                        'question_id': r['question_id'],
+                        'is_correct': r['is_correct'],
+                        'points_earned': r['points_earned'],
+                        'answered_at': r['answered_at'],
+                      },
+                    )
+                    .toList();
+                await client.from('assessment_responses').insert(fallbackRows);
+              }
+            }
+          } catch (respErr) {
+            debugPrint('assessment_responses persistence notice: $respErr');
+          }
+        }
+
+        // 3. Upsert into student_classwork_submissions if mirror row exists & sync Gradebook
+        final cwRow = await client
+            .from('classwork_items')
+            .select(
+              'id, subject_offering_id, term_number, gradebook_column_index, grading_category',
+            )
+            .eq('id', widget.assessment.id)
+            .maybeSingle();
+
+        if (cwRow != null) {
+          await client.from('student_classwork_submissions').upsert({
+            'classwork_id': widget.assessment.id,
+            'student_id': studentId,
+            'status': 'submitted',
+            'score': scoreEarned,
+            'submitted_at': submittedUtc.toIso8601String(),
+          }, onConflict: 'classwork_id,student_id');
+        }
+
+        // Sync auto-graded score to gradebook_term_sheets as Single Source of Truth
+        try {
+          final offeringId =
+              cwRow?['subject_offering_id']?.toString() ??
+              existingAssess['subject_offering_id']?.toString() ??
+              widget.assessment.subjectOfferingId;
+          final termNum =
+              (cwRow?['term_number'] as num?)?.toInt() ??
+              widget.assessment.termNumber;
+          final assessType =
+              existingAssess['assessment_type']?.toString().toLowerCase() ??
+              widget.assessment.examType;
+          final colIdx =
+              (cwRow?['gradebook_column_index'] as num?)?.toInt() ??
+              widget.assessment.gradebookColumnIndex ??
+              (assessType == 'st1'
+                  ? 1
+                  : (assessType == 'st2'
+                        ? 2
+                        : (assessType == 'term_exam' ? 3 : null)));
+          final catKey =
+              cwRow?['grading_category']?.toString().toLowerCase() ??
+              existingAssess['grading_category']?.toString().toLowerCase() ??
+              (widget.assessment.isExam ? 'ex' : 'ww');
+
+          if (offeringId != null && offeringId.isNotEmpty && colIdx != null) {
+            final sheet =
+                await SubjectRepository.instance.getGradebookTermSheet(
+                  offeringId,
+                  termNum,
+                ) ??
+                <String, dynamic>{};
+            final scores = Map<String, dynamic>.from(
+              sheet['scores'] as Map? ?? {},
+            );
+            final studentScores = Map<String, dynamic>.from(
+              scores[studentId] as Map? ?? {},
+            );
+            final catScores = Map<String, dynamic>.from(
+              studentScores[catKey] as Map? ?? {},
+            );
+            final colKey = catKey == 'ex'
+                ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
+                : colIdx.toString();
+            catScores[colKey] = scoreEarned;
+            studentScores[catKey] = catScores;
+            scores[studentId] = studentScores;
+            sheet['scores'] = scores;
+
+            final hps = Map<String, dynamic>.from(sheet['hps'] as Map? ?? {});
+            final catHps = Map<String, dynamic>.from(hps[catKey] as Map? ?? {});
+            if (catHps[colKey] == null) {
+              catHps[colKey] = widget.assessment.totalPoints.toInt();
+              hps[catKey] = catHps;
+              sheet['hps'] = hps;
+            }
+
+            await SubjectRepository.instance.saveGradebookTermSheet(
+              offeringId,
+              termNum,
+              sheet,
+            );
+            TeacherGradebookTab.gradebookRefreshNotifier.value++;
+          }
+        } catch (gbErr) {
+          debugPrint('Gradebook assessment score sync notice: $gbErr');
+        }
+
+        // 4. Log session_submitted in anti_cheating_logs for proctoring audit
+        try {
+          await client.from('anti_cheating_logs').insert({
+            'event_type': 'session_submitted',
+            'details':
+                'Submitted ${widget.assessment.isExam ? "examination" : "quiz"} (Score: ${scoreEarned.toInt()}/${widget.assessment.totalPoints.toInt()})',
+            'student_id': studentId,
+            'assessment_id': widget.assessment.id,
+            'event_at': submittedUtc.toIso8601String(),
+          });
+        } catch (_) {}
+
+        // Invalidate relevant caches
+        AppDataCache.instance.invalidatePrefix('student_dashboard_');
+        AppDataCache.instance.invalidatePrefix('teacher_activities_');
+        AppDataCache.instance.invalidatePrefix('teacher_assessments_');
+        AppDataCache.instance.invalidatePrefix('gradebook_');
+        await _clearVault();
+        _heartbeatTimer?.cancel();
+        _offlineRetryTimer?.cancel();
+        if (mounted) {
+          setState(() {
+            _isOffline = false;
+            _pendingOfflineSync = false;
+          });
+        }
+      } catch (e) {
+        debugPrint('Error saving assessment attempt and scores: $e');
+        if (!mounted) return;
+        setState(() {
+          _isSubmitting = false;
+          _isOffline = true;
+          _pendingOfflineSync = true;
+        });
+        _saveVault();
+        _offlineRetryTimer?.cancel();
+        _offlineRetryTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+          if (mounted && _pendingOfflineSync && !_isSubmitting) {
+            _submitAssessment(autoSubmit: true);
+          }
+        });
         return;
       }
-
-      final submittedUtc = DateTime.now().toUtc();
-      var startedUtc = (_startTime ?? DateTime.now()).toUtc();
-      if (startedUtc.isAfter(submittedUtc)) {
-        startedUtc = submittedUtc;
-      }
-
-      // 1. Upsert assessment_attempts with score_earned & conflict target
-      final attemptRes = await client
-          .from('assessment_attempts')
-          .upsert({
-            'assessment_id': widget.assessment.id,
-            'student_id': studentId,
-            'attempt_number': 1,
-            'status': attemptStatus,
-            'score_earned': scoreEarned,
-            'started_at': startedUtc.toIso8601String(),
-            'submitted_at': submittedUtc.toIso8601String(),
-          }, onConflict: 'assessment_id,student_id,attempt_number')
-          .select('id')
-          .maybeSingle();
-
-      final attemptId = attemptRes?['id']?.toString();
-
-      // 2. Persist individual question responses for review & item analysis
-      if (attemptId != null && attemptId.isNotEmpty) {
-        try {
-          await client
-              .from('assessment_responses')
-              .delete()
-              .eq('attempt_id', attemptId);
-
-          final responsesToInsert = <Map<String, dynamic>>[];
-          for (final q in _orderedQuestions) {
-            final studentAns = (_studentAnswers[q.id] ?? '').trim();
-            final isMatching =
-                q.type == QuestionType.matching &&
-                q.matchingPairs.isNotEmpty &&
-                q.matchingPairs.entries.every(
-                  (pair) => studentAns.toLowerCase().contains(
-                    '${pair.key.toLowerCase()}=${pair.value.toLowerCase()}',
-                  ),
-                );
-            final isCorrect = isMatching || q.matchesStudentAnswer(studentAns);
-            final pointsEarned = isCorrect ? q.points : 0.0;
-
-            responsesToInsert.add({
-              'attempt_id': attemptId,
-              'question_id': q.id,
-              'text_response': studentAns,
-              'is_correct': isCorrect,
-              'points_earned': pointsEarned,
-              'answered_at': submittedUtc.toIso8601String(),
-            });
-          }
-
-          if (responsesToInsert.isNotEmpty) {
-            try {
-              await client.from('assessment_responses').insert(responsesToInsert);
-            } catch (insErr) {
-              // Fallback without text_response column in case schema lacks it
-              debugPrint('assessment_responses insert fallback: $insErr');
-              final fallbackRows = responsesToInsert.map((r) => {
-                'attempt_id': r['attempt_id'],
-                'question_id': r['question_id'],
-                'is_correct': r['is_correct'],
-                'points_earned': r['points_earned'],
-                'answered_at': r['answered_at'],
-              }).toList();
-              await client.from('assessment_responses').insert(fallbackRows);
-            }
-          }
-        } catch (respErr) {
-          debugPrint('assessment_responses persistence notice: $respErr');
-        }
-      }
-
-      // 3. Upsert into student_classwork_submissions if mirror row exists & sync Gradebook
-      final cwRow = await client
-          .from('classwork_items')
-          .select(
-            'id, subject_offering_id, term_number, gradebook_column_index, grading_category',
-          )
-          .eq('id', widget.assessment.id)
-          .maybeSingle();
-
-      if (cwRow != null) {
-        await client.from('student_classwork_submissions').upsert({
-          'classwork_id': widget.assessment.id,
-          'student_id': studentId,
-          'status': 'submitted',
-          'score': scoreEarned,
-          'submitted_at': submittedUtc.toIso8601String(),
-        }, onConflict: 'classwork_id,student_id');
-      }
-
-      // Sync auto-graded score to gradebook_term_sheets as Single Source of Truth
-      try {
-        final offeringId =
-            cwRow?['subject_offering_id']?.toString() ??
-            existingAssess['subject_offering_id']?.toString() ??
-            widget.assessment.subjectOfferingId;
-        final termNum =
-            (cwRow?['term_number'] as num?)?.toInt() ??
-            widget.assessment.termNumber;
-        final assessType =
-            existingAssess['assessment_type']?.toString().toLowerCase() ??
-            widget.assessment.examType;
-        final colIdx =
-            (cwRow?['gradebook_column_index'] as num?)?.toInt() ??
-            widget.assessment.gradebookColumnIndex ??
-            (assessType == 'st1'
-                ? 1
-                : (assessType == 'st2'
-                      ? 2
-                      : (assessType == 'term_exam' ? 3 : null)));
-        final catKey =
-            cwRow?['grading_category']?.toString().toLowerCase() ??
-            existingAssess['grading_category']?.toString().toLowerCase() ??
-            (widget.assessment.isExam ? 'ex' : 'ww');
-
-        if (offeringId != null && offeringId.isNotEmpty && colIdx != null) {
-          final sheet =
-              await SubjectRepository.instance.getGradebookTermSheet(
-                offeringId,
-                termNum,
-              ) ??
-              <String, dynamic>{};
-          final scores = Map<String, dynamic>.from(
-            sheet['scores'] as Map? ?? {},
-          );
-          final studentScores = Map<String, dynamic>.from(
-            scores[studentId] as Map? ?? {},
-          );
-          final catScores = Map<String, dynamic>.from(
-            studentScores[catKey] as Map? ?? {},
-          );
-          final colKey = catKey == 'ex'
-              ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
-              : colIdx.toString();
-          catScores[colKey] = scoreEarned;
-          studentScores[catKey] = catScores;
-          scores[studentId] = studentScores;
-          sheet['scores'] = scores;
-
-          final hps = Map<String, dynamic>.from(sheet['hps'] as Map? ?? {});
-          final catHps = Map<String, dynamic>.from(hps[catKey] as Map? ?? {});
-          if (catHps[colKey] == null) {
-            catHps[colKey] = widget.assessment.totalPoints.toInt();
-            hps[catKey] = catHps;
-            sheet['hps'] = hps;
-          }
-
-          await SubjectRepository.instance.saveGradebookTermSheet(
-            offeringId,
-            termNum,
-            sheet,
-          );
-          TeacherGradebookTab.gradebookRefreshNotifier.value++;
-        }
-      } catch (gbErr) {
-        debugPrint('Gradebook assessment score sync notice: $gbErr');
-      }
-
-      // 4. Log session_submitted in anti_cheating_logs for proctoring audit
-      try {
-        await client.from('anti_cheating_logs').insert({
-          'event_type': 'session_submitted',
-          'details':
-              'Submitted ${widget.assessment.isExam ? "examination" : "quiz"} (Score: ${scoreEarned.toInt()}/${widget.assessment.totalPoints.toInt()})',
-          'student_id': studentId,
-          'assessment_id': widget.assessment.id,
-          'event_at': submittedUtc.toIso8601String(),
-        });
-      } catch (_) {}
-
-      // Invalidate relevant caches
-      AppDataCache.instance.invalidatePrefix('student_dashboard_');
-      AppDataCache.instance.invalidatePrefix('teacher_activities_');
-      AppDataCache.instance.invalidatePrefix('teacher_assessments_');
-      AppDataCache.instance.invalidatePrefix('gradebook_');
+    } else {
       await _clearVault();
       _heartbeatTimer?.cancel();
       _offlineRetryTimer?.cancel();
@@ -1220,36 +1274,9 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           _pendingOfflineSync = false;
         });
       }
-    } catch (e) {
-      debugPrint('Error saving assessment attempt and scores: $e');
-      if (!mounted) return;
-      setState(() {
-        _isSubmitting = false;
-        _isOffline = true;
-        _pendingOfflineSync = true;
-      });
-      _saveVault();
-      _offlineRetryTimer?.cancel();
-      _offlineRetryTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-        if (mounted && _pendingOfflineSync && !_isSubmitting) {
-          _submitAssessment(autoSubmit: true);
-        }
-      });
-      return;
     }
-  } else {
-    await _clearVault();
-    _heartbeatTimer?.cancel();
-    _offlineRetryTimer?.cancel();
-    if (mounted) {
-      setState(() {
-        _isOffline = false;
-        _pendingOfflineSync = false;
-      });
-    }
-  }
 
-  if (!mounted) return;
+    if (!mounted) return;
     setState(() {
       _isSubmitting = false;
       _currentStep = 2;
@@ -1305,10 +1332,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            color: onSurface.withValues(alpha: 0.08),
-          ),
+          child: Container(height: 1, color: onSurface.withValues(alpha: 0.08)),
         ),
       ),
       body: PopScope(
@@ -1328,9 +1352,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: onSurface.withValues(alpha: 0.1),
-                ),
+                border: Border.all(color: onSurface.withValues(alpha: 0.1)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.04),
@@ -1342,9 +1364,12 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
-                  if (_currentStep == 0) _buildRulesView(isMobile, primaryColor, onSurface),
-                  if (_currentStep == 1) _buildAnsweringView(isMobile, primaryColor, onSurface),
-                  if (_currentStep == 2) _buildResultView(isMobile, primaryColor, onSurface),
+                  if (_currentStep == 0)
+                    _buildRulesView(isMobile, primaryColor, onSurface),
+                  if (_currentStep == 1)
+                    _buildAnsweringView(isMobile, primaryColor, onSurface),
+                  if (_currentStep == 2)
+                    _buildResultView(isMobile, primaryColor, onSurface),
                 ],
               ),
             ),
@@ -1421,9 +1446,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 decoration: BoxDecoration(
                   color: onSurface.withValues(alpha: 0.03),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: onSurface.withValues(alpha: 0.08),
-                  ),
+                  border: Border.all(color: onSurface.withValues(alpha: 0.08)),
                 ),
                 child: ExpandableInstructionsText(
                   text: widget.assessment.description,
@@ -1472,7 +1495,8 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 ),
                 value: _rulesAccepted,
                 activeColor: primaryColor,
-                onChanged: (val) => setState(() => _rulesAccepted = val ?? false),
+                onChanged: (val) =>
+                    setState(() => _rulesAccepted = val ?? false),
               ),
             ),
             const SizedBox(height: 14),
@@ -1495,8 +1519,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                           AppModals.showErrorDialog(
                             context: context,
                             title: 'Assessment Locked',
-                            message:
-                                'You cannot start this assessment yet. It is scheduled to begin later.',
+                            message: 'You cannot start this assessment yet. It is scheduled to begin later.',
                           );
                           return;
                         }
@@ -1520,8 +1543,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                 AppModals.showWarningDialog(
                                   context: context,
                                   title: 'Assessment Already Submitted',
-                                  message:
-                                      'You have already completed and submitted this assessment.',
+                                  message: 'You have already completed and submitted this assessment.',
                                 );
                                 return;
                               } else if (st == 'disqualified') {
@@ -1529,8 +1551,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                 AppModals.showErrorDialog(
                                   context: context,
                                   title: 'Session Disqualified',
-                                  message:
-                                      'This assessment attempt was previously disqualified by your proctor.',
+                                  message: 'This assessment attempt was previously disqualified by your proctor.',
                                 );
                                 return;
                               }
@@ -1538,14 +1559,19 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
                             _mySessionId =
                                 'sess_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
-                            await client.from('assessment_attempts').upsert({
-                              'assessment_id': widget.assessment.id,
-                              'student_id': studentId,
-                              'attempt_number': 1,
-                              'status': 'in_progress',
-                              'started_at':
-                                  DateTime.now().toUtc().toIso8601String(),
-                            }, onConflict: 'assessment_id,student_id,attempt_number');
+                            await client.from('assessment_attempts').upsert(
+                              {
+                                'assessment_id': widget.assessment.id,
+                                'student_id': studentId,
+                                'attempt_number': 1,
+                                'status': 'in_progress',
+                                'started_at': DateTime.now()
+                                    .toUtc()
+                                    .toIso8601String(),
+                              },
+                              onConflict:
+                                  'assessment_id,student_id,attempt_number',
+                            );
                           } catch (sessErr) {
                             debugPrint(
                               'Notice establishing active exam session: $sessErr',
@@ -1731,9 +1757,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                             Icon(
                               Icons.timer_outlined,
                               size: 14,
-                              color: isLowTime
-                                  ? AppTheme.catRed
-                                  : primaryColor,
+                              color: isLowTime ? AppTheme.catRed : primaryColor,
                             ),
                             const SizedBox(width: 4),
                             Text(
@@ -1771,10 +1795,9 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         separatorBuilder: (_, _) => const SizedBox(width: 5),
                         itemBuilder: (ctx, idx) {
                           final itemQ = _orderedQuestions[idx];
-                          final isAnswered =
-                              (_studentAnswers[itemQ.id] ?? '')
-                                  .trim()
-                                  .isNotEmpty;
+                          final isAnswered = (_studentAnswers[itemQ.id] ?? '')
+                              .trim()
+                              .isNotEmpty;
                           final isCurrent = idx == _currentQuestionIndex;
 
                           Color pillBg;
@@ -2111,8 +2134,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                 hintText:
                                     "Enter answer (or type 'N/A' if unknown)",
                                 hintStyle: const TextStyle(fontSize: 12.5),
-                                helperText:
-                                    "Blank answers are prohibited on submission. Enter 'N/A' if unknown.",
+                                helperText: "Blank answers are prohibited on submission. Enter 'N/A' if unknown.",
                                 helperMaxLines: 2,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
@@ -2192,8 +2214,9 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: primaryColor,
-                            foregroundColor:
-                                Theme.of(context).colorScheme.onPrimary,
+                            foregroundColor: Theme.of(context)
+                                .colorScheme
+                                .onPrimary,
                             elevation: 0,
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             shape: RoundedRectangleBorder(
@@ -2288,9 +2311,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1F2937) : Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: onSurface.withValues(alpha: 0.1),
-              ),
+              border: Border.all(color: onSurface.withValues(alpha: 0.1)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
@@ -2440,9 +2461,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                     ? const Color(0xFF1F2937)
                     : const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: onSurface.withValues(alpha: 0.1),
-                ),
+                border: Border.all(color: onSurface.withValues(alpha: 0.1)),
               ),
               child: Column(
                 children: [
@@ -2541,10 +2560,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text(
                   'Return to Student Portal',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ),
             ),

@@ -127,10 +127,20 @@ class _LoginScreenState extends State<LoginScreen> {
           if (mounted) {
             AppTopToast.show(
               context,
-              message:
-                  'You were automatically logged out due to 30 minutes of inactivity.',
+              message: 'You were automatically logged out due to 30 minutes of inactivity.',
               type: AppToastType.warning,
               duration: const Duration(seconds: 4),
+            );
+          }
+        });
+      } else if (argReason == 'signed_in_elsewhere') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            AppTopToast.show(
+              context,
+              message: 'Your account was signed in on another device. You have been logged out on this device.',
+              type: AppToastType.warning,
+              duration: const Duration(seconds: 5),
             );
           }
         });
@@ -195,8 +205,9 @@ class _LoginScreenState extends State<LoginScreen> {
         sel.end < 0 ||
         sel.start > text.length ||
         sel.end > text.length) {
-      _passwordController.selection =
-          TextSelection.collapsed(offset: text.length);
+      _passwordController.selection = TextSelection.collapsed(
+        offset: text.length,
+      );
     }
   }
 
@@ -212,8 +223,9 @@ class _LoginScreenState extends State<LoginScreen> {
           final curLen = _passwordController.text.length;
           final sel = _passwordController.selection;
           if (sel.isValid && sel.start != sel.end) {
-            _passwordController.selection =
-                TextSelection.collapsed(offset: curLen);
+            _passwordController.selection = TextSelection.collapsed(
+              offset: curLen,
+            );
           }
         }
       });
@@ -391,10 +403,35 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
       }
+
+      // Friendly User-Facing Translation for System / Network / Firebase Errors
+      String friendlyMessage = e.toString().replaceAll('Exception: ', '');
+      String friendlyTitle = 'Login Error';
+
+      final errText = e.toString().toLowerCase();
+      if (errText.contains('no firebase app') ||
+          errText.contains('firebase.initializeapp') ||
+          errText.contains('core/no-app')) {
+        friendlyTitle = 'Service Connecting';
+        friendlyMessage =
+            'ClassRealm security service is still connecting. Please wait a brief moment and tap Login again.';
+      } else if (errText.contains('network') ||
+          errText.contains('socketexception') ||
+          errText.contains('connection refused') ||
+          errText.contains('failed host lookup')) {
+        friendlyTitle = 'Connection Issue';
+        friendlyMessage =
+            'Unable to connect to the server. Please check your internet connection and try again.';
+      } else if (errText.contains('timeout')) {
+        friendlyTitle = 'Connection Timeout';
+        friendlyMessage =
+            'The request took too long to respond. Please check your internet and tap Login again.';
+      }
+
       AppModals.showErrorDialog(
         context: context,
-        title: 'Login Error',
-        message: e.toString().replaceAll('Exception: ', ''),
+        title: friendlyTitle,
+        message: friendlyMessage,
         onConfirm: _restorePasswordFocusAfterDialog,
       ).whenComplete(_restorePasswordFocusAfterDialog);
     }
@@ -709,14 +746,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       }
                       final text = _passwordController.text;
                       final sel = _passwordController.selection;
-                      final bool hasRange = sel.isValid &&
+                      final bool hasRange =
+                          sel.isValid &&
                           sel.start >= 0 &&
                           sel.end <= text.length &&
                           sel.start != sel.end;
                       final int offset =
-                          (sel.isValid && sel.end >= 0 && sel.end <= text.length)
-                              ? sel.end
-                              : text.length;
+                          (sel.isValid &&
+                              sel.end >= 0 &&
+                              sel.end <= text.length)
+                          ? sel.end
+                          : text.length;
 
                       // Support Ctrl+A / Cmd+A to highlight all text
                       if ((HardwareKeyboard.instance.isControlPressed ||
@@ -731,7 +771,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       if (event.logicalKey == LogicalKeyboardKey.backspace) {
                         if (hasRange) {
-                          final newText = text.substring(0, sel.start) +
+                          final newText =
+                              text.substring(0, sel.start) +
                               text.substring(sel.end);
                           _passwordController.value = TextEditingValue(
                             text: newText,
@@ -740,7 +781,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           );
                         } else if (text.isNotEmpty && offset > 0) {
-                          final newText = text.substring(0, offset - 1) +
+                          final newText =
+                              text.substring(0, offset - 1) +
                               text.substring(offset);
                           final newOffset = offset - 1;
                           _passwordController.value = TextEditingValue(
@@ -755,7 +797,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       if (event.logicalKey == LogicalKeyboardKey.delete) {
                         if (hasRange) {
-                          final newText = text.substring(0, sel.start) +
+                          final newText =
+                              text.substring(0, sel.start) +
                               text.substring(sel.end);
                           _passwordController.value = TextEditingValue(
                             text: newText,
@@ -764,13 +807,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           );
                         } else if (text.isNotEmpty && offset < text.length) {
-                          final newText = text.substring(0, offset) +
+                          final newText =
+                              text.substring(0, offset) +
                               text.substring(offset + 1);
                           _passwordController.value = TextEditingValue(
                             text: newText,
-                            selection: TextSelection.collapsed(
-                              offset: offset,
-                            ),
+                            selection: TextSelection.collapsed(offset: offset),
                           );
                         }
                         return KeyEventResult.handled;
@@ -780,8 +822,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         final newOffset = hasRange
                             ? sel.start
                             : (offset - 1).clamp(0, text.length);
-                        _passwordController.selection =
-                            TextSelection.collapsed(offset: newOffset);
+                        _passwordController.selection = TextSelection.collapsed(
+                          offset: newOffset,
+                        );
                         return KeyEventResult.handled;
                       }
 
@@ -789,8 +832,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         final newOffset = hasRange
                             ? sel.end
                             : (offset + 1).clamp(0, text.length);
-                        _passwordController.selection =
-                            TextSelection.collapsed(offset: newOffset);
+                        _passwordController.selection = TextSelection.collapsed(
+                          offset: newOffset,
+                        );
                         return KeyEventResult.handled;
                       }
 
@@ -817,7 +861,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           char.codeUnitAt(0) >= 32 &&
                           char.codeUnitAt(0) != 127) {
                         if (hasRange) {
-                          final newText = text.substring(0, sel.start) +
+                          final newText =
+                              text.substring(0, sel.start) +
                               char +
                               text.substring(sel.end);
                           final newOffset = sel.start + char.length;
@@ -828,7 +873,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           );
                         } else if (text.length < 100) {
-                          final newText = text.substring(0, offset) +
+                          final newText =
+                              text.substring(0, offset) +
                               char +
                               text.substring(offset);
                           final newOffset = offset + char.length;
@@ -864,9 +910,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
-                      inputFormatters: [
-                        LengthLimitingTextInputFormatter(100),
-                      ],
+                      inputFormatters: [LengthLimitingTextInputFormatter(100)],
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) {
                           return 'Password is required';

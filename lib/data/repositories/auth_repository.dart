@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:class_realm/core/config/env_config.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase;
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:class_realm/models/user_model.dart' as custom;
@@ -17,6 +18,7 @@ import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
+import 'package:class_realm/firebase_options.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
@@ -87,6 +89,7 @@ class AuthRepository {
       _activeSessionId ?? LocalStorageService.getActiveSessionId();
   Future<String?>? _inFlightSessionFuture;
   bool _isLoggingOut = false;
+  bool get isLoggingOut => _isLoggingOut;
 
   set currentUser(custom.UserModel? user) => setCurrentUser(user);
 
@@ -99,26 +102,160 @@ class AuthRepository {
     }
   }
 
-  /// Synchronously hydrates the cached user model before the first frame renders (e.g. on F5 refresh).
+  /// Asynchronously closes any leftover session in Supabase when the tab was closed,
+  /// the app was swiped from Recents, or 30+ minutes of background inactivity elapsed.
+  Future<void> _closeLeftoverSessionAsync({
+    String? sessionId,
+    String? userId,
+    DateTime? lastInteraction,
+    required String reason,
+  }) async {
+    try {
+      final nowUtc = DateTime.now().toUtc();
+      final cleanReason = reason == 'inactivity' ? 'inactivity' : 'terminated';
+
+      if (sessionId != null && sessionId.isNotEmpty) {
+        final sRow = await _supabaseClient
+            .from('user_session_logs')
+            .select('id, login_at, last_active_at, is_active')
+            .eq('id', sessionId)
+            .maybeSingle();
+
+        if (sRow != null && sRow['is_active'] == true) {
+          final loginAt =
+              DateTime.tryParse(sRow['login_at']?.toString() ?? '')?.toUtc() ??
+              nowUtc;
+          final lastActiveAt =
+              DateTime.tryParse(sRow['last_active_at']?.toString() ?? '')
+                  ?.toUtc() ??
+              (lastInteraction?.toUtc() ?? nowUtc);
+
+          DateTime effectiveEnd = lastActiveAt;
+          if (cleanReason == 'inactivity' && lastInteraction != null) {
+            final inactivityCutoff = lastInteraction.toUtc().add(
+              const Duration(minutes: 30),
+            );
+            effectiveEnd = inactivityCutoff.isBefore(nowUtc)
+                ? inactivityCutoff
+                : nowUtc;
+          }
+          if (effectiveEnd.isBefore(loginAt)) {
+            effectiveEnd = loginAt;
+          }
+          final dur = effectiveEnd
+              .difference(loginAt)
+              .inSeconds
+              .clamp(0, 86400);
+
+          await _supabaseClient
+              .from('user_session_logs')
+              .update({
+                'is_active': false,
+                'logout_at': effectiveEnd.toIso8601String(),
+                'last_active_at': effectiveEnd.toIso8601String(),
+                'logout_reason': cleanReason,
+                'duration_seconds': dur,
+              })
+              .eq('id', sessionId)
+              .eq('is_active', true);
+        }
+      } else if (userId != null && userId.isNotEmpty) {
+        final openRows = await _supabaseClient
+            .from('user_session_logs')
+            .select('id, login_at, last_active_at')
+            .eq('user_id', userId)
+            .eq('is_active', true);
+        for (final row in (openRows as List)) {
+          final rId = row['id']?.toString();
+          if (rId == null) continue;
+          final loginAt =
+              DateTime.tryParse(row['login_at']?.toString() ?? '')?.toUtc() ??
+              nowUtc;
+          final lastActiveAt =
+              DateTime.tryParse(row['last_active_at']?.toString() ?? '')
+                  ?.toUtc() ??
+              (lastInteraction?.toUtc() ?? nowUtc);
+          final effectiveEnd = lastActiveAt.isBefore(loginAt)
+              ? loginAt
+              : (lastActiveAt.isBefore(nowUtc) ? lastActiveAt : nowUtc);
+          final dur = effectiveEnd
+              .difference(loginAt)
+              .inSeconds
+              .clamp(0, 86400);
+          await _supabaseClient
+              .from('user_session_logs')
+              .update({
+                'is_active': false,
+                'logout_at': effectiveEnd.toIso8601String(),
+                'last_active_at': effectiveEnd.toIso8601String(),
+                'logout_reason': cleanReason,
+                'duration_seconds': dur,
+              })
+              .eq('id', rId)
+              .eq('is_active', true);
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Synchronously hydrates the cached user model before the first frame renders (ONLY on warm F5 refresh).
+  /// If the tab was closed or the app was swiped from Recents (!isWarmSession()), forces re-login.
   /// Enforces wall-clock inactivity checks (>= 30 mins triggers expiration) and Maintenance Mode lockdown.
   custom.UserModel? hydrateCachedSessionSync() {
     final lastInteraction = LocalStorageService.getLastInteraction();
+    final oldSessionId = LocalStorageService.getActiveSessionId();
+    final cached = LocalStorageService.getCachedUser();
+
+    // 1. Tab closed (Web) or App swiped from Recents / Cold Start (Mobile/Desktop):
+    // Do NOT auto-login from localStorage. Terminate leftover session and require fresh login.
+    if (!isWarmSession()) {
+      if (oldSessionId != null || cached != null) {
+        unawaited(
+          _closeLeftoverSessionAsync(
+            sessionId: oldSessionId,
+            userId: cached?.id,
+            lastInteraction: lastInteraction,
+            reason: 'terminated',
+          ),
+        );
+      }
+      LocalStorageService.clearCachedUser();
+      unawaited(LocalStorageService.clearActiveSessionId());
+      _currentUser = null;
+      _activeSessionId = null;
+      unawaited(_firebaseAuth.signOut().catchError((_) {}));
+      return null;
+    }
+
+    // 2. Wall-Clock Inactivity Check (>= 30 minutes)
     if (lastInteraction != null) {
       final diff = DateTime.now().difference(lastInteraction);
       if (diff >= const Duration(minutes: 30)) {
+        unawaited(
+          _closeLeftoverSessionAsync(
+            sessionId: oldSessionId,
+            userId: cached?.id,
+            lastInteraction: lastInteraction,
+            reason: 'inactivity',
+          ),
+        );
         LocalStorageService.clearCachedUser();
+        unawaited(LocalStorageService.clearActiveSessionId());
         _currentUser = null;
+        _activeSessionId = null;
         clearWarmSession();
         unawaited(_firebaseAuth.signOut().catchError((_) {}));
         return null;
       }
     }
-    final cached = LocalStorageService.getCachedUser();
+
     if (cached != null) {
       if (LocalStorageService.isMaintenanceMode &&
           cached.role != custom.UserRole.admin) {
         LocalStorageService.clearCachedUser();
+        unawaited(LocalStorageService.clearActiveSessionId());
         _currentUser = null;
+        _activeSessionId = null;
         clearWarmSession();
         return null;
       }
@@ -213,6 +350,19 @@ class AuthRepository {
       );
     }
 
+    // Ensure Firebase is initialized before accessing FirebaseAuth instance
+    if (Firebase.apps.isEmpty) {
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      } catch (_) {
+        try {
+          await Firebase.initializeApp();
+        } catch (_) {}
+      }
+    }
+
     // Real Firebase Authentication for all users (Admin, Teacher, etc.)
     try {
       final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
@@ -263,10 +413,13 @@ class AuthRepository {
           ),
         );
 
+        _activeSessionId = null;
+        await LocalStorageService.clearActiveSessionId();
+        markWarmSession();
         await LocalStorageService.saveUser(_currentUser!);
         await LocalStorageService.markCredentialsSaved(cleanEmail);
         unawaited(LocalStorageService.saveLastInteraction(DateTime.now()));
-        unawaited(startSessionLog(_currentUser!));
+        unawaited(startSessionLog(_currentUser!, forceNewSession: true));
         return _currentUser;
       }
     } on firebase.FirebaseAuthException catch (e) {
@@ -277,15 +430,6 @@ class AuthRepository {
             'The system is currently under maintenance. Teacher, Student, and Parent accounts cannot log in at this time. Please try again later.',
             isMaintenanceBlocked: true,
           );
-        }
-        final cached = LocalStorageService.getCachedUser();
-        if (cached != null &&
-            cached.email.toLowerCase() == cleanEmail &&
-            cached.role == custom.UserRole.teacher &&
-            LocalStorageService.hasSavedCredentials(cleanEmail)) {
-          _currentUser = cached;
-          markWarmSession();
-          return _currentUser;
         }
         throw Exception(
           "We're having trouble connecting to the network right now. Please check your internet connection and try again.",
@@ -349,12 +493,54 @@ class AuthRepository {
     return null;
   }
 
-  // Fast Login / Restore Session
+  // Fast Login / Restore Session (Strictly for warm tab refresh / active process)
   Future<custom.UserModel?> restoreSession() async {
     // Invalidate any legacy session with the purged old admin ID
     final cached = LocalStorageService.getCachedUser();
     if (cached != null && cached.id == 'uiR8FjHtAWezyZ2dADnOfsHfBz32') {
       await LocalStorageService.clearAuth();
+    }
+
+    final lastInteraction = LocalStorageService.getLastInteraction();
+    final oldSessionId = LocalStorageService.getActiveSessionId();
+
+    // 1. If the tab was closed (Web) or the app was swiped from Recents (!isWarmSession() on boot),
+    // terminate any leftover session and require logging in again.
+    if (!isWarmSession() && _currentUser == null) {
+      if (oldSessionId != null || cached != null) {
+        unawaited(
+          _closeLeftoverSessionAsync(
+            sessionId: oldSessionId,
+            userId: cached?.id,
+            lastInteraction: lastInteraction,
+            reason: 'terminated',
+          ),
+        );
+      }
+      await LocalStorageService.clearCachedUser();
+      await LocalStorageService.clearActiveSessionId();
+      _activeSessionId = null;
+      try {
+        await _firebaseAuth.signOut();
+      } catch (_) {}
+      return null;
+    }
+
+    // 2. Wall-Clock Inactivity Check (>= 30 minutes)
+    if (lastInteraction != null) {
+      final diff = DateTime.now().difference(lastInteraction);
+      if (diff >= const Duration(minutes: 30)) {
+        unawaited(
+          _closeLeftoverSessionAsync(
+            sessionId: oldSessionId,
+            userId: cached?.id,
+            lastInteraction: lastInteraction,
+            reason: 'inactivity',
+          ),
+        );
+        await clearLocalSessionOnly();
+        return null;
+      }
     }
 
     final isMaintenance = await isSystemMaintenanceActive();
@@ -381,18 +567,14 @@ class AuthRepository {
           if (updatedUser != null) {
             if (updatedUser.role != cachedUser.role) {
               // Role tampering or server-side role change detected: invalidate session immediately
-              await _firebaseAuth.signOut();
-              await LocalStorageService.clearAuth();
-              _currentUser = null;
+              await clearLocalSessionOnly();
               return null;
             }
             _currentUser = updatedUser;
             await LocalStorageService.saveUser(updatedUser);
           } else {
             // User no longer exists in Supabase `users` table
-            await _firebaseAuth.signOut();
-            await LocalStorageService.clearAuth();
-            _currentUser = null;
+            await clearLocalSessionOnly();
             return null;
           }
         } catch (_) {}
@@ -404,13 +586,19 @@ class AuthRepository {
                 _currentUser!.status == custom.AccountStatus.rejected ||
                 (isMaintenance &&
                     _currentUser!.role != custom.UserRole.admin))) {
-          await _firebaseAuth.signOut();
-          await LocalStorageService.clearAuth();
-          _currentUser = null;
+          await clearLocalSessionOnly();
           return null;
         }
 
-        unawaited(startSessionLog(_currentUser!));
+        // Verify or resume active session (if kicked by another device, invalidate local session)
+        final resumedSessionId = await startSessionLog(
+          _currentUser!,
+          allowCreateIfSuperseded: false,
+        );
+        if (resumedSessionId == '__SUPERSEDED__') {
+          await clearLocalSessionOnly();
+          return null;
+        }
         return _currentUser;
       }
 
@@ -428,9 +616,7 @@ class AuthRepository {
               _currentUser!.status == custom.AccountStatus.deactivated ||
               _currentUser!.status == custom.AccountStatus.rejected ||
               (isMaintenance && _currentUser!.role != custom.UserRole.admin)) {
-            await _firebaseAuth.signOut();
-            await LocalStorageService.clearAuth();
-            _currentUser = null;
+            await clearLocalSessionOnly();
             return null;
           }
           await LocalStorageService.saveUser(_currentUser!);
@@ -441,27 +627,13 @@ class AuthRepository {
         debugPrint('Failed to restore session from Supabase: $e');
         if (cachedUser != null && cachedUser.id == firebaseUser.uid) {
           if (isMaintenance && cachedUser.role != custom.UserRole.admin) {
-            await _firebaseAuth.signOut();
-            await LocalStorageService.clearAuth();
-            _currentUser = null;
+            await clearLocalSessionOnly();
             return null;
           }
           _currentUser = cachedUser;
           return _currentUser;
         }
       }
-    } else if (cached != null) {
-      if (cached.isArchived ||
-          cached.status == custom.AccountStatus.archived ||
-          cached.status == custom.AccountStatus.deactivated ||
-          cached.status == custom.AccountStatus.rejected ||
-          (isMaintenance && cached.role != custom.UserRole.admin)) {
-        await LocalStorageService.clearAuth();
-        _currentUser = null;
-        return null;
-      }
-      _currentUser = cached;
-      return _currentUser;
     }
     return null;
   }
@@ -693,6 +865,50 @@ class AuthRepository {
     }
   }
 
+  /// Clears local session state and Firebase Auth without touching Supabase `user_session_logs`.
+  /// Used when this device is kicked out because the account signed in on another device (Option B).
+  Future<void> clearLocalSessionOnly() async {
+    _isLoggingOut = true;
+    try {
+      _currentUser = null;
+      _activeSessionId = null;
+      clearWarmSession();
+      AppDataCache.instance.clearAll();
+      StudentDashboardRepository.instance.clearMemoryCache();
+      await LocalStorageService.clearAuth();
+      try {
+        await _firebaseAuth.signOut();
+      } catch (_) {}
+    } finally {
+      _isLoggingOut = false;
+    }
+  }
+
+  /// Triggered on Web pagehide/beforeunload or Native app detached so closing the tab/app
+  /// immediately terminates the active session in Supabase.
+  void handleAppOrTabDestroyed() {
+    if (_isLoggingOut) return;
+    final sessionId =
+        _activeSessionId ?? LocalStorageService.getActiveSessionId();
+    final user = _currentUser ?? LocalStorageService.getCachedUser();
+    if (sessionId == null || sessionId.isEmpty) return;
+
+    final nowUtc = DateTime.now().toUtc();
+    final loginAt = LocalStorageService.getSessionLoginAt()?.toUtc() ?? nowUtc;
+    final dur = nowUtc.difference(loginAt).inSeconds.clamp(0, 86400);
+
+    if (kIsWeb) {
+      sendWebKeepaliveSessionEnd(
+        supabaseUrl: EnvConfig.supabaseUrl,
+        supabaseAnonKey: EnvConfig.supabaseAnonKey,
+        sessionId: sessionId,
+        logoutAtIso: nowUtc.toIso8601String(),
+        durationSeconds: dur,
+      );
+    }
+    unawaited(endSession('terminated', user, sessionId));
+  }
+
   // Logout
   Future<void> logout([String? reason]) async {
     final userToLogOut = currentUser;
@@ -721,11 +937,19 @@ class AuthRepository {
   // Non-Blocking Session Logging for ALL Roles (Admin, Teacher, Student, Parent)
   // =========================================================================
 
-  Future<String?> startSessionLog(custom.UserModel user) async {
-    if (_inFlightSessionFuture != null) {
+  Future<String?> startSessionLog(
+    custom.UserModel user, {
+    bool forceNewSession = false,
+    bool allowCreateIfSuperseded = true,
+  }) async {
+    if (_inFlightSessionFuture != null && !forceNewSession) {
       return _inFlightSessionFuture!;
     }
-    _inFlightSessionFuture = _doStartSessionLog(user);
+    _inFlightSessionFuture = _doStartSessionLog(
+      user,
+      forceNewSession: forceNewSession,
+      allowCreateIfSuperseded: allowCreateIfSuperseded,
+    );
     try {
       return await _inFlightSessionFuture!;
     } finally {
@@ -733,22 +957,96 @@ class AuthRepository {
     }
   }
 
-  Future<String?> _doStartSessionLog(custom.UserModel user) async {
+  Future<String?> _doStartSessionLog(
+    custom.UserModel user, {
+    bool forceNewSession = false,
+    bool allowCreateIfSuperseded = true,
+  }) async {
     try {
       final now = DateTime.now().toUtc();
       final roleStr = user.role.name;
 
-      // Re-use active session if one already exists
-      final existingSessionId =
-          LocalStorageService.getActiveSessionId() ?? _activeSessionId;
+      // Re-use active session if one already exists (e.g. warm F5 refresh in the same tab)
+      final existingSessionId = forceNewSession
+          ? null
+          : (LocalStorageService.getActiveSessionId() ?? _activeSessionId);
       if (existingSessionId != null) {
-        _activeSessionId = existingSessionId;
-        return existingSessionId;
+        try {
+          final existingRow = await _supabaseClient
+              .from('user_session_logs')
+              .select('id, login_at, is_active, logout_at, logout_reason')
+              .eq('id', existingSessionId)
+              .maybeSingle();
+
+          if (existingRow != null) {
+            final dbLoginAt = DateTime.tryParse(
+              existingRow['login_at']?.toString() ?? '',
+            );
+            if (dbLoginAt != null) {
+              await LocalStorageService.saveSessionLoginAt(dbLoginAt);
+            }
+
+            if (existingRow['is_active'] == true) {
+              _activeSessionId = existingSessionId;
+              return existingSessionId;
+            }
+
+            // If this session was closed with 'terminated' just a few seconds ago
+            // (because the user pressed F5 refresh in the same tab), check if another device logged in.
+            // If no newer session exists for this user, seamlessly re-activate this session!
+            final logoutReason = existingRow['logout_reason']?.toString();
+            final logoutAt = DateTime.tryParse(
+              existingRow['logout_at']?.toString() ?? '',
+            )?.toUtc();
+            final secondsSinceClose = logoutAt != null
+                ? now.difference(logoutAt).inSeconds.abs()
+                : 9999;
+
+            if (logoutReason == 'terminated' &&
+                secondsSinceClose <= 25 &&
+                dbLoginAt != null) {
+              final newerSessions = await _supabaseClient
+                  .from('user_session_logs')
+                  .select('id')
+                  .eq('user_id', user.id)
+                  .gt('login_at', dbLoginAt.toUtc().toIso8601String())
+                  .limit(1);
+
+              if ((newerSessions as List).isEmpty) {
+                final dur = now
+                    .difference(dbLoginAt.toUtc())
+                    .inSeconds
+                    .clamp(0, 86400);
+                await _supabaseClient
+                    .from('user_session_logs')
+                    .update({
+                      'is_active': true,
+                      'logout_at': null,
+                      'logout_reason': null,
+                      'last_active_at': now.toIso8601String(),
+                      'duration_seconds': dur,
+                    })
+                    .eq('id', existingSessionId);
+                _activeSessionId = existingSessionId;
+                return existingSessionId;
+              }
+            }
+
+            // Otherwise, this session was superseded by another device or explicitly closed!
+            if (!allowCreateIfSuperseded) {
+              return '__SUPERSEDED__';
+            }
+          }
+        } catch (_) {
+          _activeSessionId = existingSessionId;
+          return existingSessionId;
+        }
       }
 
-      // Close any previous open session for this user before starting new one
+      // Option B (Single Active Session):
+      // Atomically close ALL previous open sessions for this user BEFORE inserting the new session.
+      // Guarantees zero overlap and kicks out the previous device immediately.
       try {
-        // Delete all dangling empty ghost sessions (0 seconds and not properly closed)
         await _supabaseClient
             .from('user_session_logs')
             .delete()
@@ -756,40 +1054,42 @@ class AuthRepository {
             .eq('is_active', false)
             .eq('duration_seconds', 0);
 
-        // Find existing active sessions
         final oldSessions = await _supabaseClient
             .from('user_session_logs')
             .select('id, login_at, last_active_at')
             .eq('user_id', user.id)
             .eq('is_active', true);
 
-        for (var old in oldSessions) {
-          final loginTime = DateTime.parse(old['login_at']);
-          final lastActiveTime = DateTime.parse(
-            old['last_active_at'] ?? now.toIso8601String(),
-          );
-          final computedDuration = lastActiveTime
+        for (final old in (oldSessions as List)) {
+          final loginTime =
+              DateTime.tryParse(old['login_at']?.toString() ?? '')?.toUtc() ??
+              now;
+          final lastActiveTime =
+              DateTime.tryParse(old['last_active_at']?.toString() ?? '')
+                  ?.toUtc() ??
+              now;
+          // Clamp effectiveLogout to min(lastActiveTime, now) and >= loginTime so intervals NEVER overlap!
+          DateTime effectiveLogout = lastActiveTime.isBefore(now)
+              ? lastActiveTime
+              : now;
+          if (effectiveLogout.isBefore(loginTime)) {
+            effectiveLogout = loginTime;
+          }
+          final computedDuration = effectiveLogout
               .difference(loginTime)
               .inSeconds
-              .abs();
+              .clamp(0, 86400);
 
-          if (computedDuration < 30) {
-            // Treat anything under 30 seconds as an accidental double-click / immediate refresh ghost session
-            await _supabaseClient
-                .from('user_session_logs')
-                .delete()
-                .eq('id', old['id']);
-          } else {
-            await _supabaseClient
-                .from('user_session_logs')
-                .update({
-                  'is_active': false,
-                  'logout_at': lastActiveTime.toIso8601String(), // Use last known active time as logout
-                  'logout_reason': 'terminated',
-                  'duration_seconds': computedDuration,
-                })
-                .eq('id', old['id']);
-          }
+          await _supabaseClient
+              .from('user_session_logs')
+              .update({
+                'is_active': false,
+                'logout_at': effectiveLogout.toIso8601String(),
+                'last_active_at': effectiveLogout.toIso8601String(),
+                'logout_reason': 'terminated',
+                'duration_seconds': computedDuration,
+              })
+              .eq('id', old['id']);
         }
       } catch (_) {}
 
@@ -810,6 +1110,7 @@ class AuthRepository {
       if (sessionLogId != null) {
         _activeSessionId = sessionLogId;
         await LocalStorageService.saveActiveSessionId(sessionLogId);
+        await LocalStorageService.saveSessionLoginAt(now);
       }
       return sessionLogId;
     } catch (e) {
@@ -820,7 +1121,7 @@ class AuthRepository {
 
   Future<void> recordHeartbeat([String? sessionId]) async {
     final user = currentUser;
-    if (user == null) return;
+    if (user == null || _isLoggingOut) return;
     final id =
         sessionId ??
         LocalStorageService.getActiveSessionId() ??
@@ -828,33 +1129,43 @@ class AuthRepository {
     if (id == null) return;
     final now = DateTime.now().toUtc();
     try {
-      int? currentDuration;
-      try {
-        final sRow = await _supabaseClient
-            .from('user_session_logs')
-            .select('login_at')
-            .eq('id', id)
-            .maybeSingle();
-        if (sRow != null && sRow['login_at'] != null) {
-          final loginAt = DateTime.tryParse(sRow['login_at'].toString());
-          if (loginAt != null) {
-            currentDuration = now.difference(loginAt).inSeconds;
-            if (currentDuration < 0) currentDuration = 0;
+      DateTime? loginAt = LocalStorageService.getSessionLoginAt()?.toUtc();
+      if (loginAt == null) {
+        try {
+          final sRow = await _supabaseClient
+              .from('user_session_logs')
+              .select('login_at, is_active')
+              .eq('id', id)
+              .maybeSingle();
+          if (sRow != null) {
+            if (sRow['is_active'] == false) return;
+            if (sRow['login_at'] != null) {
+              loginAt = DateTime.tryParse(sRow['login_at'].toString())?.toUtc();
+              if (loginAt != null) {
+                await LocalStorageService.saveSessionLoginAt(loginAt);
+              }
+            }
           }
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
 
       final updateData = <String, dynamic>{
         'last_active_at': now.toIso8601String(),
       };
-      if (currentDuration != null) {
+      if (loginAt != null) {
+        final currentDuration = now
+            .difference(loginAt)
+            .inSeconds
+            .clamp(0, 86400);
         updateData['duration_seconds'] = currentDuration;
       }
 
+      // Only update if the session is STILL active (never overwrite a closed/superseded session)
       await _supabaseClient
           .from('user_session_logs')
           .update(updateData)
-          .eq('id', id);
+          .eq('id', id)
+          .eq('is_active', true);
     } catch (e) {
       debugPrint('AuthRepository recordHeartbeat notice: $e');
     }
@@ -886,13 +1197,15 @@ class AuthRepository {
           LocalStorageService.getActiveSessionId() ??
           _activeSessionId;
       final user = targetUser ?? currentUser;
+      final lastInteraction = LocalStorageService.getLastInteraction()?.toUtc();
 
       if (sessionId != null) {
         int? computedDuration;
+        DateTime effectiveEnd = now;
         try {
           final sRow = await _supabaseClient
               .from('user_session_logs')
-              .select('login_at, is_active, logout_reason')
+              .select('login_at, last_active_at, is_active, logout_reason')
               .eq('id', sessionId)
               .maybeSingle();
 
@@ -902,19 +1215,41 @@ class AuthRepository {
           }
 
           if (sRow != null && sRow['login_at'] != null) {
-            final loginAt = DateTime.tryParse(sRow['login_at'].toString());
+            final loginAt = DateTime.tryParse(sRow['login_at'].toString())
+                ?.toUtc();
+            final lastActiveAt = DateTime.tryParse(
+              sRow['last_active_at']?.toString() ?? '',
+            )?.toUtc();
+
+            if (cleanReason == 'inactivity' && lastInteraction != null) {
+              final cutoff = lastInteraction.add(const Duration(minutes: 30));
+              if (cutoff.isBefore(effectiveEnd)) {
+                effectiveEnd = cutoff;
+              }
+            } else if (cleanReason == 'terminated' && lastActiveAt != null) {
+              // If no heartbeat for >= 3 minutes (e.g. tab was sleeping), cap at lastActiveAt
+              if (now.difference(lastActiveAt).inMinutes >= 3) {
+                effectiveEnd = lastActiveAt;
+              }
+            }
+
             if (loginAt != null) {
-              computedDuration = now.difference(loginAt).inSeconds;
-              if (computedDuration < 0) computedDuration = 0;
+              if (effectiveEnd.isBefore(loginAt)) {
+                effectiveEnd = loginAt;
+              }
+              computedDuration = effectiveEnd
+                  .difference(loginAt)
+                  .inSeconds
+                  .clamp(0, 86400);
             }
           }
         } catch (_) {}
 
         final updatePayload = <String, dynamic>{
-          'logout_at': now.toIso8601String(),
+          'logout_at': effectiveEnd.toIso8601String(),
           'logout_reason': cleanReason,
           'is_active': false,
-          'last_active_at': now.toIso8601String(),
+          'last_active_at': effectiveEnd.toIso8601String(),
         };
         if (computedDuration != null) {
           updatePayload['duration_seconds'] = computedDuration;
@@ -932,8 +1267,6 @@ class AuthRepository {
       // Even if session ID is lost in local storage (due to hot reloads/tests),
       // force close ALL active sessions for this user to guarantee accuracy.
       if (user != null) {
-        // If this is a 'terminated' call from background, DO NOT bulk close
-        // other legitimate active sessions, only targeted ones!
         if (cleanReason != 'terminated') {
           await _supabaseClient
               .from('user_session_logs')
@@ -1450,15 +1783,17 @@ class AuthRepository {
       if (current != null && current.id == userId) {
         _currentUser = current.copyWith(status: custom.AccountStatus.active);
       } else {
-        _currentUser = (currentAppUser ??
-            custom.UserModel(
-              id: userId,
-              username: user?.email ?? '',
-              fullName: user?.displayName ?? 'User',
-              email: user?.email ?? '',
-              role: role,
-              status: custom.AccountStatus.active,
-            )).copyWith(status: custom.AccountStatus.active);
+        _currentUser =
+            (currentAppUser ??
+                    custom.UserModel(
+                      id: userId,
+                      username: user?.email ?? '',
+                      fullName: user?.displayName ?? 'User',
+                      email: user?.email ?? '',
+                      role: role,
+                      status: custom.AccountStatus.active,
+                    ))
+                .copyWith(status: custom.AccountStatus.active);
       }
       if (_currentUser != null) {
         await LocalStorageService.saveUser(_currentUser!);

@@ -128,7 +128,10 @@ class LocalStorageService {
   /// Computes a deterministic tamper-detection signature bound to the user's critical
   /// authorization fields (`id`, `email`, `role`, `status`, `isArchived`, `linkedStudentId`)
   /// and the device ID so manual DevTools `localStorage` role escalation is rejected.
-  static String _computeUserIntegritySignature(UserModel user, String deviceId) {
+  static String _computeUserIntegritySignature(
+    UserModel user,
+    String deviceId,
+  ) {
     final canonical = [
       'v1',
       deviceId.trim(),
@@ -220,6 +223,7 @@ class LocalStorageService {
     await prefs.remove(keyCachedUser);
     await prefs.remove(keyCachedUserSig);
     await prefs.remove('session.active_id');
+    await prefs.remove('session.login_at');
     await prefs.remove('session.last_interaction');
     await prefs.remove('session.last_active_route');
     await prefs.remove('session.tab_teacher');
@@ -338,17 +342,25 @@ class LocalStorageService {
       '_',
     );
     final prefs = await _prefs;
-    await _ensureSaved(await prefs.setInt('${_authPrefix}rl_fails_$cleanKey', failedAttempts));
-    await _ensureSaved(await prefs.setInt(
-      '${_authPrefix}rl_window_$cleanKey',
-      windowStartedAt.millisecondsSinceEpoch,
-    ));
-    await _ensureSaved(await prefs.setInt('${_authPrefix}rl_tier_$cleanKey', lockoutTier));
+    await _ensureSaved(
+      await prefs.setInt('${_authPrefix}rl_fails_$cleanKey', failedAttempts),
+    );
+    await _ensureSaved(
+      await prefs.setInt(
+        '${_authPrefix}rl_window_$cleanKey',
+        windowStartedAt.millisecondsSinceEpoch,
+      ),
+    );
+    await _ensureSaved(
+      await prefs.setInt('${_authPrefix}rl_tier_$cleanKey', lockoutTier),
+    );
     if (tierEscalatedAt != null) {
-      await _ensureSaved(await prefs.setInt(
-        '${_authPrefix}rl_tier_time_$cleanKey',
-        tierEscalatedAt.millisecondsSinceEpoch,
-      ));
+      await _ensureSaved(
+        await prefs.setInt(
+          '${_authPrefix}rl_tier_time_$cleanKey',
+          tierEscalatedAt.millisecondsSinceEpoch,
+        ),
+      );
     }
   }
 
@@ -362,11 +374,16 @@ class LocalStorageService {
     if (fails == null || windowMs == null) return null;
 
     final tier = _preferences?.getInt('${_authPrefix}rl_tier_$cleanKey') ?? 0;
-    final tierTimeMs = _preferences?.getInt('${_authPrefix}rl_tier_time_$cleanKey');
+    final tierTimeMs = _preferences?.getInt(
+      '${_authPrefix}rl_tier_time_$cleanKey',
+    );
 
     return {
       'failed_attempts': fails,
-      'window_started_at': DateTime.fromMillisecondsSinceEpoch(windowMs, isUtc: true),
+      'window_started_at': DateTime.fromMillisecondsSinceEpoch(
+        windowMs,
+        isUtc: true,
+      ),
       'lockout_tier': tier,
       'tier_escalated_at': tierTimeMs != null
           ? DateTime.fromMillisecondsSinceEpoch(tierTimeMs, isUtc: true)
@@ -383,7 +400,9 @@ class LocalStorageService {
     await _ensureSaved(await prefs.remove('${_authPrefix}rl_fails_$cleanKey'));
     await _ensureSaved(await prefs.remove('${_authPrefix}rl_window_$cleanKey'));
     await _ensureSaved(await prefs.remove('${_authPrefix}rl_tier_$cleanKey'));
-    await _ensureSaved(await prefs.remove('${_authPrefix}rl_tier_time_$cleanKey'));
+    await _ensureSaved(
+      await prefs.remove('${_authPrefix}rl_tier_time_$cleanKey'),
+    );
     await clearOtpLockout(scopeKey);
   }
 
@@ -602,9 +621,21 @@ class LocalStorageService {
     return _preferences?.getString('session.active_id');
   }
 
+  static Future<void> saveSessionLoginAt(DateTime dt) async {
+    final prefs = await _prefs;
+    await prefs.setString('session.login_at', dt.toUtc().toIso8601String());
+  }
+
+  static DateTime? getSessionLoginAt() {
+    final str = _preferences?.getString('session.login_at');
+    if (str == null) return null;
+    return DateTime.tryParse(str);
+  }
+
   static Future<void> clearActiveSessionId() async {
     final prefs = await _prefs;
     await prefs.remove('session.active_id');
+    await prefs.remove('session.login_at');
     await prefs.remove('session.last_interaction');
   }
 
@@ -732,11 +763,17 @@ class LocalStorageService {
 
   static Future<void> setPushNotificationsEnabled(bool enabled) async {
     final prefs = await _prefs;
-    await prefs.setBool('${_settingsPrefix}push_notifications_enabled', enabled);
+    await prefs.setBool(
+      '${_settingsPrefix}push_notifications_enabled',
+      enabled,
+    );
   }
 
   static bool arePushNotificationsEnabled() {
-    return _preferences?.getBool('${_settingsPrefix}push_notifications_enabled') ?? true;
+    return _preferences?.getBool(
+          '${_settingsPrefix}push_notifications_enabled',
+        ) ??
+        true;
   }
 
   // =========================================================================
@@ -773,7 +810,9 @@ class LocalStorageService {
   static bool get isMaintenanceForcedLogout =>
       _preferences?.getBool(_maintenanceForcedLogoutKey) ?? false;
 
-  static Future<void> saveMaintenanceCooldownSeconds(int remainingSeconds) async {
+  static Future<void> saveMaintenanceCooldownSeconds(
+    int remainingSeconds,
+  ) async {
     try {
       final prefs = await _prefs;
       if (remainingSeconds <= 0) {

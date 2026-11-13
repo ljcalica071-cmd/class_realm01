@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 
@@ -177,9 +178,30 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
 
   /// Filter notifications: only show notifications for enrolled subjects + general broadcasts
   List<AppNotificationModel> get _filteredNotifications {
-    final currentStudentName = AuthRepository.instance.currentUser?.fullName.toLowerCase() ?? '';
+    final currentUser = AuthRepository.instance.currentUser;
+    if (currentUser != null) {
+      if (currentUser.isArchived ||
+          currentUser.status == AccountStatus.archived ||
+          currentUser.status == AccountStatus.deactivated) {
+        return [];
+      }
+      final isEligible = currentUser.status == AccountStatus.active ||
+          currentUser.status == AccountStatus.pendingFirstLogin;
+      if (!isEligible) {
+        return [];
+      }
+    }
+
+    final currentStudentName = currentUser?.fullName.toLowerCase() ?? '';
 
     return _notifications.where((n) {
+      // Exclude announcements broadcasted before the student account existed
+      if (currentUser?.createdAt != null && n.type.toLowerCase() == 'announcement') {
+        if (n.timestamp.isBefore(currentUser!.createdAt!)) {
+          return false;
+        }
+      }
+
       final title = n.title.toLowerCase();
       final body = n.message.toLowerCase();
 

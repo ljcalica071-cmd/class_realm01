@@ -27,8 +27,6 @@ import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/forgot_password_screen.dart';
 import 'features/auth/screens/first_login_screen.dart';
 import 'features/admin/screens/admin_dashboard_screen.dart';
-import 'features/admin/screens/admin_add_teacher_screen.dart';
-import 'features/teacher/sub_features/setup/screens/academic_setup_wizard_screen.dart';
 import 'features/teacher/screens/teacher_dashboard_screen.dart';
 import 'features/student/screens/student_home_screen.dart';
 import 'features/student/sub_features/academics/screens/student_academic_performance_screen.dart';
@@ -60,13 +58,27 @@ Future<void> _initializeRuntimeServices({
   await _guarded(EnvConfig.init(), 'EnvConfig');
 
   onProgress?.call(0.48, 'Connecting to Firebase Auth & Supabase...');
-  await Future.wait<void>([
-    _guarded(
-      Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
-      'Firebase',
-    ),
-    _guarded(SupabaseService.initialize(), 'Supabase'),
-  ]);
+
+  // Guarantee Firebase is initialized on Android/iOS/Web before any authentication calls
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
+  } catch (e) {
+    debugPrint('Firebase.initializeApp direct notice: $e');
+    // Fallback attempt without options if native config is present
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+    } catch (e2) {
+      debugPrint('Firebase fallback notice: $e2');
+    }
+  }
+
+  await _guarded(SupabaseService.initialize(), 'Supabase');
 
   onProgress?.call(0.78, 'Preparing local sync engine...');
   try {
@@ -106,13 +118,17 @@ Future<UserModel?> _bootstrapClassRealmServices(
         const Duration(milliseconds: 1600),
         onTimeout: () => cached,
       );
+      markWarmSession();
       return restored ?? cached;
     } catch (_) {
+      markWarmSession();
       return cached;
     }
   }
 
-  return await _restoreUserSession();
+  final restored = await _restoreUserSession();
+  markWarmSession();
+  return restored;
 }
 
 void _applySavedUserTheme(UserModel? user) {
@@ -120,10 +136,7 @@ void _applySavedUserTheme(UserModel? user) {
     AppTheme.themeModeNotifier.value = ThemeMode.light;
     return;
   }
-  final isDark = LocalStorageService.isUserDarkMode(
-    user.id,
-    email: user.email,
-  );
+  final isDark = LocalStorageService.isUserDarkMode(user.id, email: user.email);
   AppTheme.themeModeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
 }
 
@@ -140,6 +153,34 @@ void main() async {
   usePathUrlStrategy(); // Removes the # from the URL
 
   if (!kIsWeb) {
+    // -----------------------------------------------------------------------
+    // Android / iOS / Native Bootstrap Guarantee:
+    // Initialize LocalStorage and Firebase Core immediately before runApp()
+    // so no authentication or background service ever hits [core/no-app].
+    // -----------------------------------------------------------------------
+    try {
+      await LocalStorageService.init();
+    } catch (e) {
+      debugPrint('LocalStorage native init notice: $e');
+    }
+
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
+    } catch (e) {
+      debugPrint('Firebase native direct init notice: $e');
+      try {
+        if (Firebase.apps.isEmpty) {
+          await Firebase.initializeApp();
+        }
+      } catch (e2) {
+        debugPrint('Firebase native fallback init notice: $e2');
+      }
+    }
+
     AppLifecycleCoordinator.instance.initialize();
     runApp(const ClassRealmApp(isWarmBoot: false));
     return;
@@ -297,7 +338,6 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.adminDashboard,
       AppRoutes.adminBroadcasts,
       AppRoutes.adminTeacherManagement,
-      AppRoutes.adminAddTeacher,
       AppRoutes.adminActivityAnalytics,
       AppRoutes.adminProfile,
       AppRoutes.teacherDashboard,
@@ -345,9 +385,13 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         final assessId = nav['activeAssessmentId']?.toString();
         final actId = nav['activeActivityId']?.toString();
         if (assessId != null && assessId.isNotEmpty) {
-          updateBrowserUrl('$_initialDestination?tab=$tabParam&assessment=$assessId');
+          updateBrowserUrl(
+            '$_initialDestination?tab=$tabParam&assessment=$assessId',
+          );
         } else if (actId != null && actId.isNotEmpty) {
-          updateBrowserUrl('$_initialDestination?tab=$tabParam&activity=$actId');
+          updateBrowserUrl(
+            '$_initialDestination?tab=$tabParam&activity=$actId',
+          );
         } else {
           updateBrowserUrl('$_initialDestination?tab=$tabParam');
         }
@@ -466,10 +510,6 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         }
         return const LoginScreen();
       },
-      AppRoutes.adminAddTeacher: (context) => const AuthGuard(
-        allowedRoles: [UserRole.admin],
-        child: AdminAddTeacherScreen(),
-      ),
       AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
       AppRoutes.studentFirstLogin: (context) => const AuthGuard(
         allowedRoles: [UserRole.student],
@@ -500,10 +540,6 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         allowedRoles: [UserRole.teacher],
         isFirstLogin: true,
         child: FirstLoginScreen(),
-      ),
-      AppRoutes.academicSetup: (context) => const AuthGuard(
-        allowedRoles: [UserRole.teacher],
-        child: AcademicSetupWizardScreen(),
       ),
       AppRoutes.adminDashboard: (context) => const AuthGuard(
         allowedRoles: [UserRole.admin],

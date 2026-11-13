@@ -26,6 +26,7 @@ class UserModel {
   final String? enrolledSubjectName;
   final String? contactNumber;
   final bool isArchived;
+  final DateTime? createdAt;
   // Student-specific fields
   final String? firstName;
   final String? middleName;
@@ -65,6 +66,7 @@ class UserModel {
     this.enrolledSubjectName,
     this.contactNumber,
     this.isArchived = false,
+    this.createdAt,
     this.isSetupComplete = false,
     this.hideTermGradesFromParent = false,
     this.hideFinalGradesFromParent = false,
@@ -176,6 +178,7 @@ class UserModel {
     String? enrolledSubjectName,
     String? contactNumber,
     bool? isArchived,
+    DateTime? createdAt,
     String? firstName,
     String? middleName,
     String? lastName,
@@ -212,6 +215,7 @@ class UserModel {
       enrolledSubjectName: enrolledSubjectName ?? this.enrolledSubjectName,
       contactNumber: contactNumber ?? this.contactNumber,
       isArchived: isArchived ?? this.isArchived,
+      createdAt: createdAt ?? this.createdAt,
       isSetupComplete: isSetupComplete ?? this.isSetupComplete,
       hideTermGradesFromParent:
           hideTermGradesFromParent ?? this.hideTermGradesFromParent,
@@ -277,6 +281,8 @@ class UserModel {
       'enrolledSubjectName': enrolledSubjectName,
       'contactNumber': contactNumber,
       'isArchived': isArchived,
+      'createdAt': createdAt?.toIso8601String(),
+      'created_at': createdAt?.toIso8601String(),
       'firstName': firstName,
       'middleName': middleName,
       'lastName': lastName,
@@ -322,6 +328,11 @@ class UserModel {
       enrolledSubjectName: json['enrolledSubjectName'] as String?,
       contactNumber: json['contactNumber'] as String?,
       isArchived: json['isArchived'] as bool? ?? false,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : (json['createdAt'] != null
+              ? DateTime.tryParse(json['createdAt'].toString())
+              : null),
       firstName: json['firstName'] as String?,
       middleName: json['middleName'] as String?,
       lastName: json['lastName'] as String?,

@@ -56,6 +56,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
               subject_offerings!inner (
                 id,
                 is_archived,
+                is_final_grade_published,
                 ww_weight,
                 pt_weight,
                 ex_weight,
@@ -72,7 +73,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
         client
             .from('term_grades')
             .select(
-              'subject_offering_id, term_number, initial_grade, transmuted_grade, remarks, is_finalized',
+              'subject_offering_id, term_number, initial_grade, transmuted_grade, remarks, is_finalized, is_published',
             )
             .eq('student_id', student.id),
       ]);
@@ -173,10 +174,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
       appBar: AppBar(
         title: const Text(
           'My Grades',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         actions: [
           IconButton(
@@ -466,11 +464,14 @@ class _StudentSubjectGradeCard extends StatelessWidget {
     final grades = <int, int?>{
       for (final term in activeTerms) term: _encodedTermGrade(termGrades[term]),
     };
-    final finalGrade = DepEdGradingEngine.computeFinalGrade(
-      termsTaught: activeTerms.length,
-      activeTerms: activeTerms,
-      termGrades: grades,
-    );
+    final isFinalPublished = offering['is_final_grade_published'] == true;
+    final finalGrade = isFinalPublished
+        ? DepEdGradingEngine.computeFinalGrade(
+            termsTaught: activeTerms.length,
+            activeTerms: activeTerms,
+            termGrades: grades,
+          )
+        : null;
     final rawTeacherName = [teacher['first_name'], teacher['last_name']]
         .where((part) => part != null && part.toString().trim().isNotEmpty)
         .join(' ');
@@ -638,7 +639,9 @@ class _StudentSubjectGradeCard extends StatelessWidget {
                   ),
                 ] else
                   Text(
-                    'Awaiting grades',
+                    offering['is_final_grade_published'] == true
+                        ? 'Awaiting grades'
+                        : 'Pending / Not published',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -668,6 +671,8 @@ class _TermGradeTile extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final encodedGrade = isActive ? _encodedTermGrade(grade) : null;
+    final isUnpublished =
+        isActive && grade != null && grade!['is_published'] != true;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
       decoration: BoxDecoration(
@@ -685,12 +690,23 @@ class _TermGradeTile extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           Text(
-            !isActive ? 'N/A' : encodedGrade?.toString() ?? '—',
+            !isActive ? 'N/A' : (encodedGrade != null ? '$encodedGrade' : '—'),
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.bold,
               color: isActive ? scheme.onSurface : scheme.onSurfaceVariant,
             ),
           ),
+          if (isUnpublished) ...[
+            const SizedBox(height: 3),
+            Text(
+              'Not published',
+              style: TextStyle(
+                fontSize: 8.5,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -749,6 +765,7 @@ List<int> _activeTerms(int termsTaught, String termBlock) {
 
 int? _encodedTermGrade(Map<String, dynamic>? row) {
   if (row == null) return null;
+  if (row['is_published'] != true) return null;
   final grade = row['transmuted_grade'];
   final parsed = grade is num ? grade.toDouble() : double.tryParse('$grade');
   final remarks = row['remarks']?.toString().toLowerCase();

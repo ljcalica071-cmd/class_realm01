@@ -215,12 +215,12 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     onResume();
   }
 
-  /// onDestroy(): App is closed/detached. Disposes resources cleanly and persists final state.
+  /// onDestroy(): App is closed/detached. Terminates active session and persists final state.
   void onDestroy() {
     stateNotifier.value = AppActivityLifecycleState.destroyed;
-    debugPrint('[AppLifecycleCoordinator] onDestroy()');
+    debugPrint('[AppLifecycleCoordinator] onDestroy() -> terminating session');
 
-    unawaited(AuthRepository.instance.recordHeartbeat());
+    AuthRepository.instance.handleAppOrTabDestroyed();
   }
 
   // =========================================================================
@@ -272,12 +272,14 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
           if (isOnlineNotifier.value != false) isOnlineNotifier.value = false;
           return false;
         }
+        // On Web, avoid cross-origin HEAD to google.com/generate_204 (blocked by CORS).
+        hasConnection = true;
+      } else {
+        final response = await http
+            .head(Uri.parse('https://www.google.com/generate_204'))
+            .timeout(const Duration(seconds: 4));
+        hasConnection = response.statusCode >= 200 && response.statusCode < 400;
       }
-
-      final response = await http
-          .head(Uri.parse('https://www.google.com/generate_204'))
-          .timeout(const Duration(seconds: 4));
-      hasConnection = response.statusCode >= 200 && response.statusCode < 400;
     } catch (_) {
       try {
         final supaUri = Uri.parse(Supabase.instance.client.rest.url);

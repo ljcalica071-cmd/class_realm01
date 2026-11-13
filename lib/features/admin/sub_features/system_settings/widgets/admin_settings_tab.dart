@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:class_realm/features/admin/sub_features/broadcasts/widgets/admin_broadcasts_tab.dart';
 
 /// Deprecated prototype tab. Use [AdminBroadcastsTab] instead.
-@deprecated
+@Deprecated('Use AdminBroadcastsTab instead.')
 class AdminSettingsTab extends StatelessWidget {
   const AdminSettingsTab({super.key});
 

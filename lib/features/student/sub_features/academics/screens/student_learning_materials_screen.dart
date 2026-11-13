@@ -285,7 +285,12 @@ class _StudentLearningMaterialsScreenState
     }
 
     try {
-      // 1. Fetch folders for this offering (strictly counting student-visible materials)
+      // 1. Ensure the 4 default term folders exist in Supabase DB for this offering
+      if (_currentFolder == null) {
+        await _materialRepo.ensureDefaultTermFolders(offeringId);
+      }
+
+      // 2. Fetch folders for this offering (strictly counting student-visible materials)
       final allFolders = await _materialRepo.getFolders(
         subjectOfferingId: offeringId,
         parentFolderId: _currentFolder?.id,
@@ -296,7 +301,7 @@ class _StudentLearningMaterialsScreenState
           .where((f) => f.isVisibleToStudents && !f.isArchived)
           .toList();
 
-      // 2. Fetch materials using hierarchical visibility check
+      // 3. Fetch materials using hierarchical visibility check
       List<ClassRealmMaterial> visibleMaterials = [];
       if (_currentFolder != null) {
         final rawMaterials = await _materialRepo

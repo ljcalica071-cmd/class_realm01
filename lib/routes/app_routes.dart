@@ -7,14 +7,12 @@ class AppRoutes {
 
   static const String splash = '/splash';
   static const String login = '/login';
-  static const String adminAddTeacher = '/admin/add-teacher';
   static const String forgotPassword = '/forgot-password';
   static const String studentFirstLogin = '/student/first-login';
   static const String parentFirstLogin = '/parent/first-login';
   static const String teacherFirstLogin = '/teacher/first-login';
 
   // Dashboards & Wizards
-  static const String academicSetup = '/teacher/academic-setup';
   static const String adminDashboard = '/admin/dashboard';
   static const String adminBroadcasts = '/admin/broadcasts';
   static const String adminTeacherManagement = '/admin/teacher-management';
@@ -140,12 +138,10 @@ class AppRoutes {
         adminDashboard,
         adminBroadcasts,
         adminTeacherManagement,
-        adminAddTeacher,
         adminActivityAnalytics,
         adminProfile,
       }.contains(clean),
       UserRole.teacher => const {
-        academicSetup,
         teacherDashboard,
         teacherClassroomSetup,
         teacherGradebook,

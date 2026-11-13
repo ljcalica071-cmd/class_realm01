@@ -117,8 +117,7 @@ bool getWebNavigatorOnlineStatus() {
   return getWebNavigatorOnlineStatusPlatform();
 }
 
-
-/// Opens a native browser file input dialog on Web and reads the selected file via FileReader.
+///Opens a native browser file input dialog on Web and reads the selected file via FileReader.
 /// Immune to FilePicker's window.onfocus cancellation race condition on Windows browsers.
 void pickWebFile({
   required String accept,
@@ -130,5 +129,23 @@ void pickWebFile({
     onFileSelected: (bytes, fileName, size) {
       onFileSelected(bytes, fileName, size);
     },
+  );
+}
+
+/// Sends a browser keepalive PATCH request on pagehide/beforeunload so closing a tab
+/// immediately marks the active session as terminated in Supabase.
+void sendWebKeepaliveSessionEnd({
+  required String supabaseUrl,
+  required String supabaseAnonKey,
+  required String sessionId,
+  required String logoutAtIso,
+  required int durationSeconds,
+}) {
+  sendWebKeepaliveSessionEndPlatform(
+    supabaseUrl: supabaseUrl,
+    supabaseAnonKey: supabaseAnonKey,
+    sessionId: sessionId,
+    logoutAtIso: logoutAtIso,
+    durationSeconds: durationSeconds,
   );
 }

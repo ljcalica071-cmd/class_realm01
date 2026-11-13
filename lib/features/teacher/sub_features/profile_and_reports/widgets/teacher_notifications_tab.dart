@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
@@ -168,9 +169,30 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
   /// 2. Apply search query
   /// 3. Apply subject filter dropdown
   List<AppNotificationModel> get _filteredNotifications {
+    final currentUser = AuthRepository.instance.currentUser;
+    if (currentUser != null) {
+      if (currentUser.isArchived ||
+          currentUser.status == AccountStatus.archived ||
+          currentUser.status == AccountStatus.deactivated) {
+        return [];
+      }
+      final isEligible = currentUser.status == AccountStatus.active ||
+          currentUser.status == AccountStatus.pendingFirstLogin;
+      if (!isEligible) {
+        return [];
+      }
+    }
+
     final handledSubjectNames = _distinctHandledSubjects.map((s) => s.toLowerCase()).toSet();
 
     return _notifications.where((n) {
+      // Exclude announcements broadcasted before the teacher account existed
+      if (currentUser?.createdAt != null && n.type.toLowerCase() == 'announcement') {
+        if (n.timestamp.isBefore(currentUser!.createdAt!)) {
+          return false;
+        }
+      }
+
       final title = n.title.toLowerCase();
       final body = n.message.toLowerCase();
       final fullText = '$title $body';

@@ -538,7 +538,6 @@ void main() {
       AppRoutes.adminTeacherManagement,
       AppRoutes.adminActivityAnalytics,
       AppRoutes.adminProfile,
-      AppRoutes.adminAddTeacher,
     ];
 
     final teacherRoutes = <String>[
@@ -557,7 +556,6 @@ void main() {
       AppRoutes.teacherNotifications,
       AppRoutes.teacherProfile,
       AppRoutes.teacherSettings,
-      AppRoutes.academicSetup,
     ];
 
     final studentRoutes = <String>[

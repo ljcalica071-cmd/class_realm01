@@ -891,8 +891,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return 'Attendance Logs';
       case 6:
         return 'Exam Checker';
-      case 8:
-        return 'Grading Weights';
       case 9:
         return 'Performance Analytics';
       case 12:
@@ -1092,15 +1090,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           examReviews: examReviews,
           quizzes: quizzesAndExams,
         );
-      case 8:
-        return TeacherGradingSystemTab(criteria: criteria);
       case 9:
         return TeacherGradesTab(
           students: activeStudents,
           onNavigateToGradebook: () => _onSelectTab(18),
         );
-      case 11:
-        return const TeacherAcademicSetupTab();
       case 17:
         return TeacherClassroomSetupTab(
           onNavigateTo: (idx) => _onSelectTab(idx),

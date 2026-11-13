@@ -390,6 +390,12 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     } else if (cleanPath.contains('/learning_materials/')) {
       cleanPath = cleanPath.split('/learning_materials/').last;
     }
+    if (cleanPath.startsWith('classwork-materials/')) {
+      cleanPath = cleanPath.substring('classwork-materials/'.length);
+    }
+    if (cleanPath.startsWith('learning_materials/')) {
+      cleanPath = cleanPath.substring('learning_materials/'.length);
+    }
     if (cleanPath.contains('?')) {
       cleanPath = cleanPath.split('?').first;
     }

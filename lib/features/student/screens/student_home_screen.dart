@@ -1009,14 +1009,17 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   child: Icon(icon, color: color, size: 20),
                 ),
                 const SizedBox(height: 7),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onSurface,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
                 ),
               ],

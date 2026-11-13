@@ -1215,6 +1215,7 @@ class SupabaseParentRepository {
               terms_taught,
               term_block,
               is_archived,
+              is_final_grade_published,
               subjects!inner ( id, subject_name, subject_code, grade_level, is_archived ),
               sections ( id, section_name, grade_level ),
               teacher_profiles ( teacher_id, first_name, middle_name, last_name, gender )
@@ -1422,9 +1423,7 @@ class SupabaseParentRepository {
     try {
       final resp = await _client
           .from('student_settings')
-          .select(
-            'hide_term_grades_from_parent, hide_final_grades_from_parent',
-          )
+          .select('hide_term_grades_from_parent, hide_final_grades_from_parent')
           .eq('student_id', studentId)
           .maybeSingle();
       if (resp != null) {
@@ -1540,110 +1539,14 @@ class SupabaseParentRepository {
   }
 
   /// Fetches the student's real weekly schedules directly from their enrolled
-  /// `subject_offerings` in `public.student_enrollments` -> `public.teacher_schedule`,
-  /// falling back to `fallbackSection` if needed.
+  /// `subject_offerings` in `public.student_enrollments` -> `public.teacher_schedule`.
   Future<List<ScheduleModel>> getSchedulesForStudent(
     String studentId, {
     String? fallbackSection,
   }) async {
-    if (studentId.trim().isEmpty) {
-      if (fallbackSection != null && fallbackSection.trim().isNotEmpty) {
-        return SupabaseScheduleRepository.instance.getSchedules(
-          section: fallbackSection.trim(),
-        );
-      }
-      return [];
-    }
-
-    try {
-      final enrollResp = await _client
-          .from('student_enrollments')
-          .select('''
-            subject_offering_id,
-            subject_offerings!inner (
-              is_archived,
-              subjects!inner ( is_archived )
-            )
-          ''')
-          .eq('student_id', studentId)
-          .ilike('status', 'enrolled')
-          .eq('subject_offerings.is_archived', false)
-          .eq('subject_offerings.subjects.is_archived', false);
-
-      final offeringIds = (enrollResp as List)
-          .map((r) => r['subject_offering_id']?.toString())
-          .whereType<String>()
-          .where((id) => id.isNotEmpty)
-          .toSet()
-          .toList();
-
-      if (offeringIds.isNotEmpty) {
-        final schedResp = await _client
-            .from('teacher_schedule')
-            .select('''
-              id, day_of_week, start_time, end_time, room, is_active,
-              subject_offerings!inner (
-                id, teacher_id, ww_weight, pt_weight, ex_weight, is_archived,
-                subjects!inner ( id, subject_name, grade_level, is_archived ),
-                sections ( id, section_name, grade_level )
-              )
-            ''')
-            .filter('subject_offering_id', 'in', offeringIds)
-            .eq('subject_offerings.is_archived', false)
-            .eq('subject_offerings.subjects.is_archived', false)
-            .order('day_of_week')
-            .order('start_time');
-
-        final list = <ScheduleModel>[];
-        for (final row in (schedResp as List)) {
-          final offering =
-              row['subject_offerings'] as Map<String, dynamic>? ?? {};
-          final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
-          final sec = offering['sections'] as Map<String, dynamic>? ?? {};
-
-          final subName = sub['subject_name']?.toString() ?? 'Subject';
-          final secName = sec['section_name']?.toString() ?? 'Section';
-          final dayIndex = row['day_of_week'] is int
-              ? row['day_of_week'] as int
-              : int.tryParse(row['day_of_week']?.toString() ?? '1') ?? 1;
-
-          list.add(
-            ScheduleModel(
-              id: row['id'].toString(),
-              subject: subName,
-              section: secName,
-              room: row['room']?.toString() ?? '',
-              dayOfWeek: ScheduleModel.dayFromIndex(dayIndex),
-              startTime: ScheduleModel.formatTime24to12(
-                row['start_time']?.toString() ?? '08:00:00',
-              ),
-              endTime: ScheduleModel.formatTime24to12(
-                row['end_time']?.toString() ?? '09:00:00',
-              ),
-              sectionId: sec['id']?.toString() ?? secName,
-              subjectId: sub['id']?.toString(),
-              teacherId: offering['teacher_id']?.toString(),
-              gradeLevel: sub['grade_level'] is int
-                  ? sub['grade_level'] as int
-                  : null,
-              wwWeight: (offering['ww_weight'] as num?)?.toDouble() ?? 20.0,
-              ptWeight: (offering['pt_weight'] as num?)?.toDouble() ?? 50.0,
-              exWeight: (offering['ex_weight'] as num?)?.toDouble() ?? 30.0,
-            ),
-          );
-        }
-        if (list.isNotEmpty) return list;
-      }
-    } catch (e) {
-      debugPrint('Error fetching schedules by student enrollments: $e');
-    }
-
-    if (fallbackSection != null && fallbackSection.trim().isNotEmpty) {
-      return SupabaseScheduleRepository.instance.getSchedules(
-        section: fallbackSection.trim(),
-      );
-    }
-    return [];
+    return SupabaseScheduleRepository.instance.getSchedulesForStudent(
+      studentId,
+    );
   }
 
   /// Verifies the parent's current password and updates their password in

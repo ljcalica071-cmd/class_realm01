@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/models/user_model.dart';
 
 enum InAppNotificationSeverity {
   info,
@@ -94,6 +96,20 @@ class InAppNotificationService {
       return;
     }
 
+    final currentUser = AuthRepository.instance.currentUser;
+    if (currentUser != null) {
+      if (currentUser.isArchived ||
+          currentUser.status == AccountStatus.archived ||
+          currentUser.status == AccountStatus.deactivated) {
+        return; // Archived or deactivated accounts cannot receive announcements
+      }
+      final isEligible = currentUser.status == AccountStatus.active ||
+          currentUser.status == AccountStatus.pendingFirstLogin;
+      if (!isEligible) {
+        return;
+      }
+    }
+
     _announcementsChannel = Supabase.instance.client
         .channel('global_announcements_channel_${DateTime.now().millisecondsSinceEpoch}')
         .onPostgresChanges(
@@ -103,11 +119,34 @@ class InAppNotificationService {
           callback: (payload) {
             try {
               if (normalizedRole == 'admin') return;
+              final user = AuthRepository.instance.currentUser;
+              if (user != null) {
+                if (user.isArchived ||
+                    user.status == AccountStatus.archived ||
+                    user.status == AccountStatus.deactivated) {
+                  return;
+                }
+                final isUserEligible = user.status == AccountStatus.active ||
+                    user.status == AccountStatus.pendingFirstLogin;
+                if (!isUserEligible) return;
+              }
+
               final newRecord = payload.newRecord;
               if (newRecord.isEmpty) return;
 
               final isArchived = newRecord['is_archived'] as bool? ?? false;
               if (isArchived) return;
+
+              // Check if user was registered AFTER this announcement was created
+              if (user?.createdAt != null) {
+                final notifCreatedAtStr = newRecord['created_at']?.toString();
+                if (notifCreatedAtStr != null) {
+                  final notifCreatedAt = DateTime.tryParse(notifCreatedAtStr);
+                  if (notifCreatedAt != null && notifCreatedAt.isBefore(user!.createdAt!)) {
+                    return; // New user cannot see announcements from before their creation
+                  }
+                }
+              }
 
               final targetAudience = (newRecord['target_audience'] as String? ?? 'all').toLowerCase();
               final title = newRecord['title'] as String? ?? 'School Announcement';

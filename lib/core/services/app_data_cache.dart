@@ -279,7 +279,7 @@ class AppDataCache {
     }
   }
 
-  /// Invalidates a specific cache key.
+  /// Invalidates or removes a specific cache key.
   void invalidate(String key) {
     _memoryCache.remove(key);
     _timestamps.remove(key);
@@ -288,6 +288,9 @@ class AppDataCache {
     _pinnedKeys.remove(key);
     unawaited(LocalStorageService.remove(key));
   }
+
+  /// Alias for [invalidate] for compatibility across callers.
+  void remove(String key) => invalidate(key);
 
   /// Invalidates all keys starting with [prefix] (e.g. 'teacher_students_').
   void invalidatePrefix(String prefix) {

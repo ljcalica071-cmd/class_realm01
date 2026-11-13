@@ -65,6 +65,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
 
   static int? _encodedTermGrade(Map<String, dynamic>? row) {
     if (row == null) return null;
+    if (row['is_published'] != true) return null;
     final grade = row['transmuted_grade'];
     final parsed = grade is num ? grade.toDouble() : double.tryParse('$grade');
     final remarks = row['remarks']?.toString().toLowerCase();
@@ -92,8 +93,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
     final sectionName = sectionsMap['section_name']?.toString() ?? '';
 
     final teacherMap = _asMap(offering['teacher_profiles']);
-    final teacherFirstName =
-        teacherMap['first_name']?.toString().trim() ?? '';
+    final teacherFirstName = teacherMap['first_name']?.toString().trim() ?? '';
     final teacherMiddleName =
         teacherMap['middle_name']?.toString().trim() ?? '';
     final teacherLastName = teacherMap['last_name']?.toString().trim() ?? '';
@@ -153,14 +153,16 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
         student?.effectiveHideFinalGradesFromParent ?? false;
 
     final encodedGradesMap = <int, int?>{
-      for (final term in activeTerms)
-        term: _encodedTermGrade(termGrades[term]),
+      for (final term in activeTerms) term: _encodedTermGrade(termGrades[term]),
     };
-    final computedFinalGrade = DepEdGradingEngine.computeFinalGrade(
-      termsTaught: activeTerms.length,
-      activeTerms: activeTerms,
-      termGrades: encodedGradesMap,
-    );
+    final isFinalPublished = offering['is_final_grade_published'] == true;
+    final computedFinalGrade = isFinalPublished
+        ? DepEdGradingEngine.computeFinalGrade(
+            termsTaught: activeTerms.length,
+            activeTerms: activeTerms,
+            termGrades: encodedGradesMap,
+          )
+        : null;
 
     final relevantSchedules = schedules.where((s) {
       final sSubject = s.subject.toLowerCase();
@@ -710,6 +712,9 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                   isActive: activeTerms.contains(term),
                                   encodedGrade: encodedGradesMap[term],
                                   isHiddenBy18Plus: hideTermGrades,
+                                  isUnpublished:
+                                      termGrades[term] != null &&
+                                      termGrades[term]!['is_published'] != true,
                                 ),
                               ],
                             ],
@@ -774,7 +779,10 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
                                     : Text(
                                         computedFinalGrade != null
                                             ? '$computedFinalGrade (${DepEdGradingEngine.getRemarks(computedFinalGrade)})'
-                                            : 'Ongoing / Awaiting Finalization',
+                                            : (offering['is_final_grade_published'] ==
+                                                      true
+                                                  ? 'Ongoing / Awaiting Finalization'
+                                                  : 'Pending / Not published'),
                                         textAlign: TextAlign.right,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -871,6 +879,7 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
     required bool isActive,
     required int? encodedGrade,
     required bool isHiddenBy18Plus,
+    bool isUnpublished = false,
   }) {
     if (isHiddenBy18Plus) {
       return Expanded(
@@ -962,9 +971,11 @@ class ParentSubjectDetailsSheet extends StatelessWidget {
             Text(
               !isActive
                   ? 'Inactive'
-                  : (!hasGrade
-                        ? 'Ongoing'
-                        : (isPassing ? 'Passed' : 'Needs Help')),
+                  : (isUnpublished
+                        ? 'Not published'
+                        : (!hasGrade
+                              ? 'Ongoing'
+                              : (isPassing ? 'Passed' : 'Needs Help'))),
               style: TextStyle(
                 fontSize: 9.5,
                 fontWeight: FontWeight.w600,
