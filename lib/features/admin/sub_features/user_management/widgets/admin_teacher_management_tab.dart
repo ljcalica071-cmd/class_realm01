@@ -524,7 +524,6 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                   ),
                 ],
               ),
-              _buildArchiveButton(theme, archivedTeachers.length),
             ],
           ),
           const SizedBox(height: 18),
@@ -576,6 +575,7 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
                     label: 'Add Teacher',
                     onPressed: _addTeacher,
                   ),
+                  _buildArchiveButton(theme, archivedTeachers.length),
                 ],
               );
 
