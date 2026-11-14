@@ -17,6 +17,7 @@ import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/shared/widgets/app_top_toast.dart';
+import 'package:class_realm/core/utils/deped_ecr_export_service.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// DepEd-style Strengthened SHS Class Record (Gradebook).
@@ -77,6 +78,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
   Timer? _cooldownTimer;
   final Map<int, bool> _termPublished = {1: false, 2: false, 3: false};
   bool _isFinalGradePublished = false;
+  bool _isExportingEcr = false;
 
   final Map<int, Map<String, Map<int, double?>>> _termHps = {
     1: {'ww': {}, 'pt': {}, 'ex': {}},
@@ -1889,10 +1891,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
               ],
             ),
           ),
-          // Right: Publish / Unpublish Button & School Year Badge
+          // Right: Export ECR Button, Publish / Unpublish Button & School Year Badge
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              _buildExportEcrButton(theme, isDark),
+              const SizedBox(width: 8),
               _buildPublishButton(theme, isDark),
               const SizedBox(width: 8),
               Container(
@@ -4120,6 +4124,183 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         term: term,
         subject: _selectedSubject,
         section: _selectedSection,
+      ),
+    );
+  }
+
+  Future<void> _exportEcr() async {
+    if (_isExportingEcr) return;
+    final subject = _selectedSubject;
+    final section = _selectedSection;
+    final data = _currentSubjectData;
+    if (subject == null || section == null || data == null) {
+      AppTopToast.error(context, 'No active subject offering selected.');
+      return;
+    }
+
+    if (!DepEdEcrExportService.isTemplateSubject(subject)) {
+      AppTopToast.warning(
+        context,
+        'Official DepEd ECR export is only available for standard Strengthened SHS template subjects.',
+      );
+      return;
+    }
+
+    if (_students.isEmpty) {
+      AppTopToast.warning(
+        context,
+        'Cannot export: No enrolled students found for this subject and section.',
+      );
+      return;
+    }
+
+    setState(() => _isExportingEcr = true);
+
+    try {
+      final user = AuthRepository.instance.currentUser;
+      final teacherName = user?.fullName ?? 'Teacher';
+
+      await DepEdEcrExportService.exportEcr(
+        teacherName: teacherName,
+        subjectName: subject,
+        sectionName: section,
+        gradeLevel: data['grade_level'],
+        maleStudents: _maleStudents,
+        femaleStudents: _femaleStudents,
+        termHps: _termHps,
+        termScores: _termScores,
+        schoolYear: data['school_year']?.toString() ?? '2026-2027',
+      );
+
+      if (mounted) {
+        AppTopToast.success(
+          context,
+          'DepEd E-Class Record (.xlsx) exported successfully!',
+        );
+      }
+    } catch (e) {
+      debugPrint('Error exporting DepEd ECR: $e');
+      if (mounted) {
+        AppTopToast.error(
+          context,
+          'Failed to export DepEd E-Class Record. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExportingEcr = false);
+      }
+    }
+  }
+
+  Widget _buildExportEcrButton(ThemeData theme, bool isDark) {
+    final isTemplate = DepEdEcrExportService.isTemplateSubject(_selectedSubject);
+    final hasStudents = _students.isNotEmpty;
+    final isDisabled =
+        _isExportingEcr ||
+        _currentSubjectData == null ||
+        !isTemplate ||
+        !hasStudents;
+
+    // Emerald Green branding for Excel ECR export
+    const Color ecrGreen = Color(0xFF0F8A48);
+
+    final Color effectiveFg;
+    final Color effectiveBg;
+    final Border? effectiveBorder;
+
+    if (isDisabled) {
+      effectiveFg = isDark
+          ? Colors.white38
+          : AppTheme.catSlate.withValues(alpha: 0.6);
+      effectiveBg = isDark
+          ? Colors.white10
+          : Colors.black.withValues(alpha: 0.04);
+      effectiveBorder = Border.all(
+        color: isDark ? Colors.white12 : const Color(0xFFCBD5E1),
+      );
+    } else {
+      effectiveFg = isDark ? const Color(0xFF34D399) : ecrGreen;
+      effectiveBg = isDark
+          ? const Color(0xFF34D399).withValues(alpha: 0.15)
+          : ecrGreen.withValues(alpha: 0.08);
+      effectiveBorder = Border.all(
+        color: (isDark ? const Color(0xFF34D399) : ecrGreen).withValues(
+          alpha: isDark ? 0.45 : 0.35,
+        ),
+        width: 1.2,
+      );
+    }
+
+    final String tooltipMessage;
+    if (!isTemplate) {
+      tooltipMessage =
+          'Official DepEd ECR export is only available for standard Strengthened SHS template subjects.';
+    } else if (!hasStudents) {
+      tooltipMessage = 'Enroll students first before exporting E-Class Record.';
+    } else if (_isExportingEcr) {
+      tooltipMessage = 'Generating official DepEd ECR spreadsheet...';
+    } else {
+      tooltipMessage =
+          'Download official DepEd Order 15, s. 2026 Strengthened SHS E-Class Record (.xlsx)';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Tooltip(
+        message: tooltipMessage,
+        child: InkWell(
+          onTap: isDisabled ? null : _exportEcr,
+          borderRadius: BorderRadius.circular(6),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: effectiveBg,
+              borderRadius: BorderRadius.circular(6),
+              border: effectiveBorder,
+              boxShadow: (!isDisabled && !_isExportingEcr)
+                  ? [
+                      BoxShadow(
+                        color: (isDark ? const Color(0xFF34D399) : ecrGreen)
+                            .withValues(alpha: 0.15),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1.5),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isExportingEcr)
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(effectiveFg),
+                    ),
+                  )
+                else
+                  Icon(
+                    Icons.file_download_outlined,
+                    size: 14,
+                    color: effectiveFg,
+                  ),
+                const SizedBox(width: 6),
+                Text(
+                  _isExportingEcr ? 'Exporting...' : 'Export ECR',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: effectiveFg,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

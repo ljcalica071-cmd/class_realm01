@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
@@ -289,9 +290,72 @@ void main() {
       // Tap submit
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 4));
 
       expect(repository.lastCorrectedRecordId, 'rec-1');
       expect(repository.lastCorrectedReason, 'Medical certificate presented');
+    });
+
+    testWidgets('paginates early warning at-risk students at 5 per page with identical pagination styling', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final manyAtRisk = List.generate(
+        7,
+        (i) => AttendanceAtRiskStudent(
+          studentId: 's$i',
+          studentName: 'Student $i',
+          section: 'Grade 10-A',
+          absenceCount: 3 + i,
+        ),
+      );
+
+      repository.analyticsSummary = AttendanceAnalyticsSummary(
+        presenceRate: 75.0,
+        absencesAndExcuses: 25,
+        warningCount: 7,
+        presentCount: 20,
+        lateCount: 0,
+        absentCount: 25,
+        excusedCount: 0,
+        trendPoints: [],
+        atRiskStudents: manyAtRisk,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: AttendanceHistoryAnalyticsView(
+                subjectOfferingId: 'offering-101',
+                repository: repository,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Page 1 should show students 0-4
+      expect(find.text('Student 0'), findsOneWidget);
+      expect(find.text('Student 4'), findsOneWidget);
+      expect(find.text('Student 5'), findsNothing);
+      expect(find.text('Showing 1 to 5 of 7 entries'), findsOneWidget);
+      expect(find.text('Page 1 of 2'), findsOneWidget);
+
+      // Tap next page on the at-risk section
+      final nextBtn = find.byKey(const ValueKey('at_risk_next_page_button'));
+      await tester.ensureVisible(nextBtn);
+      await tester.tap(nextBtn);
+      await tester.pumpAndSettle();
+
+      // Page 2 should show students 5-6
+      expect(find.text('Student 0'), findsNothing);
+      expect(find.text('Student 5'), findsOneWidget);
+      expect(find.text('Student 6'), findsOneWidget);
+      expect(find.text('Showing 6 to 7 of 7 entries'), findsOneWidget);
+      expect(find.text('Page 2 of 2'), findsOneWidget);
     });
 
     testWidgets('displays skeleton loading shimmer instead of CircularProgressIndicator while loading', (tester) async {

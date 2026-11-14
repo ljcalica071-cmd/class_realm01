@@ -48,7 +48,11 @@ class AttendanceHistoryAnalyticsViewState
 
   void setPreset(AttendanceDatePreset preset) {
     if (preset == _selectedPreset) return;
-    setState(() => _selectedPreset = preset);
+    setState(() {
+      _selectedPreset = preset;
+      _historyCurrentPage = 1;
+      _atRiskCurrentPage = 1;
+    });
     if (preset != AttendanceDatePreset.custom) {
       _loadAll();
     } else {
@@ -66,6 +70,8 @@ class AttendanceHistoryAnalyticsViewState
       _customStartDate = _dateOnly(start);
       _customEndDate = _dateOnly(end);
       _selectedPreset = AttendanceDatePreset.custom;
+      _historyCurrentPage = 1;
+      _atRiskCurrentPage = 1;
     });
     if (!_hasInvalidCustomRange) {
       _loadAll();
@@ -93,7 +99,7 @@ class AttendanceHistoryAnalyticsViewState
   int _historyCurrentPage = 1;
   static const int _historyPageSize = 20;
   int _atRiskCurrentPage = 1;
-  static const int _atRiskPageSize = 10;
+  static const int _atRiskPageSize = 5;
   bool _isExportingCsv = false;
 
   String _getStudentDisplayName(String studentId) {
@@ -254,6 +260,7 @@ class AttendanceHistoryAnalyticsViewState
     if (cachedSummary != null) {
       _analyticsSummary = cachedSummary;
       _isLoadingAnalytics = false;
+      _atRiskCurrentPage = 1;
       if (AppDataCache.instance.isFresh(cacheKey)) {
         if (mounted) setState(() {});
         _chartAnimController.forward(from: 0.0);
@@ -274,6 +281,7 @@ class AttendanceHistoryAnalyticsViewState
       setState(() {
         _analyticsSummary = summary;
         _isLoadingAnalytics = false;
+        _atRiskCurrentPage = 1;
       });
       _chartAnimController.forward(from: 0.0);
     } catch (_) {
@@ -292,6 +300,7 @@ class AttendanceHistoryAnalyticsViewState
             atRiskStudents: [],
           );
           _isLoadingAnalytics = false;
+          _atRiskCurrentPage = 1;
         });
       }
     }
@@ -1911,73 +1920,73 @@ class AttendanceHistoryAnalyticsViewState
                         );
                       },
                     ),
-                    if (totalAtRisk > _atRiskPageSize) ...[
-                      const SizedBox(height: 12),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Showing ${totalAtRisk == 0 ? 0 : startIdx + 1} to $endIdx of $totalAtRisk at-risk learners',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.65,
-                                ),
+                    // Pagination Footer (5 per page, matching attendance logs)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Showing ${totalAtRisk == 0 ? 0 : startIdx + 1} to $endIdx of $totalAtRisk entries',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.65,
                               ),
                             ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(
-                                    LucideIcons.chevronLeft,
-                                    size: 18,
-                                  ),
-                                  onPressed: safePage > 1
-                                      ? () => setState(
-                                          () => _atRiskCurrentPage = safePage - 1,
-                                        )
-                                      : null,
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                key: const ValueKey('at_risk_prev_page_button'),
+                                icon: const Icon(
+                                  LucideIcons.chevronLeft,
+                                  size: 18,
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
+                                onPressed: safePage > 1
+                                    ? () => setState(
+                                        () => _atRiskCurrentPage = safePage - 1,
+                                      )
+                                    : null,
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.1,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.primary.withValues(
-                                      alpha: 0.1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    'Page $safePage of $totalPages',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: theme.colorScheme.primary,
-                                    ),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Page $safePage of $totalPages',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.primary,
                                   ),
                                 ),
-                                IconButton(
-                                  icon: const Icon(
-                                    LucideIcons.chevronRight,
-                                    size: 18,
-                                  ),
-                                  onPressed: safePage < totalPages
-                                      ? () => setState(
-                                          () => _atRiskCurrentPage = safePage + 1,
-                                        )
-                                      : null,
+                              ),
+                              IconButton(
+                                key: const ValueKey('at_risk_next_page_button'),
+                                icon: const Icon(
+                                  LucideIcons.chevronRight,
+                                  size: 18,
                                 ),
-                              ],
-                            ),
-                          ],
-                        ),
+                                onPressed: safePage < totalPages
+                                    ? () => setState(
+                                        () => _atRiskCurrentPage = safePage + 1,
+                                      )
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ],
                 );
               },
