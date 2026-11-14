@@ -88,6 +88,14 @@ class AuthRepository {
   String? get activeSessionId =>
       _activeSessionId ?? LocalStorageService.getActiveSessionId();
   Future<String?>? _inFlightSessionFuture;
+  DateTime? _lastLocalSessionInsertAt;
+  bool get isStartingOrJustStartedSession {
+    if (_inFlightSessionFuture != null) return true;
+    final last = _lastLocalSessionInsertAt;
+    if (last == null) return false;
+    return DateTime.now().difference(last).inSeconds < 6;
+  }
+
   bool _isLoggingOut = false;
   bool get isLoggingOut => _isLoggingOut;
 
@@ -414,11 +422,13 @@ class AuthRepository {
         );
 
         _activeSessionId = null;
+        _lastLocalSessionInsertAt = DateTime.now();
         await LocalStorageService.clearActiveSessionId();
         markWarmSession();
         await LocalStorageService.saveUser(_currentUser!);
         await LocalStorageService.markCredentialsSaved(cleanEmail);
         unawaited(LocalStorageService.saveLastInteraction(DateTime.now()));
+        broadcastWebAuthSyncEvent('login');
         unawaited(startSessionLog(_currentUser!, forceNewSession: true));
         return _currentUser;
       }
@@ -922,6 +932,7 @@ class AuthRepository {
     AppDataCache.instance.clearAll();
     StudentDashboardRepository.instance.clearMemoryCache();
     await LocalStorageService.clearAuth();
+    broadcastWebAuthSyncEvent('logout');
     try {
       await _firebaseAuth.signOut();
     } catch (_) {}
@@ -942,9 +953,10 @@ class AuthRepository {
     bool forceNewSession = false,
     bool allowCreateIfSuperseded = true,
   }) async {
-    if (_inFlightSessionFuture != null && !forceNewSession) {
+    if (_inFlightSessionFuture != null) {
       return _inFlightSessionFuture!;
     }
+    _lastLocalSessionInsertAt = DateTime.now();
     _inFlightSessionFuture = _doStartSessionLog(
       user,
       forceNewSession: forceNewSession,
@@ -953,6 +965,7 @@ class AuthRepository {
     try {
       return await _inFlightSessionFuture!;
     } finally {
+      _lastLocalSessionInsertAt = DateTime.now();
       _inFlightSessionFuture = null;
     }
   }
@@ -1107,6 +1120,7 @@ class AuthRepository {
         }
       } catch (_) {}
 
+      _lastLocalSessionInsertAt = DateTime.now();
       final res = await _supabaseClient
           .from('user_session_logs')
           .insert({
@@ -1120,11 +1134,13 @@ class AuthRepository {
           })
           .select('id')
           .single();
+      _lastLocalSessionInsertAt = DateTime.now();
       final sessionLogId = res['id']?.toString();
       if (sessionLogId != null) {
         _activeSessionId = sessionLogId;
         await LocalStorageService.saveActiveSessionId(sessionLogId);
         await LocalStorageService.saveSessionLoginAt(now);
+        broadcastWebAuthSyncEvent('login');
       }
       return sessionLogId;
     } catch (e) {

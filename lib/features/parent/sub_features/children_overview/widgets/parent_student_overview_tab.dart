@@ -9,7 +9,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/features/parent/sub_features/child_details/widgets/parent_subject_details_sheet.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class ParentStudentOverviewTab extends StatefulWidget {
   final UserModel? linkedStudent;
@@ -87,6 +87,7 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
 
   static int? _encodedTermGrade(Map<String, dynamic>? row) {
     if (row == null) return null;
+    if (row['is_published'] != true) return null;
     final raw = (row['transmuted_grade'] as num?)?.toInt();
     if (raw == null || raw <= 0) return null;
     final isFinalized = row['is_finalized'] == true;
@@ -136,7 +137,7 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
         client
             .from('term_grades')
             .select(
-              'subject_offering_id, term_number, initial_grade, transmuted_grade, remarks, is_finalized',
+              'subject_offering_id, term_number, initial_grade, transmuted_grade, remarks, is_finalized, is_published',
             )
             .eq('student_id', studentId),
       ]);
@@ -236,11 +237,14 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
       final encodedMap = <int, int?>{
         for (final t in activeTerms) t: _encodedTermGrade(terms[t]),
       };
-      final finalSubjGrade = DepEdGradingEngine.computeFinalGrade(
-        termsTaught: activeTerms.length,
-        activeTerms: activeTerms,
-        termGrades: encodedMap,
-      );
+      final isFinalPublished = off['is_final_grade_published'] == true;
+      final finalSubjGrade = isFinalPublished
+          ? DepEdGradingEngine.computeFinalGrade(
+              termsTaught: activeTerms.length,
+              activeTerms: activeTerms,
+              termGrades: encodedMap,
+            )
+          : null;
       if (finalSubjGrade != null) {
         totalGrades += finalSubjGrade;
         gradedSubjectsCount++;
@@ -347,14 +351,7 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
             const SizedBox(height: 10),
 
             if (_isLoadingSubjects)
-              Container(
-                height: 120,
-                alignment: Alignment.center,
-                child: LoadingAnimationWidget.staggeredDotsWave(
-                  color: theme.colorScheme.primary,
-                  size: 32,
-                ),
-              )
+              _buildSubjectsLoadingSkeleton(theme, isDark)
             else if (_offerings.isEmpty)
               Container(
                 width: double.infinity,
@@ -817,6 +814,47 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubjectsLoadingSkeleton(ThemeData theme, bool isDark) {
+    return ShimmerLoading(
+      child: Column(
+        children: List.generate(
+          3,
+          (_) => Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(
+                  alpha: isDark ? 0.16 : 0.1,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                const ShimmerBox(width: 44, height: 44, borderRadius: 11),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      ShimmerBox(width: 80, height: 16, borderRadius: 4),
+                      SizedBox(height: 6),
+                      ShimmerBox(width: 180, height: 16, borderRadius: 4),
+                      SizedBox(height: 6),
+                      ShimmerBox(width: 130, height: 12, borderRadius: 4),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

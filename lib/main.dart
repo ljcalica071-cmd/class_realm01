@@ -34,8 +34,10 @@ import 'features/student/sub_features/academics/screens/student_grades_screen.da
 import 'features/student/sub_features/academics/screens/student_learning_materials_screen.dart';
 import 'features/student/sub_features/schedule/screens/student_attendance_screen.dart';
 import 'features/student/sub_features/schedule/screens/student_schedule_screen.dart';
+import 'features/student/sub_features/profile/screens/student_settings_screen.dart';
 import 'features/parent/screens/parent_home_screen.dart';
 import 'features/parent/sub_features/child_details/widgets/parent_grades_tab.dart';
+import 'features/parent/sub_features/communications/widgets/parent_teacher_contact_view.dart';
 
 /// Runs a startup task with a strict timeout without letting its failure abort the boot sequence.
 Future<void> _guarded(
@@ -352,22 +354,17 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
     });
 
     final initialPath = _normalizeRoutePath(getBrowserUrlPath());
-    final initialQuery = getBrowserUrlQueryParams();
-    if (initialPath == AppRoutes.teacherClasswork && initialQuery.isNotEmpty) {
-      final tabParam = initialQuery['tab']?.toLowerCase();
-      int? catIdx;
-      if (tabParam == 'ww') {
-        catIdx = 0;
-      } else if (tabParam == 'pt') {
-        catIdx = 1;
-      } else if (tabParam == 'ex') {
-        catIdx = 2;
-      }
+    final tabIdxFromPath =
+        AppRoutes.teacherClassworkTabIndexForRoute(initialPath);
+    if (tabIdxFromPath != null) {
       LocalStorageService.saveTeacherClassworkNavState(
-        categoryTabIndex: catIdx,
-        activeAssessmentId: initialQuery['assessment'],
-        activeActivityId: initialQuery['activity'],
+        categoryTabIndex: tabIdxFromPath,
       );
+    }
+    if (initialPath != AppRoutes.teacherClassworkSubmissions &&
+        initialPath != AppRoutes.teacherClassworkProctoring &&
+        initialPath != AppRoutes.teacherClassworkItemAnalysis) {
+      LocalStorageService.clearTeacherClassworkSubView();
     }
     const restorableRoutes = {
       AppRoutes.adminDashboard,
@@ -381,6 +378,12 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.teacherManageStudents,
       AppRoutes.teacherManageParents,
       AppRoutes.teacherClasswork,
+      AppRoutes.teacherClassworkWrittenWorks,
+      AppRoutes.teacherClassworkPerformanceTasks,
+      AppRoutes.teacherClassworkExaminations,
+      AppRoutes.teacherClassworkSubmissions,
+      AppRoutes.teacherClassworkProctoring,
+      AppRoutes.teacherClassworkItemAnalysis,
       AppRoutes.teacherLessonPlanning,
       AppRoutes.teacherLearningMaterials,
       AppRoutes.teacherAttendance,
@@ -398,6 +401,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.studentMaterials,
       AppRoutes.studentGrades,
       AppRoutes.studentPerformance,
+      AppRoutes.studentSettings,
       AppRoutes.studentFirstLogin,
       AppRoutes.teacherFirstLogin,
       AppRoutes.parentFirstLogin,
@@ -407,6 +411,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.parentAlerts,
       AppRoutes.parentProfile,
       AppRoutes.parentGrades,
+      AppRoutes.parentTeachers,
     };
     if (restorableRoutes.contains(initialPath)) {
       _targetRoute = initialPath;
@@ -416,20 +421,7 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       if (_initialDestination == AppRoutes.teacherClasswork) {
         final nav = LocalStorageService.getTeacherClassworkNavState();
         final catIdx = (nav['categoryTabIndex'] as num?)?.toInt() ?? 0;
-        final tabParam = catIdx == 0 ? 'ww' : (catIdx == 1 ? 'pt' : 'ex');
-        final assessId = nav['activeAssessmentId']?.toString();
-        final actId = nav['activeActivityId']?.toString();
-        if (assessId != null && assessId.isNotEmpty) {
-          updateBrowserUrl(
-            '$_initialDestination?tab=$tabParam&assessment=$assessId',
-          );
-        } else if (actId != null && actId.isNotEmpty) {
-          updateBrowserUrl(
-            '$_initialDestination?tab=$tabParam&activity=$actId',
-          );
-        } else {
-          updateBrowserUrl('$_initialDestination?tab=$tabParam');
-        }
+        updateBrowserUrl(AppRoutes.teacherClassworkRouteForTabIndex(catIdx));
       } else {
         updateBrowserUrl(_initialDestination);
       }
@@ -621,6 +613,30 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         allowedRoles: [UserRole.teacher],
         child: TeacherDashboardScreen(initialSelectedIndex: 1),
       ),
+      AppRoutes.teacherClassworkWrittenWorks: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
+      AppRoutes.teacherClassworkPerformanceTasks: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
+      AppRoutes.teacherClassworkExaminations: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
+      AppRoutes.teacherClassworkSubmissions: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
+      AppRoutes.teacherClassworkProctoring: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
+      AppRoutes.teacherClassworkItemAnalysis: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
       AppRoutes.teacherLessonPlanning: (context) => const AuthGuard(
         allowedRoles: [UserRole.teacher],
         child: TeacherDashboardScreen(initialSelectedIndex: 3),
@@ -690,6 +706,10 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         allowedRoles: [UserRole.student],
         child: StudentAcademicPerformanceScreen(),
       ),
+      AppRoutes.studentSettings: (context) => const AuthGuard(
+        allowedRoles: [UserRole.student],
+        child: StudentSettingsScreen(),
+      ),
       // Parent Routes with sub-route support
       AppRoutes.parentHome: (context) => const AuthGuard(
         allowedRoles: [UserRole.parent],
@@ -714,6 +734,10 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.parentGrades: (context) => const AuthGuard(
         allowedRoles: [UserRole.parent],
         child: ParentGradesScreen(initialStudent: null),
+      ),
+      AppRoutes.parentTeachers: (context) => const AuthGuard(
+        allowedRoles: [UserRole.parent],
+        child: ParentTeacherContactView(),
       ),
     };
   }

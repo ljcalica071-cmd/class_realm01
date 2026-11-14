@@ -4159,7 +4159,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
 
     final IconData icon = _isPublishing || inCooldown
         ? Icons.hourglass_top_rounded
-        : (isPublished ? LucideIcons.eyeOff : LucideIcons.globe);
+        : (isPublished ? Icons.visibility_off_outlined : Icons.public_rounded);
 
     // 60-30-10 palette: 10% accent color (primary)
     final Color accentColor = theme.colorScheme.primary;
@@ -4170,13 +4170,13 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
 
     if (isDisabled) {
       effectiveFg = isDark
-          ? Colors.white38
-          : AppTheme.catSlate.withValues(alpha: 0.6);
+          ? Colors.white60
+          : const Color(0xFF475569);
       effectiveBg = isDark
           ? Colors.white10
-          : Colors.black.withValues(alpha: 0.04);
+          : const Color(0xFFF1F5F9);
       effectiveBorder = Border.all(
-        color: isDark ? Colors.white12 : const Color(0xFFCBD5E1),
+        color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
       );
     } else if (isPublished) {
       effectiveFg = accentColor;
@@ -4470,8 +4470,8 @@ class _PublishConfirmDialogContentState
                     ),
                     child: Icon(
                       widget.willPublish
-                          ? LucideIcons.globe
-                          : LucideIcons.eyeOff,
+                          ? Icons.public_rounded
+                          : Icons.visibility_off_outlined,
                       size: 20,
                       color: accent,
                     ),
@@ -4577,8 +4577,8 @@ class _PublishConfirmDialogContentState
                         : () => Navigator.of(context).pop(true),
                     icon: Icon(
                       widget.willPublish
-                          ? LucideIcons.globe
-                          : LucideIcons.eyeOff,
+                          ? Icons.public_rounded
+                          : Icons.visibility_off_outlined,
                       size: 16,
                     ),
                     label: Text(

@@ -638,10 +638,12 @@ class _TeacherDashboardOverviewTabState
                   ),
                 ),
                 const SizedBox(height: 20),
-                _buildQuickActionsCard(
-                  context,
-                  theme: theme,
-                  childAspectRatio: 2.1,
+                SizedBox(
+                  height: 320,
+                  child: _buildQuickActionsCard(
+                    context,
+                    theme: theme,
+                  ),
                 ),
               ],
             )
@@ -672,7 +674,6 @@ class _TeacherDashboardOverviewTabState
                     child: _buildQuickActionsCard(
                       context,
                       theme: theme,
-                      childAspectRatio: 1.55,
                     ),
                   ),
                 ),
@@ -871,7 +872,6 @@ class _TeacherDashboardOverviewTabState
   Widget _buildQuickActionsCard(
     BuildContext context, {
     required ThemeData theme,
-    required double childAspectRatio,
   }) {
     return Card(
       child: Padding(
@@ -900,47 +900,66 @@ class _TeacherDashboardOverviewTabState
               ],
             ),
             const SizedBox(height: 14),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: childAspectRatio,
-              children: [
-                _buildQuickActionCard(
-                  context,
-                  title: 'Attendance',
-                  subtitle: 'RFID & Roster',
-                  icon: LucideIcons.checkSquare,
-                  accentColor: Colors.teal,
-                  onTap: () => widget.onNavigateTo(5),
-                ),
-                _buildQuickActionCard(
-                  context,
-                  title: 'Create',
-                  subtitle: 'WW, PT, Exam',
-                  icon: LucideIcons.filePlus2,
-                  accentColor: theme.colorScheme.primary,
-                  onTap: widget.onCreateChooser,
-                ),
-                _buildQuickActionCard(
-                  context,
-                  title: 'Gradebook',
-                  subtitle: 'DepEd Grades',
-                  icon: LucideIcons.bookOpenCheck,
-                  accentColor: Colors.deepPurple,
-                  onTap: () => widget.onNavigateTo(18),
-                ),
-                _buildQuickActionCard(
-                  context,
-                  title: 'Schedule',
-                  subtitle: 'Timetable',
-                  icon: LucideIcons.calendarDays,
-                  accentColor: Colors.amber.shade800,
-                  onTap: () => widget.onNavigateTo(14),
-                ),
-              ],
+            Expanded(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildQuickActionCard(
+                            context,
+                            title: 'Attendance',
+                            subtitle: 'RFID & Roster',
+                            icon: LucideIcons.checkSquare,
+                            accentColor: Colors.teal,
+                            onTap: () => widget.onNavigateTo(5),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildQuickActionCard(
+                            context,
+                            title: 'Create',
+                            subtitle: 'WW, PT, Exam',
+                            icon: LucideIcons.filePlus2,
+                            accentColor: theme.colorScheme.primary,
+                            onTap: widget.onCreateChooser,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildQuickActionCard(
+                            context,
+                            title: 'Gradebook',
+                            subtitle: 'DepEd Grades',
+                            icon: LucideIcons.bookOpenCheck,
+                            accentColor: Colors.deepPurple,
+                            onTap: () => widget.onNavigateTo(18),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildQuickActionCard(
+                            context,
+                            title: 'Schedule',
+                            subtitle: 'Timetable',
+                            icon: LucideIcons.calendarDays,
+                            accentColor: Colors.amber.shade800,
+                            onTap: () => widget.onNavigateTo(14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

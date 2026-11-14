@@ -365,7 +365,12 @@ class StudentDashboardRepository {
             }
           }
 
-          classworkList = (items as List? ?? []).map<Map<String, dynamic>>((i) {
+          classworkList = (items as List? ?? [])
+              .where((i) {
+                final st = (i as Map)['status']?.toString().toLowerCase();
+                return st != 'cancelled';
+              })
+              .map<Map<String, dynamic>>((i) {
             final m = Map<String, dynamic>.from(i as Map);
             var off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
             var s = off['subjects'] as Map<String, dynamic>? ?? {};
@@ -478,6 +483,8 @@ class StudentDashboardRepository {
             final attemptsByAssessmentId = <String, Map<String, dynamic>>{};
             for (final a in (attemptRows as List? ?? [])) {
               final row = Map<String, dynamic>.from(a as Map);
+              final st = row['status']?.toString().toLowerCase();
+              if (st == 'cancelled') continue;
               final aId = row['assessment_id']?.toString();
               if (aId != null) {
                 attemptsByAssessmentId[aId] = row;
@@ -539,6 +546,9 @@ class StudentDashboardRepository {
 
             for (final item in assessments) {
               final m = Map<String, dynamic>.from(item as Map);
+              if (m['status']?.toString().toLowerCase() == 'cancelled') {
+                continue;
+              }
               var off = m['subject_offerings'] as Map<String, dynamic>? ?? {};
               var s = off['subjects'] as Map<String, dynamic>? ?? {};
               var sec = off['sections'] as Map<String, dynamic>? ?? {};

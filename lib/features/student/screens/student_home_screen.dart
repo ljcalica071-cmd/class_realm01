@@ -14,9 +14,9 @@ import 'package:class_realm/features/student/sub_features/schedule/screens/stude
 import 'package:class_realm/features/student/sub_features/schedule/screens/student_schedule_screen.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/features/student/sub_features/profile/widgets/student_notifications_tab.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
@@ -164,16 +164,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       return const SizedBox.shrink();
     }
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     if (_isLoading && _dashboard == null) {
       return Scaffold(
         body: _mobileFrame(
           context,
-          Center(
-            child: LoadingAnimationWidget.staggeredDotsWave(
-              color: theme.colorScheme.primary,
-              size: 48,
-            ),
-          ),
+          _buildStudentHomeSkeleton(theme, isDark),
         ),
       );
     }
@@ -281,7 +277,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 );
               },
             ),
-            const SizedBox(width: 4),
+            NotificationBellButton(
+              role: 'student',
+              tooltip: 'School Alerts & Notifications',
+              onTap: () => _onSelectTab(2),
+            ),
+            const SizedBox(width: 6),
           ],
         ),
         drawer: _buildStudentDrawer(context, student),
@@ -463,7 +464,11 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             context,
             icon: Icons.settings_outlined,
             title: 'Settings',
-            onTap: () => _openPage(context, const StudentSettingsScreen()),
+            onTap: () => _openPage(
+              context,
+              const StudentSettingsScreen(),
+              AppRoutes.studentSettings,
+            ),
           ),
           const Divider(),
           ListTile(
@@ -799,8 +804,11 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 icon: Icons.fact_check_rounded,
                 color: AppTheme.catGreen,
                 label: 'Attendance',
-                onTap: () =>
-                    _pushDirectPage(context, const StudentAttendanceScreen()),
+                onTap: () => _pushDirectPage(
+                  context,
+                  const StudentAttendanceScreen(),
+                  AppRoutes.studentAttendance,
+                ),
               ),
               const SizedBox(width: 10),
               _buildQuickActionTile(
@@ -813,6 +821,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 onTap: () => _pushDirectPage(
                   context,
                   StudentScheduleScreen(dashboardData: _dashboard!),
+                  AppRoutes.studentSchedule,
                 ),
               ),
             ],
@@ -1602,5 +1611,125 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       'December',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  Widget _buildStudentHomeSkeleton(ThemeData theme, bool isDark) {
+    return ShimmerLoading(
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top student header card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: isDark ? 0.16 : 0.1,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const ShimmerBox(width: 48, height: 48, borderRadius: 24),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        ShimmerBox(width: 120, height: 16, borderRadius: 4),
+                        SizedBox(height: 6),
+                        ShimmerBox(width: 180, height: 12, borderRadius: 4),
+                      ],
+                    ),
+                  ),
+                  const ShimmerBox(width: 50, height: 24, borderRadius: 12),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // Quick Access Row
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.16 : 0.1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.16 : 0.1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Section header
+            const ShimmerBox(width: 110, height: 18, borderRadius: 4),
+            const SizedBox(height: 6),
+            const ShimmerBox(width: 220, height: 12, borderRadius: 4),
+            const SizedBox(height: 14),
+
+            // 3 Classwork task cards
+            for (int i = 0; i < 3; i++)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: isDark ? 0.16 : 0.1,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const ShimmerBox(width: 42, height: 42, borderRadius: 10),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          ShimmerBox(width: 140, height: 15, borderRadius: 4),
+                          SizedBox(height: 6),
+                          ShimmerBox(width: 90, height: 12, borderRadius: 4),
+                        ],
+                      ),
+                    ),
+                    const ShimmerBox(width: 60, height: 22, borderRadius: 8),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }

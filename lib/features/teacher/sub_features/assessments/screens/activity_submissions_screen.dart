@@ -18,6 +18,7 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/shared/widgets/app_top_toast.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class ActivitySubmissionsScreen extends StatefulWidget {
   final ActivityModel activity;
@@ -1890,7 +1891,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
         : _activity.description.trim();
 
     final content = _isLoading
-        ? const Center(child: CircularProgressIndicator())
+        ? _buildSubmissionsSkeleton(theme, isDark)
         : Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -2996,6 +2997,201 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSubmissionsSkeleton(ThemeData theme, bool isDark) {
+    final borderColor = isDark
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.12)
+        : const Color(0xFFE2E8F0);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: ShimmerLoading(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Top stat badges & search/filter bar skeleton
+            const Wrap(
+              spacing: 8,
+              runSpacing: 10,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ShimmerBox(width: 112, height: 28, borderRadius: 20),
+                    ShimmerBox(width: 96, height: 28, borderRadius: 20),
+                    ShimmerBox(width: 88, height: 28, borderRadius: 20),
+                    ShimmerBox(width: 88, height: 28, borderRadius: 20),
+                  ],
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ShimmerBox(width: 220, height: 38, borderRadius: 8),
+                    ShimmerBox(width: 130, height: 38, borderRadius: 8),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Table container skeleton
+            Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                children: [
+                  // Table header skeleton
+                  Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: borderColor)),
+                    ),
+                    child: const Row(
+                      children: [
+                        ShimmerBox(width: 24, height: 14, borderRadius: 4),
+                        SizedBox(width: 16),
+                        Expanded(
+                          flex: 3,
+                          child: ShimmerBox(height: 14, borderRadius: 4),
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          flex: 2,
+                          child: ShimmerBox(height: 14, borderRadius: 4),
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          flex: 2,
+                          child: ShimmerBox(height: 14, borderRadius: 4),
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          flex: 2,
+                          child: ShimmerBox(height: 14, borderRadius: 4),
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          flex: 2,
+                          child: ShimmerBox(height: 14, borderRadius: 4),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // 7 student row skeletons
+                  for (int i = 0; i < 7; i++)
+                    Container(
+                      height: 58,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        border: Border(bottom: BorderSide(color: borderColor)),
+                      ),
+                      child: const Row(
+                        children: [
+                          ShimmerBox(width: 22, height: 14, borderRadius: 4),
+                          SizedBox(width: 16),
+                          Expanded(
+                            flex: 3,
+                            child: Row(
+                              children: [
+                                ShimmerBox(
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: 16,
+                                ),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      ShimmerBox(
+                                        width: 150,
+                                        height: 13,
+                                        borderRadius: 4,
+                                      ),
+                                      SizedBox(height: 5),
+                                      ShimmerBox(
+                                        width: 100,
+                                        height: 10,
+                                        borderRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: Center(
+                              child: ShimmerBox(
+                                width: 78,
+                                height: 22,
+                                borderRadius: 12,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: Center(
+                              child: ShimmerBox(
+                                width: 100,
+                                height: 14,
+                                borderRadius: 4,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: Center(
+                              child: ShimmerBox(
+                                width: 96,
+                                height: 26,
+                                borderRadius: 8,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                ShimmerBox(
+                                  width: 72,
+                                  height: 32,
+                                  borderRadius: 8,
+                                ),
+                                SizedBox(width: 6),
+                                ShimmerBox(
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: 14,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

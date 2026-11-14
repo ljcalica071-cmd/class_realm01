@@ -7,7 +7,8 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_academic_performance_screen.dart';
 import 'package:class_realm/features/student/sub_features/profile/screens/student_settings_screen.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+import 'package:class_realm/routes/app_routes.dart';
 
 class StudentGradesScreen extends StatefulWidget {
   const StudentGradesScreen({super.key});
@@ -129,14 +130,10 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final student = AuthRepository.instance.currentUser;
     final body = _isLoading
-        ? Center(
-            child: LoadingAnimationWidget.staggeredDotsWave(
-              color: theme.colorScheme.primary,
-              size: 44,
-            ),
-          )
+        ? _buildGradesSkeleton(theme, isDark)
         : AppPullToRefresh(
             onRefresh: () => _loadGrades(silent: true),
             child: _loadError != null
@@ -184,6 +181,9 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
+                  settings: const RouteSettings(
+                    name: AppRoutes.studentPerformance,
+                  ),
                   builder: (_) => const StudentAcademicPerformanceScreen(),
                 ),
               );
@@ -311,7 +311,10 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
         onTap: () async {
           await Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const StudentSettingsScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: AppRoutes.studentSettings),
+              builder: (_) => const StudentSettingsScreen(),
+            ),
           );
           if (mounted) setState(() {});
         },
@@ -435,6 +438,99 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
             ),
             textAlign: TextAlign.center,
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGradesSkeleton(ThemeData theme, bool isDark) {
+    return ShimmerLoading(
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(
+                  alpha: isDark ? 0.16 : 0.1,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                const ShimmerBox(width: 44, height: 44, borderRadius: 22),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      ShimmerBox(width: 140, height: 16, borderRadius: 4),
+                      SizedBox(height: 6),
+                      ShimmerBox(width: 180, height: 12, borderRadius: 4),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          for (int i = 0; i < 4; i++)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: isDark ? 0.16 : 0.1,
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const ShimmerBox(width: 36, height: 36, borderRadius: 8),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            ShimmerBox(width: 160, height: 15, borderRadius: 4),
+                            SizedBox(height: 5),
+                            ShimmerBox(width: 100, height: 12, borderRadius: 4),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      for (int t = 0; t < 4; t++) ...[
+                        Expanded(
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        if (t < 3) const SizedBox(width: 8),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

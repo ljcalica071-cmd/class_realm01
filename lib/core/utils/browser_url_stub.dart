@@ -89,3 +89,14 @@ void sendWebKeepaliveSessionEndPlatform({
 }) {
   // No-op on non-web platforms.
 }
+
+void registerWebAuthSyncListenerPlatform(
+  void Function(String eventType) onAuthSyncEvent,
+) {
+  // No-op on non-web platforms.
+}
+
+void broadcastWebAuthSyncEventPlatform(String eventType) {
+  // No-op on non-web platforms.
+}
+

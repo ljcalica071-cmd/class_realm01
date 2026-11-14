@@ -54,7 +54,28 @@ Map<String, String> getBrowserUrlQueryParamsWeb() {
 
 bool isWarmSessionWeb() {
   try {
-    return html.window.sessionStorage['classrealm_warm_session'] == '1';
+    if (html.window.sessionStorage['classrealm_warm_session'] == '1') {
+      return true;
+    }
+    // Check if another tab in this same browser is currently active and logged in.
+    // This prevents a newly opened tab from wiping the active browser session or
+    // allowing a second account to log in while Tab 1 is still open.
+    final cachedUser = html.window.localStorage['flutter.auth.cached_user'];
+    final aliveTsRaw = html.window.localStorage['classrealm_browser_alive_ts'];
+    if (cachedUser != null &&
+        cachedUser.isNotEmpty &&
+        aliveTsRaw != null &&
+        aliveTsRaw.isNotEmpty) {
+      final aliveTs = int.tryParse(aliveTsRaw);
+      if (aliveTs != null) {
+        final ageMs = DateTime.now().millisecondsSinceEpoch - aliveTs;
+        if (ageMs >= 0 && ageMs <= 65000) {
+          html.window.sessionStorage['classrealm_warm_session'] = '1';
+          return true;
+        }
+      }
+    }
+    return false;
   } catch (_) {
     return false;
   }
@@ -63,12 +84,15 @@ bool isWarmSessionWeb() {
 void markWarmSessionWeb() {
   try {
     html.window.sessionStorage['classrealm_warm_session'] = '1';
+    html.window.localStorage['classrealm_browser_alive_ts'] =
+        DateTime.now().millisecondsSinceEpoch.toString();
   } catch (_) {}
 }
 
 void clearWarmSessionWeb() {
   try {
     html.window.sessionStorage.remove('classrealm_warm_session');
+    html.window.localStorage.remove('classrealm_browser_alive_ts');
   } catch (_) {}
 }
 
@@ -362,3 +386,41 @@ void sendWebKeepaliveSessionEndPlatform({
     });
   } catch (_) {}
 }
+
+StreamSubscription<html.StorageEvent>? _webStorageSyncSub;
+
+void registerWebAuthSyncListenerPlatform(
+  void Function(String eventType) onAuthSyncEvent,
+) {
+  try {
+    _webStorageSyncSub?.cancel();
+    _webStorageSyncSub = html.window.onStorage.listen((event) {
+      final key = event.key ?? '';
+      if (key == 'classrealm_auth_sync_event') {
+        final val = event.newValue ?? '';
+        if (val.startsWith('logout:')) {
+          onAuthSyncEvent('logout');
+        } else if (val.startsWith('login:')) {
+          onAuthSyncEvent('login');
+        }
+        return;
+      }
+      if (key == 'flutter.auth.cached_user') {
+        final newVal = event.newValue;
+        if (newVal == null || newVal.trim().isEmpty) {
+          onAuthSyncEvent('logout');
+        } else {
+          onAuthSyncEvent('login');
+        }
+      }
+    });
+  } catch (_) {}
+}
+
+void broadcastWebAuthSyncEventPlatform(String eventType) {
+  try {
+    html.window.localStorage['classrealm_auth_sync_event'] =
+        '$eventType:${DateTime.now().millisecondsSinceEpoch}';
+  } catch (_) {}
+}
+

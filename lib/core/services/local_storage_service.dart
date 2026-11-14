@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:class_realm/models/user_model.dart';
 
@@ -49,6 +50,19 @@ class LocalStorageService {
     }
     return _preferences!;
   }
+
+  /// Reloads the in-memory SharedPreferences cache from browser `localStorage` / disk
+  /// so cross-tab updates (e.g. active_session_id, cached_user, logout) are immediately visible.
+  static Future<void> reload() async {
+    try {
+      if (_preferences == null) {
+        await init();
+      } else {
+        await _preferences!.reload();
+      }
+    } catch (_) {}
+  }
+
 
   /// Permanent Device ID: Generated once as UUID v4 and persisted in local storage.
   /// Never removed on logout or clearAuth.
@@ -232,6 +246,10 @@ class LocalStorageService {
     await prefs.remove('session.tab_parent');
     await prefs.remove(keyAssessmentCreationCooldown);
     await prefs.remove(keyAiAssessmentCooldown);
+    await remove('teacher_classwork_nav_state');
+    await prefs.remove('teacher_cw_cat_tab');
+    await prefs.remove('teacher_cw_assessment_id');
+    await prefs.remove('teacher_cw_activity_id');
     await _ensureSaved(await prefs.remove(keyRememberMe));
     await _ensureSaved(await prefs.remove(keySavedEmail));
     await _ensureSaved(await prefs.remove(keySavedPassword));
@@ -717,6 +735,13 @@ class LocalStorageService {
     return <String, dynamic>{};
   }
 
+  static Future<void> clearTeacherClassworkSubView() async {
+    await saveTeacherClassworkNavState(
+      clearActiveAssessment: true,
+      clearActiveActivity: true,
+    );
+  }
+
   static Future<void> saveSelectedParentChildId(
     String parentId,
     String studentId,
@@ -774,6 +799,33 @@ class LocalStorageService {
           '${_settingsPrefix}push_notifications_enabled',
         ) ??
         true;
+  }
+
+  // =========================================================================
+  // Notification Read States Persistence (Per-User)
+  // =========================================================================
+  static final ValueNotifier<int> notificationReadStateEpoch = ValueNotifier<int>(0);
+
+  static Set<String> getReadNotificationIds(String userId) {
+    if (userId.isEmpty) return {};
+    final list = _preferences?.getStringList('user_read_notifications_$userId') ?? [];
+    return list.toSet();
+  }
+
+  static Future<void> markNotificationAsRead(String userId, String notifId) async {
+    if (userId.isEmpty || notifId.isEmpty) return;
+    final current = getReadNotificationIds(userId);
+    if (!current.contains(notifId)) {
+      current.add(notifId);
+      final prefs = await _prefs;
+      await prefs.setStringList('user_read_notifications_$userId', current.toList());
+      notificationReadStateEpoch.value = notificationReadStateEpoch.value + 1;
+    }
+  }
+
+  static bool isNotificationRead(String userId, String notifId) {
+    if (userId.isEmpty || notifId.isEmpty) return false;
+    return getReadNotificationIds(userId).contains(notifId);
   }
 
   // =========================================================================

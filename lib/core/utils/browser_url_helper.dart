@@ -149,3 +149,17 @@ void sendWebKeepaliveSessionEnd({
     durationSeconds: durationSeconds,
   );
 }
+
+/// Listens for cross-tab login/logout changes in browser localStorage so all
+/// tabs in the same browser enforce a single active account at all times.
+void registerWebAuthSyncListener(
+  void Function(String eventType) onAuthSyncEvent,
+) {
+  registerWebAuthSyncListenerPlatform(onAuthSyncEvent);
+}
+
+/// Broadcasts a login or logout event across all open tabs in the same browser.
+void broadcastWebAuthSyncEvent(String eventType) {
+  broadcastWebAuthSyncEventPlatform(eventType);
+}
+

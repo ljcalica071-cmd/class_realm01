@@ -96,11 +96,16 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
 
           final rows = await query.order('created_at', ascending: false);
           final list = rows as List? ?? [];
-          return list.map((item) {
-            return ActivityModel.fromJson(
-              Map<String, dynamic>.from(item as Map),
-            );
-          }).toList();
+          return list
+              .where((item) =>
+                  (item as Map)['status']?.toString().toLowerCase() !=
+                  'cancelled')
+              .map((item) {
+                return ActivityModel.fromJson(
+                  Map<String, dynamic>.from(item as Map),
+                );
+              })
+              .toList();
         } catch (e) {
           debugPrint('Pure Dart classwork list notice: $e');
           return [];
@@ -717,6 +722,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
         final cwRows = await cwQuery.order('created_at', ascending: false);
         for (final raw in (cwRows as List? ?? [])) {
           final r = Map<String, dynamic>.from(raw as Map);
+          if (r['status']?.toString().toLowerCase() == 'cancelled') continue;
           cwMetaById[r['id'].toString()] = r;
         }
       } catch (cwErr) {
@@ -771,6 +777,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
 
       for (final raw in (rows as List? ?? [])) {
         final r = Map<String, dynamic>.from(raw as Map);
+        if (r['status']?.toString().toLowerCase() == 'cancelled') continue;
         final id = r['id'].toString();
         seenIds.add(id);
 
@@ -836,6 +843,7 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
       for (final entry in cwMetaById.entries) {
         if (seenIds.contains(entry.key)) continue;
         final r = entry.value;
+        if (r['status']?.toString().toLowerCase() == 'cancelled') continue;
         if (r['completion_mode']?.toString() != 'in_person') continue;
 
         final off = r['subject_offerings'] as Map<String, dynamic>? ?? {};

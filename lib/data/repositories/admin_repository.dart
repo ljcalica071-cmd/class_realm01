@@ -743,6 +743,40 @@ class AdminRepository {
     return AppNotificationModel.fromJson(res);
   }
 
+  Future<AppNotificationModel> updateAnnouncement({
+    required String id,
+    required String title,
+    required String message,
+    required String targetAudience,
+  }) async {
+    final cleanTitle = title.trim();
+    final cleanMessage = message.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+    if (cleanTitle.length < 2 || cleanTitle.length > 100) {
+      throw const FormatException(
+        'Title must be between 2 and 100 characters.',
+      );
+    }
+    if (cleanMessage.length < 2 || cleanMessage.length > 1000) {
+      throw const FormatException(
+        'Message must be between 2 and 1000 characters.',
+      );
+    }
+
+    final res = await _client
+        .from('notifications')
+        .update({
+          'title': cleanTitle,
+          'message': cleanMessage,
+          'target_audience': targetAudience,
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+    return AppNotificationModel.fromJson(res);
+  }
+
   Future<void> softDeleteAnnouncement(String id) async {
     await _client
         .from('notifications')

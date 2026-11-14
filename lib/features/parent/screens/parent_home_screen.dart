@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
@@ -11,6 +10,7 @@ import 'package:class_realm/features/parent/widgets/widgets.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
@@ -275,9 +275,12 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   }
 
   void _openTeachersDirectoryScreen(UserModel? activeChild) {
+    updateBrowserUrl(AppRoutes.parentTeachers);
+    LocalStorageService.saveLastActiveRoute(AppRoutes.parentTeachers);
     Navigator.push(
       context,
       MaterialPageRoute(
+        settings: const RouteSettings(name: AppRoutes.parentTeachers),
         builder: (_) => ParentTeacherContactView(
           student: activeChild,
           allChildren: _linkedStudents,
@@ -652,6 +655,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                 );
               },
             ),
+            NotificationBellButton(
+              role: 'parent',
+              tooltip: 'School Alerts & Notifications',
+              onTap: () => _selectBottomTab(3),
+            ),
             const Center(
               child: Padding(
                 padding: EdgeInsets.only(right: 10, left: 4),
@@ -677,12 +685,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               children: [
                 Expanded(
                   child: _isLoadingStudents
-                      ? Center(
-                          child: LoadingAnimationWidget.staggeredDotsWave(
-                            color: theme.colorScheme.primary,
-                            size: 42,
-                          ),
-                        )
+                      ? _buildParentHomeSkeleton(theme, theme.brightness == Brightness.dark)
                       : StaggeredEntrance(
                           key: ValueKey(
                             '${_currentIndex}_${linkedStudent?.id ?? "none"}',
@@ -815,6 +818,130 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildParentHomeSkeleton(ThemeData theme, bool isDark) {
+    return ShimmerLoading(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: isDark ? 0.16 : 0.1,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const ShimmerBox(width: 52, height: 52, borderRadius: 999),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        ShimmerBox(width: 140, height: 18, borderRadius: 4),
+                        SizedBox(height: 6),
+                        ShimmerBox(width: 190, height: 13, borderRadius: 4),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.16 : 0.1,
+                        ),
+                      ),
+                    ),
+                    child: const Column(
+                      children: [
+                        ShimmerBox(width: 50, height: 20, borderRadius: 4),
+                        SizedBox(height: 6),
+                        ShimmerBox(width: 80, height: 12, borderRadius: 4),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.16 : 0.1,
+                        ),
+                      ),
+                    ),
+                    child: const Column(
+                      children: [
+                        ShimmerBox(width: 50, height: 20, borderRadius: 4),
+                        SizedBox(height: 6),
+                        ShimmerBox(width: 80, height: 12, borderRadius: 4),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+            const ShimmerBox(width: 160, height: 14, borderRadius: 4),
+            const SizedBox(height: 12),
+            for (int i = 0; i < 3; i++)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: isDark ? 0.16 : 0.1,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const ShimmerBox(width: 44, height: 44, borderRadius: 11),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          ShimmerBox(width: 80, height: 16, borderRadius: 4),
+                          SizedBox(height: 6),
+                          ShimmerBox(width: 180, height: 16, borderRadius: 4),
+                          SizedBox(height: 6),
+                          ShimmerBox(width: 130, height: 12, borderRadius: 4),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );

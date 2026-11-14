@@ -1498,6 +1498,7 @@ class _TeacherParentManagementTabState
       title: 'Permanently Delete Parent',
       message:
           'Are you sure you want to permanently delete ${parent.fullName}? This will erase their parent profile and account records from the school system. This action is irreversible and cannot be undone.',
+      requiredText: 'CONFIRM',
     );
 
     if (confirm == true) {

@@ -1,5 +1,6 @@
 // Barrel export file for all shared ClassRealm widgets.
 export 'buttons/app_buttons.dart'; // AppButton, AppButtonType, AppPrimaryButton, AppSecondaryButton
+export 'buttons/notification_bell_button.dart'; // NotificationBellButton
 export 'inputs/app_text_field.dart';
 export 'inputs/password_requirements_checklist.dart'; // PasswordRequirementsChecklist
 export 'modals/app_modals.dart';

@@ -7,6 +7,7 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/sync_coordinator.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/core/utils/logout_helper.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/routes/app_routes.dart';
@@ -72,6 +73,7 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     _startTicker();
     _startHeartbeat();
     _subscribeToMaintenanceMode();
+    registerWebAuthSyncListener(_handleCrossTabAuthSync);
   }
 
   @override
@@ -107,6 +109,64 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
         now.difference(_lastDiskSaveAt!).inSeconds >= 5) {
       _lastDiskSaveAt = now;
       LocalStorageService.saveLastInteraction(now);
+      if (AuthRepository.instance.currentUser != null) {
+        markWarmSession();
+      }
+    }
+  }
+
+  /// Synchronizes authentication state across all open tabs in the same browser
+  /// so two different accounts/roles can never be active simultaneously.
+  Future<void> _handleCrossTabAuthSync(String eventType) async {
+    if (!mounted || AuthRepository.instance.isLoggingOut) return;
+    await LocalStorageService.reload();
+    if (!mounted) return;
+
+    final latestCachedUser = LocalStorageService.getCachedUser();
+    final latestSessionId = LocalStorageService.getActiveSessionId();
+    final currentInMemoryUser = AuthRepository.instance.currentUser;
+
+    if (eventType == 'logout' || latestCachedUser == null) {
+      if (currentInMemoryUser != null) {
+        _heartbeatTimer?.cancel();
+        _heartbeatTimer = null;
+        _activeSessionLogId = null;
+        await AuthRepository.instance.clearLocalSessionOnly();
+        updateBrowserUrl(AppRoutes.login);
+        AppRoutes.navigatorKey.currentState?.pushNamedAndRemoveUntil(
+          AppRoutes.login,
+          (route) => false,
+        );
+      }
+      return;
+    }
+
+    if (latestSessionId != null && latestSessionId.isNotEmpty) {
+      _activeSessionLogId = latestSessionId;
+    }
+    final latestLoginAt = LocalStorageService.getSessionLoginAt();
+    if (latestLoginAt != null) {
+      _sessionStart = latestLoginAt.toUtc();
+    }
+
+    if (currentInMemoryUser == null ||
+        currentInMemoryUser.id != latestCachedUser.id ||
+        currentInMemoryUser.role != latestCachedUser.role) {
+      AuthRepository.instance.setCurrentUser(latestCachedUser);
+      markWarmSession();
+      if (_sessionGuardChannel != null) {
+        try {
+          Supabase.instance.client.removeChannel(_sessionGuardChannel!);
+        } catch (_) {}
+        _sessionGuardChannel = null;
+      }
+      _subscribeToSessionGuard(latestCachedUser.id);
+      final targetRoute = AppRoutes.resolveSafeRouteForUser(latestCachedUser);
+      updateBrowserUrl(targetRoute);
+      AppRoutes.navigatorKey.currentState?.pushNamedAndRemoveUntil(
+        targetRoute,
+        (route) => false,
+      );
     }
   }
 
@@ -166,14 +226,29 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
             callback: (payload) async {
               if (!mounted ||
                   _isHandlingKickout ||
-                  AuthRepository.instance.isLoggingOut) {
+                  AuthRepository.instance.isLoggingOut ||
+                  AuthRepository.instance.isStartingOrJustStartedSession) {
                 return;
               }
+
+              // Wait briefly and reload SharedPreferences from localStorage so
+              // session inserts from this tab or another tab in the same browser
+              // are settled before comparing session IDs.
+              await Future.delayed(const Duration(milliseconds: 600));
+              if (!mounted ||
+                  _isHandlingKickout ||
+                  AuthRepository.instance.isLoggingOut ||
+                  AuthRepository.instance.isStartingOrJustStartedSession) {
+                return;
+              }
+              await LocalStorageService.reload();
+
               final currentSessionId =
-                  _activeSessionLogId ??
                   LocalStorageService.getActiveSessionId() ??
-                  AuthRepository.instance.activeSessionId;
+                  AuthRepository.instance.activeSessionId ??
+                  _activeSessionLogId;
               if (currentSessionId == null) return;
+              _activeSessionLogId = currentSessionId;
 
               final newRecord = payload.newRecord;
               if (newRecord.isEmpty) return;
@@ -191,7 +266,7 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
                 }
 
                 // If marked inactive due to unload/tab sleep ('terminated'), do NOT kick
-                // unless a genuinely newer active session now exists for this user.
+                // unless a genuinely newer active session on ANOTHER device now exists.
                 try {
                   final newer = await Supabase.instance.client
                       .from('user_session_logs')
@@ -200,7 +275,16 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
                       .neq('id', currentSessionId)
                       .eq('is_active', true)
                       .limit(1);
+                  await LocalStorageService.reload();
+                  final latestLocalId =
+                      LocalStorageService.getActiveSessionId() ??
+                      AuthRepository.instance.activeSessionId;
                   if ((newer as List).isNotEmpty) {
+                    final newerId = newer.first['id']?.toString();
+                    if (newerId != null && newerId == latestLocalId) {
+                      _activeSessionLogId = newerId;
+                      return;
+                    }
                     await _handleKickedByAnotherDevice();
                   }
                 } catch (_) {}
@@ -209,7 +293,7 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
 
               // Case 2: Another record is active for this user
               if (rowId != null && rowId != currentSessionId && isActive) {
-                // Atomic verification: check if this rowId was just saved locally as our session
+                await LocalStorageService.reload();
                 final latestLocalId =
                     LocalStorageService.getActiveSessionId() ??
                     AuthRepository.instance.activeSessionId;
@@ -222,9 +306,9 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
                 final newLoginAt = DateTime.tryParse(
                   newRecord['login_at']?.toString() ?? '',
                 );
-                if (newLoginAt == null ||
-                    !newLoginAt.isBefore(
-                      _sessionStart.subtract(const Duration(seconds: 2)),
+                if (newLoginAt != null &&
+                    newLoginAt.isAfter(
+                      _sessionStart.add(const Duration(seconds: 3)),
                     )) {
                   await _handleKickedByAnotherDevice();
                 }
@@ -304,7 +388,21 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
             .maybeSingle();
 
         if (updated == null) {
-          if (AuthRepository.instance.isLoggingOut) return;
+          if (AuthRepository.instance.isLoggingOut ||
+              AuthRepository.instance.isStartingOrJustStartedSession) {
+            return;
+          }
+
+          await LocalStorageService.reload();
+          final latestLocalId =
+              LocalStorageService.getActiveSessionId() ??
+              AuthRepository.instance.activeSessionId;
+          if (latestLocalId != null &&
+              latestLocalId.isNotEmpty &&
+              latestLocalId != sessionId) {
+            _activeSessionLogId = latestLocalId;
+            return;
+          }
 
           // Check if another device/login genuinely superseded this session
           final currentSessionRow = await Supabase.instance.client
@@ -321,21 +419,42 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
 
           final newerActiveSessions = await Supabase.instance.client
               .from('user_session_logs')
-              .select('id')
+              .select('id, login_at')
               .eq('user_id', user.id)
               .neq('id', sessionId)
               .eq('is_active', true)
               .limit(1);
 
-          final hasNewerActiveSession =
-              (newerActiveSessions as List).isNotEmpty;
+          await LocalStorageService.reload();
+          final refreshedLocalId =
+              LocalStorageService.getActiveSessionId() ??
+              AuthRepository.instance.activeSessionId;
+
+          bool hasNewerExternalSession = false;
+          if ((newerActiveSessions as List).isNotEmpty) {
+            final newerRow = newerActiveSessions.first;
+            final newerId = newerRow['id']?.toString();
+            final newerLoginAt = DateTime.tryParse(
+              newerRow['login_at']?.toString() ?? '',
+            )?.toUtc();
+            if (newerId != null && newerId == refreshedLocalId) {
+              _activeSessionLogId = newerId;
+              return;
+            }
+            if (newerLoginAt != null &&
+                newerLoginAt.isAfter(
+                  currentLoginAt.add(const Duration(seconds: 3)),
+                )) {
+              hasNewerExternalSession = true;
+            }
+          }
 
           final logoutReason = currentSessionRow?['logout_reason']?.toString();
           final isExplicitTakeover =
               logoutReason == 'superseded' ||
               logoutReason == 'signed_in_elsewhere';
 
-          if (hasNewerActiveSession || isExplicitTakeover) {
+          if (hasNewerExternalSession || isExplicitTakeover) {
             await _handleKickedByAnotherDevice();
             return;
           }
@@ -362,7 +481,7 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
             return;
           }
 
-          if (currentSessionRow == null && !hasNewerActiveSession) {
+          if (currentSessionRow == null && !hasNewerExternalSession) {
             final newId = await AuthRepository.instance.startSessionLog(
               user,
               forceNewSession: true,
@@ -373,7 +492,6 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
             return;
           }
 
-          await _handleKickedByAnotherDevice();
           return;
         }
 
@@ -419,6 +537,10 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
       _activeSessionLogId = null;
       return;
     }
+
+    // Keep browser alive timestamp fresh every 10s so new tabs opened in the
+    // same browser recognize the active logged-in session.
+    markWarmSession();
 
     if (_heartbeatTimer == null) {
       _startHeartbeat();

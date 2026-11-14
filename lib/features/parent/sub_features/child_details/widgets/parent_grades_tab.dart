@@ -7,9 +7,11 @@ import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/features/parent/sub_features/child_details/widgets/parent_subject_details_sheet.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 /// Standalone screen wrapper for opening Report Card & Term Grades from the
 /// Parent Side Panel (Drawer) or Quick Actions on Home.
@@ -31,17 +33,54 @@ class ParentGradesScreen extends StatefulWidget {
 
 class _ParentGradesScreenState extends State<ParentGradesScreen> {
   late UserModel? _activeStudent;
+  List<UserModel> _allChildren = [];
 
   @override
   void initState() {
     super.initState();
+    _allChildren = List.from(widget.allChildren);
     _activeStudent =
         widget.initialStudent ??
-        (widget.allChildren.isNotEmpty ? widget.allChildren.first : null);
+        (_allChildren.isNotEmpty ? _allChildren.first : null);
+    if (_activeStudent == null) {
+      _hydrateFallbackStudent();
+    }
+  }
+
+  void _hydrateFallbackStudent() {
+    final parent = AuthRepository.instance.currentUser;
+    if (parent == null) return;
+    final cached = AppDataCache.instance.getCached<List<UserModel>>(
+      'parent_linked_students_${parent.id}',
+      (json) => (json as List)
+          .map((e) => UserModel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
+    if (cached != null && cached.isNotEmpty) {
+      setState(() {
+        _allChildren = cached;
+        final savedId = LocalStorageService.getSelectedParentChildId(parent.id);
+        if (savedId != null && savedId.isNotEmpty) {
+          final idx = cached.indexWhere((s) => s.id == savedId);
+          _activeStudent = idx != -1 ? cached[idx] : cached.first;
+        } else {
+          _activeStudent = cached.first;
+        }
+      });
+    } else {
+      SupabaseParentRepository().getLinkedStudentsForParent(parent.id).then((students) {
+        if (students.isNotEmpty && mounted) {
+          setState(() {
+            _allChildren = students;
+            _activeStudent = students.first;
+          });
+        }
+      }).catchError((_) {});
+    }
   }
 
   void _showChildSwitcherSheet() {
-    if (widget.allChildren.isEmpty) return;
+    if (_allChildren.isEmpty) return;
     final theme = Theme.of(context);
     showModalBottomSheet(
       context: context,
@@ -81,7 +120,7 @@ class _ParentGradesScreenState extends State<ParentGradesScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                ...widget.allChildren.map((child) {
+                ..._allChildren.map((child) {
                   final isSelected = child.id == _activeStudent?.id;
                   final rel = child.parentGuardianRelationship ?? 'Guardian';
                   final sec = child.departmentOrSection ?? 'Senior High School';
@@ -168,7 +207,7 @@ class _ParentGradesScreenState extends State<ParentGradesScreen> {
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
         ),
         actions: [
-          if (student != null && widget.allChildren.isNotEmpty)
+          if (student != null && _allChildren.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 10),
               child: Center(
@@ -423,12 +462,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
     }
 
     if (_isLoading && _offerings.isEmpty) {
-      return Center(
-        child: LoadingAnimationWidget.staggeredDotsWave(
-          color: theme.colorScheme.primary,
-          size: 40,
-        ),
-      );
+      return _buildGradesSkeleton(theme, isDark);
     }
 
     if (_offerings.isEmpty) {
@@ -1164,6 +1198,99 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildGradesSkeleton(ThemeData theme, bool isDark) {
+    return ShimmerLoading(
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(
+                  alpha: isDark ? 0.16 : 0.1,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                const ShimmerBox(width: 44, height: 44, borderRadius: 22),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      ShimmerBox(width: 140, height: 16, borderRadius: 4),
+                      SizedBox(height: 6),
+                      ShimmerBox(width: 180, height: 12, borderRadius: 4),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          for (int i = 0; i < 4; i++)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: isDark ? 0.16 : 0.1,
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const ShimmerBox(width: 36, height: 36, borderRadius: 8),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            ShimmerBox(width: 160, height: 15, borderRadius: 4),
+                            SizedBox(height: 5),
+                            ShimmerBox(width: 100, height: 12, borderRadius: 4),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      for (int t = 0; t < 4; t++) ...[
+                        Expanded(
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        if (t < 3) const SizedBox(width: 8),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

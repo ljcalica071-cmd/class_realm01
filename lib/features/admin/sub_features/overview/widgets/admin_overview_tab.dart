@@ -10,6 +10,7 @@ import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class AdminOverviewTab extends StatefulWidget {
   final List<UserModel> teachers;
@@ -784,7 +785,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                     ),
                   ),
                   onPressed: widget.onNavigateToBroadcasts,
-                  icon: const Icon(Icons.campaign_rounded, size: 18),
+                  icon: const Icon(LucideIcons.megaphone, size: 16),
                   label: const Text(
                     'Quick Broadcast',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -809,9 +810,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
               child: Row(
                 children: [
                   Icon(
-                    Icons.history_rounded,
+                    LucideIcons.history,
                     color: theme.colorScheme.primary,
-                    size: 24,
+                    size: 22,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -888,7 +889,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                       title: 'Total Teachers',
                       value: '$activeTeachers / $totalTeachers',
                       subtext: 'Active / Total Teachers',
-                      icon: Icons.person_pin,
+                      icon: LucideIcons.graduationCap,
                       color: theme.colorScheme.primary,
                     ),
                     // Card 2: Students
@@ -896,7 +897,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                       title: 'Total Students',
                       value: '$activeStudents / $totalStudents',
                       subtext: 'Active / Total Students',
-                      icon: Icons.groups_rounded,
+                      icon: LucideIcons.users,
                       color: theme.colorScheme.primary,
                     ),
                     // Card 3: Parents
@@ -904,7 +905,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                       title: 'Total Parents',
                       value: '$activeParents / $totalParents',
                       subtext: 'Active / Total Parents',
-                      icon: Icons.family_restroom_rounded,
+                      icon: LucideIcons.contact,
                       color: theme.colorScheme.primary,
                     ),
                     // Card 4: Pending First Login
@@ -913,7 +914,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                       value: '$pendingTotal',
                       subtext:
                           'Tr: $pendingTr | St: $pendingSt | Pt: $pendingPt',
-                      icon: Icons.lock_clock_outlined,
+                      icon: LucideIcons.clock,
                       color: AppTheme.catOrange,
                     ),
                   ],
@@ -960,7 +961,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
-                              Icons.school_rounded,
+                              LucideIcons.graduationCap,
                               color: theme.colorScheme.primary,
                               size: 22,
                             ),
@@ -1007,7 +1008,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                           ),
                         ),
                         onPressed: _handleNewSchoolYearDialog,
-                        icon: const Icon(Icons.add_rounded, size: 18),
+                        icon: const Icon(LucideIcons.plus, size: 16),
                         label: const Text(
                           'Transition New SY',
                           style: TextStyle(
@@ -1065,9 +1066,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: const Icon(
-                                Icons.event_available_rounded,
+                                LucideIcons.calendarCheck,
                                 color: Color(0xFF16A34A),
-                                size: 24,
+                                size: 22,
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -1141,9 +1142,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Icon(
-                                Icons.view_timeline_rounded,
+                                LucideIcons.layers,
                                 color: theme.colorScheme.primary,
-                                size: 24,
+                                size: 22,
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -1223,8 +1224,8 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                         final infoBlock = Row(
                           children: [
                             Icon(
-                              Icons.history_edu_rounded,
-                              size: 22,
+                              LucideIcons.history,
+                              size: 20,
                               color: theme.colorScheme.primary,
                             ),
                             const SizedBox(width: 12),
@@ -1287,7 +1288,8 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                                 value: selectedId,
                                 isDense: true,
                                 icon: Icon(
-                                  Icons.keyboard_arrow_down_rounded,
+                                  LucideIcons.chevronDown,
+                                  size: 16,
                                   color: isDark ? Colors.white70 : const Color(0xFF475569),
                                 ),
                                 items: _allSchoolYears.map((sy) {

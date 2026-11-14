@@ -263,7 +263,7 @@ class AdminSidebar extends StatelessWidget {
                     context: context,
                     index: 1,
                     label: 'Broadcasts',
-                    icon: Icons.campaign_rounded,
+                    icon: LucideIcons.megaphone,
                     theme: theme,
                     isMobile: isMobile,
                   ),

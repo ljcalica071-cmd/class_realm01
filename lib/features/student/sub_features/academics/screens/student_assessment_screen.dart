@@ -630,8 +630,24 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             'This $_assessmentLabel session was disqualified by your proctor.',
           );
           return;
+        } else if (st == 'cancelled') {
+          _handleAssessmentCancelled();
+          return;
         }
       }
+
+      try {
+        final daRow = await SupabaseService().client
+            .from('digital_assessments')
+            .select('status')
+            .eq('id', widget.assessment.id)
+            .maybeSingle();
+        if (daRow != null &&
+            daRow['status']?.toString().toLowerCase() == 'cancelled') {
+          _handleAssessmentCancelled();
+          return;
+        }
+      } catch (_) {}
 
       if (_pendingOfflineSync && !_isSubmitting) {
         _submitAssessment(autoSubmit: true);
@@ -698,6 +714,8 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         ? details
                         : 'Violation of examination rules.',
                   );
+                } else if (ev == 'cancelled') {
+                  _handleAssessmentCancelled();
                 } else if (ev == 'entry_disallowed') {
                   _handleTeacherDisallowed();
                 } else if (ev == 'reset' || ev == 'retake_authorized') {
@@ -727,9 +745,27 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                   _handleDisqualified(
                     'This examination session was disqualified by your proctor.',
                   );
+                } else if (st == 'cancelled') {
+                  _handleAssessmentCancelled();
                 } else if (st == 'reset') {
                   _handleTeacherReset('Instructor reset attempt.');
                 }
+              }
+            },
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'digital_assessments',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'id',
+              value: widget.assessment.id,
+            ),
+            callback: (payload) {
+              final rec = payload.newRecord;
+              if (rec['status']?.toString().toLowerCase() == 'cancelled') {
+                _handleAssessmentCancelled();
               }
             },
           )
@@ -737,6 +773,61 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     } catch (e) {
       debugPrint('Notice setting up student proctor realtime channel: $e');
     }
+  }
+
+  void _handleAssessmentCancelled() {
+    if (!mounted || _isSubmitting) return;
+    _timer?.cancel();
+    _heartbeatTimer?.cancel();
+    _offlineRetryTimer?.cancel();
+    _clearVault();
+    setState(() {
+      _isSubmitting = true;
+    });
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: AppTheme.catRed, size: 24),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Notice',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Notice: This assessment has been cancelled by your teacher. Your answers will not be recorded and your grade will not be affected.',
+          style: TextStyle(fontSize: 14, height: 1.45),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.primary,
+              foregroundColor: Theme.of(ctx).colorScheme.onPrimary,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pop();
+            },
+            child: const Text(
+              'Return to Dashboard',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _handleDisqualified(String reason) {

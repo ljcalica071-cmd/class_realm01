@@ -24,6 +24,18 @@ class AppRoutes {
   static const String teacherManageStudents = '/teacher/manage-students';
   static const String teacherManageParents = '/teacher/manage-parents';
   static const String teacherClasswork = '/teacher/classwork';
+  static const String teacherClassworkWrittenWorks =
+      '/teacher/classwork/written-works';
+  static const String teacherClassworkPerformanceTasks =
+      '/teacher/classwork/performance-tasks';
+  static const String teacherClassworkExaminations =
+      '/teacher/classwork/examinations';
+  static const String teacherClassworkSubmissions =
+      '/teacher/classwork/submissions';
+  static const String teacherClassworkProctoring =
+      '/teacher/classwork/proctoring';
+  static const String teacherClassworkItemAnalysis =
+      '/teacher/classwork/item-analysis';
   static const String teacherLessonPlanning = '/teacher/lesson-planning';
   static const String teacherLearningMaterials = '/teacher/learning-materials';
   static const String teacherAttendance = '/teacher/attendance';
@@ -43,6 +55,7 @@ class AppRoutes {
   static const String studentMaterials = '/student/materials';
   static const String studentGrades = '/student/grades';
   static const String studentPerformance = '/student/performance';
+  static const String studentSettings = '/student/settings';
 
   // Parent Sub-Routes
   static const String parentHome = '/parent/home';
@@ -51,6 +64,7 @@ class AppRoutes {
   static const String parentAlerts = '/parent/alerts';
   static const String parentProfile = '/parent/profile';
   static const String parentGrades = '/parent/grades';
+  static const String parentTeachers = '/parent/teachers';
 
   static String getFirstLoginRouteForRole(UserRole role) {
     switch (role) {
@@ -76,6 +90,26 @@ class AppRoutes {
       case UserRole.parent:
         return parentHome;
     }
+  }
+
+  static String teacherClassworkRouteForTabIndex(int index) {
+    switch (index) {
+      case 1:
+        return teacherClassworkPerformanceTasks;
+      case 2:
+        return teacherClassworkExaminations;
+      case 0:
+      default:
+        return teacherClassworkWrittenWorks;
+    }
+  }
+
+  static int? teacherClassworkTabIndexForRoute(String route) {
+    final clean = normalizeRoutePath(route);
+    if (clean == teacherClassworkWrittenWorks) return 0;
+    if (clean == teacherClassworkPerformanceTasks) return 1;
+    if (clean == teacherClassworkExaminations) return 2;
+    return null;
   }
 
   /// Normalizes a route path by stripping query parameters, hash fragments, and trailing slashes.
@@ -148,6 +182,12 @@ class AppRoutes {
         teacherManageStudents,
         teacherManageParents,
         teacherClasswork,
+        teacherClassworkWrittenWorks,
+        teacherClassworkPerformanceTasks,
+        teacherClassworkExaminations,
+        teacherClassworkSubmissions,
+        teacherClassworkProctoring,
+        teacherClassworkItemAnalysis,
         teacherLessonPlanning,
         teacherLearningMaterials,
         teacherAttendance,
@@ -167,6 +207,7 @@ class AppRoutes {
         studentMaterials,
         studentGrades,
         studentPerformance,
+        studentSettings,
       }.contains(clean),
       UserRole.parent => const {
         parentHome,
@@ -175,6 +216,7 @@ class AppRoutes {
         parentAlerts,
         parentProfile,
         parentGrades,
+        parentTeachers,
       }.contains(clean),
     };
   }

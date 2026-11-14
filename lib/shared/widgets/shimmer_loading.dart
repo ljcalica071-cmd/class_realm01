@@ -115,7 +115,7 @@ class ShimmerKpiCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -140,14 +140,14 @@ class ShimmerKpiCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                ShimmerBox(width: 90, height: 14, borderRadius: 4),
-                ShimmerBox(width: 34, height: 34, borderRadius: 10),
+                ShimmerBox(width: 100, height: 14, borderRadius: 4),
+                ShimmerBox(width: 36, height: 36, borderRadius: 10),
               ],
             ),
             SizedBox(height: 12),
-            ShimmerBox(width: 70, height: 26, borderRadius: 6),
+            ShimmerBox(width: 80, height: 26, borderRadius: 6),
             SizedBox(height: 8),
-            ShimmerBox(width: 130, height: 12, borderRadius: 4),
+            ShimmerBox(width: 140, height: 12, borderRadius: 4),
           ],
         ),
       ),
@@ -155,7 +155,7 @@ class ShimmerKpiCard extends StatelessWidget {
   }
 }
 
-/// Preset: Academic School Year Card Skeleton
+/// Preset: Academic School Year Card Skeleton (Aligned with Current 2-Tile + Switcher Layout)
 class ShimmerAcademicCard extends StatelessWidget {
   const ShimmerAcademicCard({super.key});
 
@@ -181,38 +181,137 @@ class ShimmerAcademicCard extends StatelessWidget {
                 ),
               ],
       ),
-      child: const ShimmerLoading(
+      child: ShimmerLoading(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            // Header Row
+            const Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    ShimmerBox(width: 36, height: 36, borderRadius: 10),
-                    SizedBox(width: 12),
-                    ShimmerBox(width: 220, height: 18, borderRadius: 4),
+                    ShimmerBox(width: 42, height: 42, borderRadius: 12),
+                    SizedBox(width: 14),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ShimmerBox(width: 250, height: 17, borderRadius: 4),
+                        SizedBox(height: 6),
+                        ShimmerBox(width: 300, height: 12, borderRadius: 4),
+                      ],
+                    ),
                   ],
                 ),
-                ShimmerBox(width: 140, height: 38, borderRadius: 10),
+                ShimmerBox(width: 150, height: 40, borderRadius: 10),
               ],
             ),
-            SizedBox(height: 20),
-            Row(
-              children: [
-                ShimmerBox(width: 120, height: 26, borderRadius: 8),
-                SizedBox(width: 12),
-                ShimmerBox(width: 180, height: 26, borderRadius: 8),
-              ],
+            const SizedBox(height: 20),
+
+            // 2 Key Governance Tiles Row
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isMulti = constraints.maxWidth >= 600;
+                final tile1 = Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Row(
+                    children: [
+                      ShimmerBox(width: 44, height: 44, borderRadius: 10),
+                      SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ShimmerBox(width: 110, height: 10, borderRadius: 4),
+                            SizedBox(height: 6),
+                            ShimmerBox(width: 130, height: 20, borderRadius: 6),
+                            SizedBox(height: 6),
+                            ShimmerBox(width: 180, height: 11, borderRadius: 4),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+
+                final tile2 = Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Row(
+                    children: [
+                      ShimmerBox(width: 44, height: 44, borderRadius: 10),
+                      SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ShimmerBox(width: 140, height: 10, borderRadius: 4),
+                            SizedBox(height: 6),
+                            ShimmerBox(width: 160, height: 20, borderRadius: 6),
+                            SizedBox(height: 6),
+                            ShimmerBox(width: 200, height: 11, borderRadius: 4),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (isMulti) {
+                  return Row(
+                    children: [
+                      Expanded(child: tile1),
+                      const SizedBox(width: 14),
+                      Expanded(child: tile2),
+                    ],
+                  );
+                }
+
+                return Column(
+                  children: [
+                    tile1,
+                    const SizedBox(height: 12),
+                    tile2,
+                  ],
+                );
+              },
             ),
-            SizedBox(height: 18),
-            Row(
-              children: [
-                ShimmerBox(width: 160, height: 14, borderRadius: 4),
-                SizedBox(width: 12),
-                ShimmerBox(width: 140, height: 36, borderRadius: 8),
-              ],
+            const SizedBox(height: 20),
+
+            // Archive Switcher Bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white10 : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      ShimmerBox(width: 22, height: 22, borderRadius: 6),
+                      SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ShimmerBox(width: 190, height: 13, borderRadius: 4),
+                          SizedBox(height: 4),
+                          ShimmerBox(width: 260, height: 11, borderRadius: 4),
+                        ],
+                      ),
+                    ],
+                  ),
+                  ShimmerBox(width: 180, height: 36, borderRadius: 10),
+                ],
+              ),
             ),
           ],
         ),
@@ -356,10 +455,10 @@ class ShimmerTeacherStatCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
+        color: isDark ? theme.colorScheme.surface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
         ),

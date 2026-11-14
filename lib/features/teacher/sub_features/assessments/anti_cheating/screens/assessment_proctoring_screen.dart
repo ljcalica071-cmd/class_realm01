@@ -2,7 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
+import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
@@ -23,11 +26,13 @@ enum ProctorViewTab { liveMonitor, itemAnalysis }
 class AssessmentProctoringScreen extends StatefulWidget {
   final QuizOrExamModel assessment;
   final VoidCallback onBack;
+  final VoidCallback? onCancelAssessment;
 
   const AssessmentProctoringScreen({
     super.key,
     required this.assessment,
     required this.onBack,
+    this.onCancelAssessment,
   });
 
   @override
@@ -44,6 +49,7 @@ class _AssessmentProctoringScreenState
   ProctorViewTab _activeTab = ProctorViewTab.liveMonitor;
   String _searchQuery = '';
   bool _isLoading = true;
+  bool _isLoadingAnalysis = false;
   bool _resultsReleased = false;
 
   List<StudentLiveProctorState> _rosterStudents = [];
@@ -68,28 +74,48 @@ class _AssessmentProctoringScreenState
     super.initState();
     _resultsReleased = widget.assessment.resultsReleased;
 
+    final initialPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
+    final startOnItemAnalysis =
+        initialPath == AppRoutes.teacherClassworkItemAnalysis &&
+        _isTestingFinished;
+    if (startOnItemAnalysis) {
+      _activeTab = ProctorViewTab.itemAnalysis;
+    }
+
     _tabController = TabController(
-      length: widget.assessment.isExam ? 2 : 1,
+      length: 2,
       vsync: this,
+      initialIndex: startOnItemAnalysis ? 1 : 0,
     );
     _tabController.addListener(() {
-      if (!mounted) return;
+      if (!mounted || _tabController.indexIsChanging) return;
       final hasSubmitted = _rosterStudents.any(
         (s) => s.status == ProctorSessionStatus.submitted,
       );
       if (_tabController.index == 1 && !_isTestingFinished && !hasSubmitted) {
         _tabController.index = 0;
+        final typeLabel = widget.assessment.isExam ? 'examination' : 'quiz';
         AppTopToast.warning(
           context,
-          'Item Analysis unlocks once learners submit or after the examination window ends.',
+          'Item Analysis unlocks once learners submit or after the $typeLabel window ends.',
         );
       } else {
+        final newTab = _tabController.index == 0
+            ? ProctorViewTab.liveMonitor
+            : ProctorViewTab.itemAnalysis;
         setState(() {
-          _activeTab = _tabController.index == 0
-              ? ProctorViewTab.liveMonitor
-              : ProctorViewTab.itemAnalysis;
+          _activeTab = newTab;
         });
-        if (_activeTab == ProctorViewTab.itemAnalysis) {
+        if (newTab == ProctorViewTab.liveMonitor) {
+          updateBrowserUrl(AppRoutes.teacherClassworkProctoring);
+          LocalStorageService.saveLastActiveRoute(
+            AppRoutes.teacherClassworkProctoring,
+          );
+        } else {
+          updateBrowserUrl(AppRoutes.teacherClassworkItemAnalysis);
+          LocalStorageService.saveLastActiveRoute(
+            AppRoutes.teacherClassworkItemAnalysis,
+          );
           _loadItemAnalysis();
         }
       }
@@ -711,9 +737,23 @@ class _AssessmentProctoringScreenState
       }
 
       if (mounted) {
+        final currentPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
+        final shouldRestoreItemAnalysis =
+            widget.assessment.isExam &&
+            currentPath == AppRoutes.teacherClassworkItemAnalysis &&
+            (_isTestingFinished ||
+                parsedList.any(
+                  (s) => s.status == ProctorSessionStatus.submitted,
+                ));
         setState(() {
           _rosterStudents = parsedList;
           _isLoading = false;
+          if (shouldRestoreItemAnalysis) {
+            _activeTab = ProctorViewTab.itemAnalysis;
+            if (_tabController.index != 1) {
+              _tabController.index = 1;
+            }
+          }
         });
       }
     } catch (e) {
@@ -749,6 +789,9 @@ class _AssessmentProctoringScreenState
   }
 
   Future<void> _loadItemAnalysis() async {
+    if (mounted && _itemStats.isEmpty) {
+      setState(() => _isLoadingAnalysis = true);
+    }
     try {
       final client = SupabaseService().client;
       // 1. Query assessment_questions using real 'position' column (fallback to widget.assessment.questions)
@@ -836,10 +879,16 @@ class _AssessmentProctoringScreenState
       }
 
       if (mounted) {
-        setState(() => _itemStats = statsList);
+        setState(() {
+          _itemStats = statsList;
+          _isLoadingAnalysis = false;
+        });
       }
     } catch (e) {
       debugPrint('Item analysis load error: $e');
+      if (mounted && _isLoadingAnalysis) {
+        setState(() => _isLoadingAnalysis = false);
+      }
     }
   }
 
@@ -1456,43 +1505,12 @@ class _AssessmentProctoringScreenState
           // ── TOP HEADER WITH BACK BUTTON ──
           Row(
             children: [
-              InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: widget.onBack,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? theme.colorScheme.surfaceContainerHighest
-                        : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isDark
-                          ? theme.colorScheme.onSurface.withValues(alpha: 0.1)
-                          : const Color(0xFFCBD5E1),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(LucideIcons.arrowLeft, size: 16),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Back to Classwork',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: widget.onBack,
+                tooltip: 'Back',
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1557,66 +1575,93 @@ class _AssessmentProctoringScreenState
                   ],
                 ),
               ),
+              if (widget.onCancelAssessment != null) ...[
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.catRed,
+                    side: BorderSide(
+                      color: AppTheme.catRed.withValues(alpha: 0.4),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(Icons.cancel_outlined, size: 16),
+                  label: Text(
+                    widget.assessment.isExam ? 'Cancel Exam' : 'Cancel Quiz',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onPressed: widget.onCancelAssessment,
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 16),
 
           // ── SLIDING TAB BAR (Written Works / PT / Exam style) ──
-          if (widget.assessment.isExam) ...[
-            Container(
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
-                ),
-              ),
-              child: TabBar(
-                controller: _tabController,
-                dividerColor: Colors.transparent,
-                labelColor: theme.colorScheme.primary,
-                unselectedLabelColor: theme.colorScheme.onSurface.withValues(
-                  alpha: 0.6,
-                ),
-                indicatorColor: theme.colorScheme.primary,
-                indicatorWeight: 3,
-                tabs: [
-                  const Tab(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(LucideIcons.shieldCheck, size: 16),
-                        SizedBox(width: 8),
-                        Text(
-                          'Live Proctoring Monitor',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Tab(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          (_isTestingFinished || completedCount > 0)
-                              ? LucideIcons.barChart2
-                              : LucideIcons.lock,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Item Analysis (DepEd Tiers)',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+          Container(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
               ),
             ),
-            const SizedBox(height: 16),
-          ],
+            child: TabBar(
+              controller: _tabController,
+              dividerColor: Colors.transparent,
+              labelColor: theme.colorScheme.primary,
+              unselectedLabelColor: theme.colorScheme.onSurface.withValues(
+                alpha: 0.6,
+              ),
+              indicatorColor: theme.colorScheme.primary,
+              indicatorWeight: 3,
+              tabs: [
+                const Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(LucideIcons.shieldCheck, size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        'Live Proctoring Monitor',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        (_isTestingFinished || completedCount > 0)
+                            ? LucideIcons.barChart2
+                            : LucideIcons.lock,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.assessment.isExam
+                            ? 'Item Analysis (DepEd Tiers)'
+                            : 'Quiz Item Analysis',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
 
           // ── 15-MINUTE ENTRANCE WINDOW NOTICE ──
           Container(
@@ -1729,27 +1774,27 @@ class _AssessmentProctoringScreenState
           const SizedBox(height: 16),
 
           // ── ACTIVE TAB CONTENT ──
-          if (_isLoading)
-            _buildProctoringSkeleton(theme, isDark)
-          else if (_activeTab == ProctorViewTab.liveMonitor)
-            ProctoringRosterTable(
-              students: _rosterStudents,
-              searchQuery: _searchQuery,
-              onSearchChanged: (q) => setState(() => _searchQuery = q),
-              onReset: _handleResetStudent,
-              onToggleAllow: _handleToggleAllow,
-              isScheduleExpired: _isTestingFinished,
-              onUpdateSchedule: _showUpdateScheduleDialog,
-              scheduleDateFormatted: _formatDateOnly(_scheduleDate),
-              onRefresh: () async {
-                await _loadLearners(silent: true);
-                if (widget.assessment.isExam) {
-                  await _loadItemAnalysis();
-                }
-              },
-            )
+          if (_activeTab == ProctorViewTab.liveMonitor)
+            (_isLoading
+                ? _buildProctoringSkeleton(theme, isDark)
+                : ProctoringRosterTable(
+                    students: _rosterStudents,
+                    searchQuery: _searchQuery,
+                    onSearchChanged: (q) => setState(() => _searchQuery = q),
+                    onReset: _handleResetStudent,
+                    onToggleAllow: _handleToggleAllow,
+                    isScheduleExpired: _isTestingFinished,
+                    onUpdateSchedule: _showUpdateScheduleDialog,
+                    scheduleDateFormatted: _formatDateOnly(_scheduleDate),
+                    onRefresh: () async {
+                      await _loadLearners(silent: true);
+                      await _loadItemAnalysis();
+                    },
+                  ))
           else
-            _buildItemAnalysisView(theme, isDark),
+            (_isLoadingAnalysis
+                ? _buildProctoringSkeleton(theme, isDark)
+                : _buildItemAnalysisView(theme, isDark)),
         ],
       ),
     );
@@ -1981,15 +2026,20 @@ class _AssessmentProctoringScreenState
             ),
             const SizedBox(height: 10),
             // Middle Row: Value
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-                color: theme.colorScheme.onSurface,
+            if (_isLoading)
+              const ShimmerLoading(
+                child: ShimmerBox(width: 44, height: 26, borderRadius: 6),
+              )
+            else
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: theme.colorScheme.onSurface,
+                ),
               ),
-            ),
             const SizedBox(height: 4),
             // Bottom Row: Helper Subtitle
             Text(

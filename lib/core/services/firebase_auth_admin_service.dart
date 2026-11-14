@@ -462,6 +462,48 @@ class FirebaseAuthAdminService {
         debugPrint('FirebaseAuthAdminService adminResetUserCredentials error: $e');
       }
     }
+
+    // Fallback: If direct Google Identity Platform API fails (e.g. on Flutter Web
+    // where service account credentials are unavailable or direct CORS requests are blocked),
+    // delegate to the Supabase Edge Function 'reset-password' which runs in Deno with Firebase Admin SDK.
+    if (cleanEmail != null && cleanEmail.isNotEmpty) {
+      final supabaseUrl = EnvConfig.supabaseUrl;
+      final supabaseAnonKey = EnvConfig.supabaseAnonKey;
+      if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
+        try {
+          final resetUrl = Uri.parse('$supabaseUrl/functions/v1/reset-password');
+          final resp = await http.post(
+            resetUrl,
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': supabaseAnonKey,
+              'Authorization': 'Bearer $supabaseAnonKey',
+            },
+            body: jsonEncode({
+              'email': cleanEmail,
+              'new_password': newPassword,
+            }),
+          );
+          if (resp.statusCode == 200) {
+            final respData = jsonDecode(resp.body) as Map<String, dynamic>?;
+            if (respData?['success'] == true) {
+              debugPrint(
+                'FirebaseAuthAdminService adminResetUserCredentials succeeded via reset-password edge function.',
+              );
+              return true;
+            }
+          }
+          debugPrint(
+            'FirebaseAuthAdminService reset-password edge function returned ${resp.statusCode}: ${resp.body}',
+          );
+        } catch (edgeErr) {
+          debugPrint(
+            'FirebaseAuthAdminService edge function fallback error: $edgeErr',
+          );
+        }
+      }
+    }
+
     return false;
   }
 

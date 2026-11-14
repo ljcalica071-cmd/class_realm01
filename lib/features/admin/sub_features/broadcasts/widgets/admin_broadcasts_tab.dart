@@ -594,29 +594,39 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     }
   }
 
+  Future<void> _handleEditAnnouncement(AppNotificationModel b) async {
+    final updated = await showDialog<AppNotificationModel>(
+      context: context,
+      builder: (ctx) => _EditAnnouncementDialog(
+        announcement: b,
+        userCounts: _userCounts,
+      ),
+    );
+
+    if (updated != null && mounted) {
+      setState(() {
+        final idx = _broadcasts.indexWhere((item) => item.id == updated.id);
+        if (idx != -1) {
+          _broadcasts[idx] = updated;
+        }
+      });
+      AppDataCache.instance.setCache(
+        'admin_broadcasts_history',
+        _broadcasts.map((e) => e.toJson()).toList(),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppTheme.catGreen,
+          content: Text('Announcement updated successfully!'),
+        ),
+      );
+    }
+  }
+
   Future<void> _handleDeleteAnnouncement(AppNotificationModel b) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Announcement'),
-        content: Text(
-          'Are you sure you want to delete "${b.title}"? This announcement will no longer be visible to any recipient.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      builder: (ctx) => _DeleteAnnouncementDialog(announcement: b),
     );
 
     if (confirmed != true) return;
@@ -1388,6 +1398,8 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                         final b = pagedBroadcasts[i];
                         return ExpandableNotificationCard(
                           notification: b,
+                          showEdit: true,
+                          onEdit: () => _handleEditAnnouncement(b),
                           showDelete: true,
                           onDelete: () => _handleDeleteAnnouncement(b),
                         );
@@ -1748,6 +1760,527 @@ class _EnableMaintenanceDialogState extends State<_EnableMaintenanceDialog> {
           child: const Text('Cancel'),
         ),
       ],
+    );
+  }
+}
+
+class _DeleteAnnouncementDialog extends StatefulWidget {
+  final AppNotificationModel announcement;
+
+  const _DeleteAnnouncementDialog({required this.announcement});
+
+  @override
+  State<_DeleteAnnouncementDialog> createState() =>
+      _DeleteAnnouncementDialogState();
+}
+
+class _DeleteAnnouncementDialogState extends State<_DeleteAnnouncementDialog> {
+  int _secondsRemaining = 5;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (_secondsRemaining > 1) {
+        setState(() => _secondsRemaining--);
+      } else {
+        setState(() => _secondsRemaining = 0);
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDC2626).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      LucideIcons.triangleAlert,
+                      color: Color(0xFFDC2626),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Delete Announcement',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Are you sure you want to delete "${widget.announcement.title}"?',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                  height: 1.35,
+                ),
+                softWrap: true,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This announcement will be archived and will no longer be visible to any recipient.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                ),
+                softWrap: true,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      foregroundColor: isDark ? Colors.white70 : const Color(0xFF475569),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFE2E8F0),
+                      disabledForegroundColor: isDark
+                          ? const Color(0xFF64748B)
+                          : const Color(0xFF94A3B8),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
+                    ),
+                    onPressed: _secondsRemaining > 0
+                        ? null
+                        : () => Navigator.pop(context, true),
+                    child: Text(
+                      _secondsRemaining > 0
+                          ? 'Delete (${_secondsRemaining}s)'
+                          : 'Delete',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EditAnnouncementDialog extends StatefulWidget {
+  final AppNotificationModel announcement;
+  final Map<String, int> userCounts;
+
+  const _EditAnnouncementDialog({
+    required this.announcement,
+    required this.userCounts,
+  });
+
+  @override
+  State<_EditAnnouncementDialog> createState() => _EditAnnouncementDialogState();
+}
+
+class _EditAnnouncementDialogState extends State<_EditAnnouncementDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _messageController;
+  late String _selectedAudience;
+
+  String? _titleError;
+  String? _messageError;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.announcement.title);
+    _messageController = TextEditingController(text: widget.announcement.message);
+    final existingAudience = widget.announcement.targetAudience.toLowerCase().trim();
+    if (['all', 'teachers', 'students', 'parents'].contains(existingAudience)) {
+      _selectedAudience = existingAudience;
+    } else {
+      _selectedAudience = 'all';
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSave() async {
+    final title = _titleController.text.trim();
+    final message = _messageController.text.trim();
+
+    bool hasError = false;
+    if (title.length < 2 || title.length > 100) {
+      setState(() => _titleError = 'Title must be between 2 and 100 characters.');
+      hasError = true;
+    } else {
+      if (_titleError != null) setState(() => _titleError = null);
+    }
+
+    if (message.length < 2 || message.length > 1000) {
+      setState(() => _messageError = 'Message must be between 2 and 1,000 characters.');
+      hasError = true;
+    } else {
+      if (_messageError != null) setState(() => _messageError = null);
+    }
+
+    if (hasError) return;
+
+    setState(() => _isSaving = true);
+    try {
+      final updated = await AdminRepository.instance.updateAnnouncement(
+        id: widget.announcement.id,
+        title: title,
+        message: message,
+        targetAudience: _selectedAudience,
+      );
+      if (mounted) {
+        Navigator.pop(context, updated);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _messageError = 'Failed to update: $e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final titleCharCount = _titleController.text.length;
+    final messageCharCount = _messageController.text.length;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      LucideIcons.pencil,
+                      color: theme.colorScheme.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Edit Announcement',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Update announcement title, content, or audience.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Target Audience Dropdown
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.users,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Audience:',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedAudience,
+                          isDense: true,
+                          items: [
+                            DropdownMenuItem(
+                              value: 'all',
+                              child: Text(
+                                'All Users (${widget.userCounts['total'] ?? 0} active)',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'teachers',
+                              child: Text(
+                                'Teachers (${widget.userCounts['teachers'] ?? 0} active)',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'students',
+                              child: Text(
+                                'Students (${widget.userCounts['students'] ?? 0} active)',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'parents',
+                              child: Text(
+                                'Parents (${widget.userCounts['parents'] ?? 0} active)',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) {
+                              setState(() => _selectedAudience = v);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Title TextField
+              TextField(
+                controller: _titleController,
+                maxLength: 100,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Announcement Title',
+                  counterText: '',
+                  errorText: _titleError,
+                  filled: true,
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFFAFAFA),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: isDark ? Colors.white24 : const Color(0xFFE5E7EB)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2.0),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 5, bottom: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '2 – 100 characters required',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    Text(
+                      '$titleCharCount / 100',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: titleCharCount > 90
+                            ? AppTheme.catRed
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Message TextField
+              TextField(
+                controller: _messageController,
+                maxLength: 1000,
+                maxLines: 4,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Message Content',
+                  counterText: '',
+                  errorText: _messageError,
+                  filled: true,
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFFAFAFA),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: isDark ? Colors.white24 : const Color(0xFFE5E7EB)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2.0),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 5, bottom: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '2 – 1,000 characters required',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    Text(
+                      '$messageCharCount / 1000',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: messageCharCount > 950
+                            ? AppTheme.catRed
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Action Buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _isSaving ? null : () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      foregroundColor: isDark ? Colors.white70 : const Color(0xFF475569),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
+                    ),
+                    onPressed: _isSaving ? null : _handleSave,
+                    child: _isSaving
+                        ? LoadingAnimationWidget.staggeredDotsWave(
+                            color: Colors.white,
+                            size: 16,
+                          )
+                        : const Text(
+                            'Save Changes',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

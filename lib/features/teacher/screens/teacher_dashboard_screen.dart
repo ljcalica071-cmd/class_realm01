@@ -72,7 +72,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case 19:
         return AppRoutes.teacherManageParents;
       case 1:
-        return AppRoutes.teacherClasswork;
+        return AppRoutes.teacherClassworkWrittenWorks;
       case 3:
         return AppRoutes.teacherLessonPlanning;
       case 4:
@@ -95,7 +95,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   int? _indexForRoute(String route) {
-    final cleanRoute = route.split('?').first.trim();
+    final cleanRoute = AppRoutes.normalizeRoutePath(route);
     switch (cleanRoute) {
       case AppRoutes.teacherDashboard:
         return 0;
@@ -108,6 +108,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       case AppRoutes.teacherManageParents:
         return 19;
       case AppRoutes.teacherClasswork:
+      case AppRoutes.teacherClassworkWrittenWorks:
+      case AppRoutes.teacherClassworkPerformanceTasks:
+      case AppRoutes.teacherClassworkExaminations:
+      case AppRoutes.teacherClassworkSubmissions:
+      case AppRoutes.teacherClassworkProctoring:
+      case AppRoutes.teacherClassworkItemAnalysis:
         return 1;
       case AppRoutes.teacherLessonPlanning:
         return 3;
@@ -136,33 +142,29 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     } else if (index == 1) {
       unawaited(_loadActivities(forceRefresh: true));
     }
+    LocalStorageService.saveActiveDashboardTab('teacher', index);
+    final route = _routeForIndex(index);
+    if (index == 1) {
+      LocalStorageService.saveTeacherClassworkNavState(
+        categoryTabIndex: 0,
+        clearActiveAssessment: true,
+        clearActiveActivity: true,
+      );
+      LocalStorageService.saveLastActiveRoute(
+        AppRoutes.teacherClassworkWrittenWorks,
+      );
+      updateBrowserUrl(AppRoutes.teacherClassworkWrittenWorks, replace: false);
+    } else {
+      LocalStorageService.saveLastActiveRoute(route);
+      updateBrowserUrl(route, replace: false);
+    }
     setState(() {
       _selectedIndex = index;
       _loadedTabIndices.add(index);
-    });
-    LocalStorageService.saveActiveDashboardTab('teacher', index);
-    final route = _routeForIndex(index);
-    LocalStorageService.saveLastActiveRoute(route);
-    if (index == 1) {
-      final nav = LocalStorageService.getTeacherClassworkNavState();
-      final catIdx = (nav['categoryTabIndex'] as num?)?.toInt() ?? 0;
-      final tabParam = catIdx == 0 ? 'ww' : (catIdx == 1 ? 'pt' : 'ex');
-      final assessId = nav['activeAssessmentId'] != null
-          ? '${nav['activeAssessmentId']}'
-          : null;
-      final actId = nav['activeActivityId'] != null
-          ? '${nav['activeActivityId']}'
-          : null;
-      if (assessId != null && assessId.isNotEmpty) {
-        updateBrowserUrl('$route?tab=$tabParam&view=proctoring', replace: false);
-      } else if (actId != null && actId.isNotEmpty) {
-        updateBrowserUrl('$route?tab=$tabParam&view=submissions', replace: false);
-      } else {
-        updateBrowserUrl('$route?tab=$tabParam', replace: false);
+      if (index == 1) {
+        _viewingSubmissionsFor = null;
       }
-    } else {
-      updateBrowserUrl(route, replace: false);
-    }
+    });
   }
 
   void _onClassworkSyncTriggered() {
@@ -198,26 +200,26 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ? widget.initialSelectedIndex
         : (savedTab > 0 ? savedTab : 0);
     _loadedTabIndices.add(_selectedIndex);
+    final initialBrowserPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
     final currentRoute = _routeForIndex(_selectedIndex);
-    LocalStorageService.saveLastActiveRoute(currentRoute);
     if (_selectedIndex == 1) {
-      final nav = LocalStorageService.getTeacherClassworkNavState();
-      final catIdx = (nav['categoryTabIndex'] as num?)?.toInt() ?? 0;
-      final tabParam = catIdx == 0 ? 'ww' : (catIdx == 1 ? 'pt' : 'ex');
-      final assessId = nav['activeAssessmentId'] != null
-          ? '${nav['activeAssessmentId']}'
-          : null;
-      final actId = nav['activeActivityId'] != null
-          ? '${nav['activeActivityId']}'
-          : null;
-      if (assessId != null && assessId.isNotEmpty) {
-        updateBrowserUrl('$currentRoute?tab=$tabParam&view=proctoring');
-      } else if (actId != null && actId.isNotEmpty) {
-        updateBrowserUrl('$currentRoute?tab=$tabParam&view=submissions');
+      if (initialBrowserPath == AppRoutes.teacherClassworkSubmissions ||
+          initialBrowserPath == AppRoutes.teacherClassworkProctoring ||
+          initialBrowserPath == AppRoutes.teacherClassworkItemAnalysis) {
+        LocalStorageService.saveLastActiveRoute(initialBrowserPath);
+        updateBrowserUrl(initialBrowserPath);
       } else {
-        updateBrowserUrl('$currentRoute?tab=$tabParam');
+        LocalStorageService.clearTeacherClassworkSubView();
+        final nav = LocalStorageService.getTeacherClassworkNavState();
+        final catIdx =
+            AppRoutes.teacherClassworkTabIndexForRoute(initialBrowserPath) ??
+            ((nav['categoryTabIndex'] as num?)?.toInt() ?? 0);
+        final cleanRoute = AppRoutes.teacherClassworkRouteForTabIndex(catIdx);
+        LocalStorageService.saveLastActiveRoute(cleanRoute);
+        updateBrowserUrl(cleanRoute);
       }
     } else {
+      LocalStorageService.saveLastActiveRoute(currentRoute);
       updateBrowserUrl(currentRoute);
     }
     _loadData();
@@ -239,9 +241,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         LocalStorageService.saveActiveDashboardTab('teacher', targetIndex);
         LocalStorageService.saveLastActiveRoute(path);
       } else if (targetIndex == 1 && _selectedIndex == 1) {
-        final uri = Uri.tryParse(path);
-        final view = uri?.queryParameters['view'];
-        if (view != 'submissions' && _viewingSubmissionsFor != null) {
+        final cleanPath = AppRoutes.normalizeRoutePath(path);
+        if (cleanPath != AppRoutes.teacherClassworkSubmissions &&
+            _viewingSubmissionsFor != null) {
           setState(() {
             _viewingSubmissionsFor = null;
           });
@@ -306,7 +308,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         final loadedActs = results[0] as List<ActivityModel>;
         final loadedAssess = results[1] as List<QuizOrExamModel>;
         final navState = LocalStorageService.getTeacherClassworkNavState();
-        final savedActId = navState['activeActivityId'] != null
+        final currentBrowserPath = AppRoutes.normalizeRoutePath(
+          getBrowserUrlPath(),
+        );
+        final canRestoreSubmissions =
+            _selectedIndex == 1 &&
+            currentBrowserPath == AppRoutes.teacherClassworkSubmissions;
+        final savedActId =
+            canRestoreSubmissions && navState['activeActivityId'] != null
             ? '${navState['activeActivityId']}'
             : null;
         ActivityModel? restoredAct;
@@ -745,13 +754,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   }
                 },
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: Icon(
-                  LucideIcons.bellRing,
-                  color: theme.colorScheme.onSurface,
-                ),
-                onPressed: () => _onSelectTab(15),
+              const SizedBox(width: 4),
+              NotificationBellButton(
+                role: 'teacher',
+                tooltip: 'School Announcements & Notifications',
+                onTap: () => _onSelectTab(15),
               ),
               const SizedBox(width: 8),
               CircleAvatar(
@@ -1063,16 +1070,19 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 assessments: quizzesAndExams,
                 selectedClassSection: _selectedClassSection,
                 repository: SupabaseTeacherClassworkRepository.instance,
+                isLoading: _persistedActivities == null,
                 onRefresh: () => _loadActivities(forceRefresh: true),
                 onViewSubmissions: (act) {
+                  final catIdx = act.isRequirement
+                      ? 1
+                      : (act.gradingCategory == 'ex' ? 2 : 0);
                   LocalStorageService.saveTeacherClassworkNavState(
+                    categoryTabIndex: catIdx,
                     activeActivityId: act.id,
                   );
-                  final catParam = act.isRequirement
-                      ? 'pt'
-                      : (act.gradingCategory == 'ex' ? 'ex' : 'ww');
-                  updateBrowserUrl(
-                    '${AppRoutes.teacherClasswork}?tab=$catParam&view=submissions',
+                  updateBrowserUrl(AppRoutes.teacherClassworkSubmissions);
+                  LocalStorageService.saveLastActiveRoute(
+                    AppRoutes.teacherClassworkSubmissions,
                   );
                   setState(() => _viewingSubmissionsFor = act);
                 },
@@ -1085,10 +1095,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   LocalStorageService.saveTeacherClassworkNavState(
                     clearActiveActivity: true,
                   );
-                  final catParam = act.isRequirement
-                      ? 'pt'
-                      : (act.gradingCategory == 'ex' ? 'ex' : 'ww');
-                  updateBrowserUrl('${AppRoutes.teacherClasswork}?tab=$catParam');
+                  final catIdx = act.isRequirement
+                      ? 1
+                      : (act.gradingCategory == 'ex' ? 2 : 0);
+                  final cleanRoute = AppRoutes.teacherClassworkRouteForTabIndex(
+                    catIdx,
+                  );
+                  updateBrowserUrl(cleanRoute);
+                  LocalStorageService.saveLastActiveRoute(cleanRoute);
                   setState(() => _viewingSubmissionsFor = null);
                 },
               );
@@ -1280,67 +1294,89 @@ class _SchoolYearSelectorWidgetState extends State<SchoolYearSelectorWidget> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'School Year: ',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-            ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark ? Colors.white12 : const Color(0xFFCBD5E1),
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: theme.colorScheme.primary.withValues(alpha: 0.3),
-              ),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedSy,
-                isDense: true,
-                padding: EdgeInsets.zero,
-                icon: Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: Icon(
-                    LucideIcons.chevronDown,
-                    color: theme.colorScheme.primary,
-                    size: 18,
+          boxShadow: isDark
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
-                ),
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  letterSpacing: 0,
-                  color: theme.colorScheme.primary,
-                ),
-                items: _schoolYears
-                    .map(
-                      (sy) => DropdownMenuItem(
-                        value: sy,
-                        child: Text(sy, style: const TextStyle(letterSpacing: 0)),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() => _selectedSy = val);
-                  }
-                },
+                ],
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: _selectedSy,
+            isDense: true,
+            padding: EdgeInsets.zero,
+            icon: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Icon(
+                LucideIcons.chevronDown,
+                color: isDark ? Colors.white70 : const Color(0xFF475569),
+                size: 16,
               ),
             ),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+            ),
+            items: _schoolYears.map((sy) {
+              final isCurrent = sy == _schoolYears.last;
+              return DropdownMenuItem<String>(
+                value: sy,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: isCurrent
+                            ? const Color(0xFF16A34A)
+                            : const Color(0xFFEAB308),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Text(
+                      'S.Y. $sy ${isCurrent ? "(Current Active)" : "(Archived)"}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            isCurrent ? FontWeight.w700 : FontWeight.w500,
+                        color: isCurrent
+                            ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                            : (isDark
+                                ? Colors.white70
+                                : const Color(0xFF64748B)),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            onChanged: (val) {
+              if (val != null) {
+                setState(() => _selectedSy = val);
+              }
+            },
           ),
-        ],
+        ),
       ),
     );
   }

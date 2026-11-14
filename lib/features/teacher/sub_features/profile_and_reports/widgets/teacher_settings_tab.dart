@@ -26,7 +26,7 @@ class TeacherSettingsTab extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Manage your notification preferences, account security, and view official ClassRealm legal policies.',
+                'Manage your account security and view official ClassRealm legal policies.',
                 style: TextStyle(
                   fontSize: 13.5,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
