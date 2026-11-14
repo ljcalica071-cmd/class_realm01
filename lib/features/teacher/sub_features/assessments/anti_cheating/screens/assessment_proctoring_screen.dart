@@ -278,10 +278,14 @@ class _AssessmentProctoringScreenState
                   first_name,
                   middle_name,
                   last_name,
-                  gender
+                  gender,
+                  users (
+                    is_archived
+                  )
                 )
               ''')
-              .eq('subject_offering_id', offeringId);
+              .eq('subject_offering_id', offeringId)
+              .neq('status', 'archived');
           enrollData = res as List<dynamic>? ?? [];
         } catch (e) {
           debugPrint('Tier 1 enrollment query notice: $e');
@@ -325,10 +329,14 @@ class _AssessmentProctoringScreenState
                       first_name,
                       middle_name,
                       last_name,
-                      gender
+                      gender,
+                      users (
+                        is_archived
+                      )
                     )
                   ''')
-                  .inFilter('subject_offering_id', offIds);
+                  .inFilter('subject_offering_id', offIds)
+                  .neq('status', 'archived');
               enrollData = secEnroll as List<dynamic>? ?? [];
             }
           }
@@ -381,7 +389,7 @@ class _AssessmentProctoringScreenState
         try {
           final allProfiles = await client
               .from('student_profiles')
-              .select('student_id, lrn, first_name, middle_name, last_name, gender')
+              .select('student_id, lrn, first_name, middle_name, last_name, gender, users ( is_archived )')
               .order('last_name', ascending: true);
           for (final p in (allProfiles as List? ?? [])) {
             enrollData.add({
@@ -413,11 +421,51 @@ class _AssessmentProctoringScreenState
         final sId = row['student_id']?.toString() ??
             profile['student_id']?.toString() ??
             '';
+        final enrollStatus = row['status']?.toString().toLowerCase() ?? '';
+        final usersRaw = profile['users'];
+        bool isUserArchived = false;
+        if (usersRaw is Map) {
+          isUserArchived = usersRaw['is_archived'] == true;
+        } else if (usersRaw is List && usersRaw.isNotEmpty && usersRaw.first is Map) {
+          isUserArchived = (usersRaw.first as Map)['is_archived'] == true;
+        }
+        if (enrollStatus == 'archived' || isUserArchived) {
+          continue;
+        }
         if (sId.isNotEmpty && seenStudentIds.add(sId)) {
           uniqueEnrollData.add({
             'student_id': sId,
             'student_profiles': profile,
           });
+        }
+      }
+
+      // Exclude any students marked archived in student_settings
+      if (uniqueEnrollData.isNotEmpty) {
+        try {
+          final settingsRows = await client
+              .from('student_settings')
+              .select('student_id, status')
+              .inFilter(
+                'student_id',
+                uniqueEnrollData
+                    .map((r) => r['student_id'].toString())
+                    .toList(),
+              );
+          final archivedSettingsIds = <String>{};
+          for (final sr in (settingsRows as List? ?? [])) {
+            if (sr['status']?.toString().toLowerCase() == 'archived') {
+              final sid = sr['student_id']?.toString() ?? '';
+              if (sid.isNotEmpty) archivedSettingsIds.add(sid);
+            }
+          }
+          if (archivedSettingsIds.isNotEmpty) {
+            uniqueEnrollData.removeWhere(
+              (r) => archivedSettingsIds.contains(r['student_id']?.toString()),
+            );
+          }
+        } catch (stErr) {
+          debugPrint('student_settings archive filter notice: $stErr');
         }
       }
 
@@ -796,30 +844,104 @@ class _AssessmentProctoringScreenState
   }
 
   Future<void> _handleResetStudent(StudentLiveProctorState student) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
+        backgroundColor: theme.colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: theme.colorScheme.outline.withValues(alpha: 0.14),
+          ),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
+        contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
+        title: Row(
           children: [
-            Icon(LucideIcons.rotateCcw, color: AppTheme.catBlue, size: 20),
-            SizedBox(width: 8),
-            Text('Reset Student Progress'),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                LucideIcons.rotateCcw,
+                color: theme.colorScheme.primary,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Reset Student Progress',
+                style: TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ),
           ],
         ),
-        content: Text(
-          'Are you sure you want to reset the assessment for ${student.studentName}? '
-          'This will wipe all existing answers and reset their attempt to Question 1.',
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to reset the assessment for ${student.studentName}?',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  height: 1.5,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                      : theme.colorScheme.primary.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Text(
+                  'This will clear all saved answers and violation history, and restart their attempt from Question 1.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.catBlue,
-              foregroundColor: Colors.white,
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Reset Attempt'),
@@ -849,60 +971,6 @@ class _AssessmentProctoringScreenState
           context,
           'Progress reset for ${student.studentName}',
           icon: LucideIcons.rotateCcw,
-        );
-      }
-    }
-  }
-
-  Future<void> _handleForceSubmit(StudentLiveProctorState student) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
-          children: [
-            Icon(LucideIcons.send, color: AppTheme.catRed, size: 20),
-            SizedBox(width: 8),
-            Text('Force Submit Assessment'),
-          ],
-        ),
-        content: Text(
-          'Force submit the examination for ${student.studentName}? '
-          'Their test will be locked and current answers evaluated immediately.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.catRed,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Force Submit'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      _proctorService.forceSubmitStudent(student.studentId);
-      setState(() {
-        final idx =
-            _rosterStudents.indexWhere((s) => s.studentId == student.studentId);
-        if (idx != -1) {
-          _rosterStudents[idx] = _rosterStudents[idx].copyWith(
-            status: ProctorSessionStatus.submitted,
-          );
-        }
-      });
-      if (mounted) {
-        AppTopToast.info(
-          context,
-          'Submitted assessment for ${student.studentName}',
-          icon: LucideIcons.send,
         );
       }
     }
@@ -1669,7 +1737,6 @@ class _AssessmentProctoringScreenState
               searchQuery: _searchQuery,
               onSearchChanged: (q) => setState(() => _searchQuery = q),
               onReset: _handleResetStudent,
-              onForceSubmit: _handleForceSubmit,
               onToggleAllow: _handleToggleAllow,
               isScheduleExpired: _isTestingFinished,
               onUpdateSchedule: _showUpdateScheduleDialog,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/phone_nfc_service.dart';
@@ -79,6 +80,7 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
   bool _isSubmitting = false;
   bool _isUnlinking = false;
   bool _lastCaptureFromScanner = false;
+  RealtimeChannel? _pendingScanChannel;
 
   String? get _normalizedCurrentUid {
     final raw = widget.currentRfidUid?.trim().toUpperCase();
@@ -103,10 +105,15 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
     PhoneNfcService.instance.startNfcCapture(
       onCardScanned: (scannedUid) {
         if (!mounted) return;
+        final normalized = scannedUid
+            .trim()
+            .toUpperCase()
+            .replaceAll(RegExp(r'[^0-9A-F]'), '');
+        if (normalized.isEmpty) return;
         setState(() {
-          _uidController.text = scannedUid;
+          _uidController.text = normalized;
           _uidController.selection = TextSelection.collapsed(
-            offset: scannedUid.length,
+            offset: normalized.length,
           );
           _uidError = null;
           _lastCaptureFromScanner = true;
@@ -114,6 +121,9 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
         _validateAndSubmit();
       },
     );
+
+    // Also subscribe to ESP32 hardware pending scans while modal is open
+    _subscribeToHardwarePendingScans();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -126,8 +136,51 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
     });
   }
 
+  void _subscribeToHardwarePendingScans() {
+    try {
+      final client = Supabase.instance.client;
+      _pendingScanChannel = client
+          .channel(
+            'rfid_modal_pending_${widget.studentId}_${DateTime.now().millisecondsSinceEpoch}',
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'rfid_pending_scans',
+            callback: (payload) {
+              if (!mounted || _isSubmitting || _isUnlinking) return;
+              final rawUid = payload.newRecord['rfid_uid']?.toString() ?? '';
+              final cleanUid = rawUid
+                  .trim()
+                  .toUpperCase()
+                  .replaceAll(RegExp(r'[^0-9A-F]'), '');
+              if (cleanUid.length >= 4) {
+                setState(() {
+                  _uidController.text = cleanUid;
+                  _uidController.selection = TextSelection.collapsed(
+                    offset: cleanUid.length,
+                  );
+                  _uidError = null;
+                  _lastCaptureFromScanner = true;
+                });
+                _validateAndSubmit();
+              }
+            },
+          )
+          .subscribe();
+    } catch (_) {
+      // Safe fallback when Supabase is not initialized in widget tests
+    }
+  }
+
   @override
   void dispose() {
+    if (_pendingScanChannel != null) {
+      try {
+        Supabase.instance.client.removeChannel(_pendingScanChannel!);
+      } catch (_) {}
+      _pendingScanChannel = null;
+    }
     PhoneNfcService.instance.stopNfcCapture();
     _uidController.dispose();
     _keyboardFocusNode.dispose();
@@ -213,7 +266,8 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
   Future<void> _validateAndSubmit() async {
     if (_isSubmitting || _isUnlinking) return;
 
-    final newUid = _uidController.text.trim().toUpperCase();
+    final rawInput = _uidController.text.trim().toUpperCase();
+    final newUid = rawInput.replaceAll(RegExp(r'[\s:\-]'), '');
 
     // E1: Invalid / Empty Format
     if (!_hexUidRegex.hasMatch(newUid)) {
@@ -221,6 +275,11 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
         _uidError = 'Enter or scan a valid 8–14 character hexadecimal RFID UID (0–9, A–F).';
       });
       return;
+    }
+
+    if (_uidController.text != newUid) {
+      _uidController.text = newUid;
+      _uidController.selection = TextSelection.collapsed(offset: newUid.length);
     }
 
     final currentUid = _normalizedCurrentUid;
@@ -723,7 +782,7 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
                 ] else ...[
                   const SizedBox(height: 6),
                   Text(
-                    '8–14 hex characters (0–9, A–F). Syncs automatically with ESP32 classroom terminals.',
+                    '8–14 hex characters (0–9, A–F). One linked RFID card works across all subjects and sections this student is enrolled in.',
                     style: TextStyle(
                       fontSize: 11.5,
                       color: theme.colorScheme.onSurface.withValues(

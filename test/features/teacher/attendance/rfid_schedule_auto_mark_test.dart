@@ -40,6 +40,15 @@ void main() {
 
       expect(statusHoliday.isLockedByDefault, isTrue);
       expect(statusHoliday.lockReason, contains('Bonifacio Day'));
+
+      final statusNoScheduleSet = AttendanceScheduleStatus(
+        hasPlottedScheduleAnyDay: false,
+        isScheduledOnDate: false,
+        cutoffConfig: AttendanceCutoffConfig(subjectOfferingId: 'sub-1'),
+      );
+
+      expect(statusNoScheduleSet.isLockedByDefault, isTrue);
+      expect(statusNoScheduleSet.lockReason, contains('My Schedule'));
     });
   });
 }

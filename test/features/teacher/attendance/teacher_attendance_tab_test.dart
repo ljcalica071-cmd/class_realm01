@@ -10,6 +10,31 @@ class TabMockAttendanceRepository extends AttendanceRepository {
   List<AttendanceWorkspaceRecord> dateRecords = [];
   bool saveBatchCalled = false;
   List<AttendanceWorkspaceRecord> savedBatchRecords = [];
+  bool clearDateCalled = false;
+  String? clearedOfferingId;
+  AttendanceScheduleStatus? customScheduleStatus;
+
+  @override
+  Future<AttendanceScheduleStatus> getScheduleAndCutoffStatus({
+    required String subjectOfferingId,
+    required DateTime date,
+  }) async {
+    if (customScheduleStatus != null) return customScheduleStatus!;
+    return super.getScheduleAndCutoffStatus(
+      subjectOfferingId: subjectOfferingId,
+      date: date,
+    );
+  }
+
+  @override
+  Future<void> clearAttendanceForDate({
+    required String subjectOfferingId,
+    required DateTime date,
+  }) async {
+    clearDateCalled = true;
+    clearedOfferingId = subjectOfferingId;
+    dateRecords = [];
+  }
 
   @override
   Future<AttendanceRosterResult> getAttendanceRosterAndDateRecords({
@@ -242,6 +267,117 @@ void main() {
           mockRepo.savedBatchRecords.first.status,
           AttendanceStatus.present,
         );
+      },
+    );
+
+    testWidgets(
+      'strictly locks attendance when no schedule is set in My Schedule',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1280, 1000));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        mockRepo.customScheduleStatus = const AttendanceScheduleStatus(
+          hasPlottedScheduleAnyDay: false,
+          isScheduledOnDate: false,
+          cutoffConfig: AttendanceCutoffConfig(subjectOfferingId: 'sub-1'),
+        );
+        mockRepo.rosterStudents = [
+          const AttendanceRosterStudent(
+            studentId: 's1',
+            firstName: 'Juan',
+            lastName: 'Dela Cruz',
+            gender: 'male',
+          ),
+        ];
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: TeacherAttendanceTab(
+                  repository: mockRepo,
+                  initialSubjects: const [
+                    {
+                      'id': 'sub-1',
+                      'subject_name': 'General Mathematics',
+                      'grade_level': 11,
+                      'section_name': 'STEM-11A',
+                    },
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        expect(find.text('Schedule Locked'), findsOneWidget);
+        expect(
+          find.text('No Class Schedule Set Yet — Attendance Locked'),
+          findsOneWidget,
+        );
+        expect(find.text('Enable Make-Up Class Override'), findsNothing);
+        expect(find.text('Mark All Present'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Clear All button opens confirmation modal and deletes date attendance records',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1280, 1000));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        mockRepo.rosterStudents = [
+          const AttendanceRosterStudent(
+            studentId: 's1',
+            firstName: 'Juan',
+            lastName: 'Dela Cruz',
+            gender: 'male',
+          ),
+        ];
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: TeacherAttendanceTab(
+                  repository: mockRepo,
+                  initialSubjects: const [
+                    {
+                      'id': 'sub-1',
+                      'subject_name': 'General Mathematics',
+                      'grade_level': 11,
+                      'section_name': 'STEM-11A',
+                    },
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Mark all present first
+        final markAllBtn = find.text('Mark All Present');
+        expect(markAllBtn, findsOneWidget);
+        await tester.tap(markAllBtn);
+        await tester.pumpAndSettle();
+
+        // Click Clear All button next to Mark All Present
+        final clearAllBtn = find.text('Clear All');
+        expect(clearAllBtn, findsOneWidget);
+        await tester.tap(clearAllBtn);
+        await tester.pumpAndSettle();
+
+        // Confirmation modal should appear
+        expect(find.text('Clear All Records'), findsOneWidget);
+        await tester.tap(find.text('Clear All Records'));
+        await tester.pumpAndSettle();
+
+        expect(mockRepo.clearDateCalled, isTrue);
+        expect(mockRepo.clearedOfferingId, 'sub-1');
       },
     );
   });

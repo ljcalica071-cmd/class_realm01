@@ -25,6 +25,11 @@ abstract class AttendanceRepository {
     List<String>? deletedStudentIds,
   });
 
+  Future<void> clearAttendanceForDate({
+    required String subjectOfferingId,
+    required DateTime date,
+  }) async {}
+
   Future<AttendancePage<AttendanceWorkspaceRecord>> getAttendanceHistory(
     AttendanceHistoryFilter filter,
   );
@@ -47,7 +52,7 @@ abstract class AttendanceRepository {
     required DateTime date,
   }) async {
     return AttendanceScheduleStatus(
-      hasPlottedScheduleAnyDay: false,
+      hasPlottedScheduleAnyDay: true,
       isScheduledOnDate: true,
       cutoffConfig: AttendanceCutoffConfig(
         subjectOfferingId: subjectOfferingId,

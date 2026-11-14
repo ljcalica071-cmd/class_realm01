@@ -38,7 +38,7 @@ class EditAssessmentFlowDialog extends StatefulWidget {
 
 class _EditPlannedQuestion {
   final String id;
-  final int position;
+  int position;
   final QuestionType type;
   final int points;
   String questionText;
@@ -76,6 +76,7 @@ class _EditPlannedQuestion {
 
 class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
   final List<_EditPlannedQuestion> _questions = [];
+  final List<String> _deletedQuestionIds = [];
   int _activeQuestionIndex = 0;
   bool _isLoading = true;
   bool _isSaving = false;
@@ -346,12 +347,25 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
     try {
       final client = SupabaseService().client;
 
+      // Delete removed questions & options first
+      for (final deletedId in _deletedQuestionIds) {
+        if (deletedId.isEmpty) continue;
+        await client
+            .from('assessment_question_options')
+            .delete()
+            .eq('question_id', deletedId);
+        await client.from('assessment_questions').delete().eq('id', deletedId);
+      }
+
       for (final q in _questions) {
-        // Update question statement
+        // Update question statement and sequential position
         if (q.id.isNotEmpty) {
           await client
               .from('assessment_questions')
-              .update({'question_text': q.questionText})
+              .update({
+                'question_text': q.questionText,
+                'position': q.position,
+              })
               .eq('id', q.id);
 
           // Update options
@@ -397,6 +411,14 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
         }
       }
 
+      if (_deletedQuestionIds.isNotEmpty) {
+        final totalPoints = _questions.fold<int>(0, (sum, q) => sum + q.points);
+        await client
+            .from('classwork_items')
+            .update({'max_score': totalPoints})
+            .eq('id', widget.assessment.id);
+      }
+
       AppDataCache.instance.invalidatePrefix('teacher_assessments_');
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
       await widget.onAssessmentUpdated();
@@ -414,7 +436,8 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
         await AppModals.showErrorDialog(
           context: context,
           title: 'Save Failed',
-          message: 'Could not update questions: $e',
+          message:
+              'We could not save your question updates right now. Please check your connection and try again.',
         );
       }
     }
@@ -588,6 +611,31 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
     );
   }
 
+  void _deleteQuestionAt(int index) {
+    if (_questions.length <= 1 || index < 0 || index >= _questions.length) {
+      AppTopToast.warning(context, 'At least 1 question is required.');
+      return;
+    }
+    final removed = _questions.removeAt(index);
+    if (removed.id.isNotEmpty) {
+      _deletedQuestionIds.add(removed.id);
+    }
+    for (int i = 0; i < _questions.length; i++) {
+      _questions[i].position = i + 1;
+    }
+    final nextIndex = _activeQuestionIndex >= _questions.length
+        ? _questions.length - 1
+        : _activeQuestionIndex;
+    setState(() {
+      _activeQuestionIndex = nextIndex;
+      _statementError = null;
+      _choicesError = null;
+      _answerKeyError = null;
+      _editorError = null;
+    });
+    _loadQuestionIntoEditor(nextIndex);
+  }
+
   Widget _buildQuestionEditor(BuildContext context) {
     if (_activeQuestionIndex < 0 || _activeQuestionIndex >= _questions.length) {
       return const SizedBox.shrink();
@@ -658,12 +706,41 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
                 ),
               ],
             ),
-            Text(
-              '${q.points} Point',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            OutlinedButton.icon(
+              onPressed: _questions.length > 1
+                  ? () => _deleteQuestionAt(_activeQuestionIndex)
+                  : null,
+              icon: Icon(
+                Icons.delete_outline,
+                size: 15,
+                color: _questions.length > 1
+                    ? const Color(0xFFDC2626)
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+              ),
+              label: Text(
+                'Delete',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: _questions.length > 1
+                      ? const Color(0xFFDC2626)
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                minimumSize: const Size(0, 32),
+                side: BorderSide(
+                  color: _questions.length > 1
+                      ? const Color(0xFFDC2626).withValues(alpha: 0.4)
+                      : theme.colorScheme.outline.withValues(alpha: 0.2),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ],
@@ -1110,7 +1187,7 @@ class _EditAssessmentFlowDialogState extends State<EditAssessmentFlowDialog> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Click any question number to edit. Delete is prohibited to preserve test integrity.',
+          'Click any question number to edit or delete from the editor.',
           style: TextStyle(
             fontSize: 11,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),

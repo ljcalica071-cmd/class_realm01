@@ -1358,8 +1358,9 @@ class StudentClassworkCard extends StatelessWidget {
 
       // Check if student has an existing active or submitted attempt
       var hasActiveAttempt = false;
+      Map<String, dynamic>? existingAttempt;
       if (studentId != null) {
-        final existingAttempt = await client
+        existingAttempt = await client
             .from('assessment_attempts')
             .select('status')
             .eq('assessment_id', assessmentDbId)
@@ -1373,6 +1374,39 @@ class StudentClassworkCard extends StatelessWidget {
         }
       }
 
+      final assessType = rawAssess['assessment_type']?.toString().toLowerCase();
+      final assessLabel = assessType == 'quiz' ? 'quiz' : 'examination';
+
+      // Check latest teacher Allow/Disallow override regardless of entrance window
+      String? latestOverrideEvent;
+      if (studentId != null &&
+          existingAttempt?['status'] != 'submitted' &&
+          existingAttempt?['status'] != 'auto_submitted' &&
+          existingAttempt?['status'] != 'disqualified') {
+        final overrideLog = await client
+            .from('anti_cheating_logs')
+            .select('event_type')
+            .eq('assessment_id', assessmentDbId)
+            .eq('student_id', studentId)
+            .inFilter('event_type', ['entry_allowed', 'entry_disallowed'])
+            .order('event_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+        latestOverrideEvent = overrideLog?['event_type']?.toString();
+
+        if (latestOverrideEvent == 'entry_disallowed') {
+          if (context.mounted) {
+            await AppModals.showWarningDialog(
+              context: context,
+              title: 'Access Not Allowed',
+              message:
+                  'You cannot take this $assessLabel right now because your teacher has disallowed your access.\n\nPlease ask your teacher for permission before trying again.',
+            );
+          }
+          return;
+        }
+      }
+
       // 15-Minute Entrance Window Policy:
       // If start time has passed by > 15 minutes, student cannot begin unless:
       // 1. They already started prior to 15 mins (hasActiveAttempt)
@@ -1382,22 +1416,7 @@ class StudentClassworkCard extends StatelessWidget {
         final isEntrancePast = DateTime.now().isAfter(entranceWindowClose);
 
         if (isEntrancePast) {
-          bool isTeacherAllowed = false;
-          if (studentId != null) {
-            final overrideLog = await client
-                .from('anti_cheating_logs')
-                .select('event_type')
-                .eq('assessment_id', assessmentDbId)
-                .eq('student_id', studentId)
-                .inFilter('event_type', ['entry_allowed', 'entry_disallowed'])
-                .order('event_at', ascending: false)
-                .limit(1)
-                .maybeSingle();
-            if (overrideLog != null &&
-                overrideLog['event_type'] == 'entry_allowed') {
-              isTeacherAllowed = true;
-            }
-          }
+          final isTeacherAllowed = latestOverrideEvent == 'entry_allowed';
 
           if (!isTeacherAllowed) {
             if (context.mounted) {
@@ -1434,7 +1453,6 @@ class StudentClassworkCard extends StatelessWidget {
           .toList();
 
       final schedDate = availLocal ?? classwork.assignedAt ?? DateTime.now();
-      final assessType = rawAssess['assessment_type']?.toString().toLowerCase();
 
       final model = QuizOrExamModel(
         id: rawAssess['id'].toString(),
@@ -1461,8 +1479,12 @@ class StudentClassworkCard extends StatelessWidget {
         onRefresh?.call();
       }
     } catch (e) {
+      debugPrint('Failed to launch assessment: $e');
       if (context.mounted) {
-        AppTopToast.error(context, 'Failed to launch exam: $e');
+        AppTopToast.error(
+          context,
+          'Unable to open this assessment right now. Please try again.',
+        );
       }
     }
   }

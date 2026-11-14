@@ -506,142 +506,125 @@ class _TeacherParentManagementTabState
               const SizedBox(height: 16),
 
               // Controls Row (Cascading Dropdowns on left, Search on right)
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 950;
-                  final leftControls = Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
-                    crossAxisAlignment: WrapCrossAlignment.end,
-                    children: [
-                      _buildFilterDropdown(
-                        label: 'Subject',
-                        icon: LucideIcons.bookOpen,
-                        value: _selectedSubjectFilter,
-                        items: _availableSubjects,
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() {
-                              _selectedSubjectFilter = val;
-                              _selectedSectionFilter = '— All Sections —';
-                              _currentPage = 1;
-                            });
-                            unawaited(_saveFilters());
-                          }
-                        },
-                        itemLabel: (val) => val,
-                        theme: theme,
-                        isDark: isDark,
-                      ),
-                      _buildFilterDropdown(
-                        label: 'Section',
-                        icon: LucideIcons.users,
-                        value: _selectedSectionFilter,
-                        items: ['— All Sections —', ..._availableSections],
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() {
-                              _selectedSectionFilter = val;
-                              _currentPage = 1;
-                            });
-                            unawaited(_saveFilters());
-                          }
-                        },
-                        itemLabel: (val) => val,
-                        theme: theme,
-                        isDark: isDark,
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Search',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.65,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          SizedBox(
-                            width: isCompact ? constraints.maxWidth : 260,
-                            height: 38,
-                            child: TextField(
-                              onChanged: (v) =>
-                                  setState(() => _parentSearchQuery = v),
-                              style: const TextStyle(fontSize: 12.5),
-                              decoration: InputDecoration(
-                                hintText: 'Search by name or student...',
-                                hintStyle: TextStyle(
-                                  fontSize: 12.5,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.5,
-                                  ),
-                                ),
-                                prefixIcon: Icon(
-                                  LucideIcons.search,
-                                  size: 16,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.5,
-                                  ),
-                                ),
-                                filled: true,
-                                fillColor: theme.colorScheme.surface,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                  horizontal: 12,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withValues(
-                                      alpha: isDark ? 0.18 : 0.16,
-                                    ),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withValues(
-                                      alpha: isDark ? 0.18 : 0.16,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
-
-                  if (isCompact) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+              SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.end,
+                  children: [
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 10,
+                      crossAxisAlignment: WrapCrossAlignment.end,
                       children: [
-                        leftControls,
-                        const SizedBox(height: 12),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: _buildArchiveButton(theme),
+                        _buildFilterDropdown(
+                          label: 'Subject',
+                          icon: LucideIcons.bookOpen,
+                          value: _selectedSubjectFilter,
+                          items: _availableSubjects,
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                _selectedSubjectFilter = val;
+                                _selectedSectionFilter = '— All Sections —';
+                                _currentPage = 1;
+                              });
+                              unawaited(_saveFilters());
+                            }
+                          },
+                          itemLabel: (val) => val,
+                          theme: theme,
+                          isDark: isDark,
+                        ),
+                        _buildFilterDropdown(
+                          label: 'Section',
+                          icon: LucideIcons.users,
+                          value: _selectedSectionFilter,
+                          items: ['— All Sections —', ..._availableSections],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                _selectedSectionFilter = val;
+                                _currentPage = 1;
+                              });
+                              unawaited(_saveFilters());
+                            }
+                          },
+                          itemLabel: (val) => val,
+                          theme: theme,
+                          isDark: isDark,
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Search',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.65,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: 240,
+                              height: 38,
+                              child: TextField(
+                                onChanged: (v) =>
+                                    setState(() => _parentSearchQuery = v),
+                                style: const TextStyle(fontSize: 12.5),
+                                decoration: InputDecoration(
+                                  hintText: 'Search by name or student...',
+                                  hintStyle: TextStyle(
+                                    fontSize: 12.5,
+                                    color: theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.5,
+                                    ),
+                                  ),
+                                  prefixIcon: Icon(
+                                    LucideIcons.search,
+                                    size: 16,
+                                    color: theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.5,
+                                    ),
+                                  ),
+                                  filled: true,
+                                  fillColor: theme.colorScheme.surface,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                    horizontal: 12,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(
+                                      color: theme.colorScheme.onSurface.withValues(
+                                        alpha: isDark ? 0.18 : 0.16,
+                                      ),
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(
+                                      color: theme.colorScheme.onSurface.withValues(
+                                        alpha: isDark ? 0.18 : 0.16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
-                    );
-                  }
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: leftControls),
-                      const SizedBox(width: 16),
-                      _buildArchiveButton(theme),
-                    ],
-                  );
-                },
+                    ),
+                    _buildArchiveButton(theme),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
 

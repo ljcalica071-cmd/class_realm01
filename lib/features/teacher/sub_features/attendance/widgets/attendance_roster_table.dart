@@ -63,6 +63,10 @@ class AttendanceRosterTable extends StatefulWidget {
 
   final VoidCallback? onMarkAllPresent;
 
+  final VoidCallback? onClearAll;
+
+  final bool isClearingAll;
+
   final VoidCallback? onAutoAbsentUnmarked;
 
   final String? linkingStudentId;
@@ -109,6 +113,10 @@ class AttendanceRosterTable extends StatefulWidget {
     required this.onLinkRfidTap,
 
     this.onMarkAllPresent,
+
+    this.onClearAll,
+
+    this.isClearingAll = false,
 
     this.onAutoAbsentUnmarked,
 
@@ -426,6 +434,14 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
         .where((s) => widget.statuses[s.studentId] == null)
         .length;
 
+    final hasAnyRecordedData = widget.students.any((s) {
+      final hasStatus = widget.statuses[s.studentId] != null;
+      final rawRemark = widget.remarks[s.studentId] ?? '';
+      final hasTeacherRemark =
+          rawRemark.trim().isNotEmpty && !isSystemAttendanceRemark(rawRemark);
+      return hasStatus || hasTeacherRemark;
+    });
+
     final filteredStudents = _buildFilteredSortedRoster();
 
     final cardBorderColor = isDark
@@ -475,6 +491,8 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
                 femaleCount: femaleCount,
 
                 unmarkedCount: unmarkedCount,
+
+                hasAnyRecordedData: hasAnyRecordedData,
               ),
 
               // ── ROSTER BODY ──
@@ -573,6 +591,8 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
     required int femaleCount,
 
     required int unmarkedCount,
+
+    required bool hasAnyRecordedData,
   }) {
     final barBg = isDark
         ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
@@ -763,6 +783,21 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
                     isSmall: true,
 
                     onPressed: widget.onMarkAllPresent,
+                  ),
+
+                if (widget.onClearAll != null)
+                  AppButton.outline(
+                    label: 'Clear All',
+
+                    icon: LucideIcons.rotateCcw,
+
+                    isSmall: true,
+
+                    isLoading: widget.isClearingAll,
+
+                    onPressed: hasAnyRecordedData && !widget.isClearingAll
+                        ? widget.onClearAll
+                        : null,
                   ),
 
                 if (widget.onAutoAbsentUnmarked != null)
@@ -1573,63 +1608,67 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
 
     AttendanceRosterStudent student,
   ) {
-    if (widget.linkingStudentId == student.studentId) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    if (widget.linkingStudentId == student.studentId && !widget.isLocked) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => widget.onLinkRfidTap(student),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
 
-        decoration: BoxDecoration(
-          color: const Color(0xFF2563EB)
-              .withValues(alpha: isDark ? 0.25 : 0.12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2563EB)
+                .withValues(alpha: isDark ? 0.25 : 0.12),
 
-          borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(16),
 
-          border: Border.all(color: const Color(0xFF2563EB), width: 1.2),
-        ),
+            border: Border.all(color: const Color(0xFF2563EB), width: 1.2),
+          ),
 
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
 
-          children: [
-            LoadingAnimationWidget.staggeredDotsWave(
-              color: const Color(0xFF2563EB),
+            children: [
+              LoadingAnimationWidget.staggeredDotsWave(
+                color: const Color(0xFF2563EB),
 
-              size: 14,
-            ),
+                size: 14,
+              ),
 
-            const SizedBox(width: 5),
+              const SizedBox(width: 5),
 
-            const Flexible(
-              child: Text(
-                'Tap RFID Card',
+              const Flexible(
+                child: Text(
+                  'Tap RFID Card',
 
-                maxLines: 1,
+                  maxLines: 1,
 
-                overflow: TextOverflow.ellipsis,
+                  overflow: TextOverflow.ellipsis,
 
-                style: TextStyle(
-                  fontSize: 11,
+                  style: TextStyle(
+                    fontSize: 11,
 
-                  fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.bold,
+
+                    color: Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 4),
+
+              InkWell(
+                onTap: widget.onCancelLinkingRfid,
+
+                child: const Icon(
+                  Icons.close,
+
+                  size: 13,
 
                   color: Color(0xFF2563EB),
                 ),
               ),
-            ),
-
-            const SizedBox(width: 4),
-
-            InkWell(
-              onTap: widget.onCancelLinkingRfid,
-
-              child: const Icon(
-                Icons.close,
-
-                size: 13,
-
-                color: Color(0xFF2563EB),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -1639,26 +1678,102 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
     if (assigned) {
       final uid = _truncateUid(student.rfidUid!);
 
-      return InkWell(
+      return Opacity(
+        opacity: widget.isLocked ? 0.6 : 1.0,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+
+          onTap: widget.isLocked
+              ? null
+              : () {
+                  widget.onLinkRfidTap(student);
+                },
+
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+
+            decoration: BoxDecoration(
+              color: AppTheme.catTeal.withValues(alpha: isDark ? 0.2 : 0.1),
+
+              borderRadius: BorderRadius.circular(16),
+
+              border: Border.all(
+                color: AppTheme.catTeal.withValues(alpha: 0.4),
+              ),
+            ),
+
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+
+              children: [
+                Icon(
+                  Icons.contactless_rounded,
+
+                  size: 13,
+
+                  color: isDark ? const Color(0xFF5EEAD4) : AppTheme.catTeal,
+                ),
+
+                const SizedBox(width: 4),
+
+                Flexible(
+                  child: Text(
+                    uid,
+
+                    maxLines: 1,
+
+                    overflow: TextOverflow.ellipsis,
+
+                    style: TextStyle(
+                      fontSize: 11,
+
+                      fontFamily: 'monospace',
+
+                      fontWeight: FontWeight.w700,
+
+                      color: isDark
+                          ? const Color(0xFF5EEAD4)
+                          : const Color(0xFF0F766E),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Opacity(
+      opacity: widget.isLocked ? 0.5 : 1.0,
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
 
-        onTap: () {
-          if (widget.onStartLinkingRfid != null) {
-            widget.onStartLinkingRfid!(student);
-          } else {
-            widget.onLinkRfidTap(student);
-          }
-        },
+        onTap: widget.isLocked
+            ? null
+            : () {
+                if (widget.onStartLinkingRfid != null) {
+                  widget.onStartLinkingRfid!(student);
+                } else {
+                  widget.onLinkRfidTap(student);
+                }
+              },
 
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
 
           decoration: BoxDecoration(
-            color: AppTheme.catTeal.withValues(alpha: isDark ? 0.2 : 0.1),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.03)
+                : const Color(0xFFF8FAFC),
 
             borderRadius: BorderRadius.circular(16),
 
-            border: Border.all(color: AppTheme.catTeal.withValues(alpha: 0.4)),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(
+                alpha: isDark ? 0.22 : 0.18,
+              ),
+            ),
           ),
 
           child: Row(
@@ -1666,18 +1781,16 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
 
             children: [
               Icon(
-                Icons.contactless_rounded,
-
-                size: 13,
-
-                color: isDark ? const Color(0xFF5EEAD4) : AppTheme.catTeal,
+                LucideIcons.plus,
+                size: 12,
+                color: theme.colorScheme.primary,
               ),
 
-              const SizedBox(width: 4),
+              const SizedBox(width: 3),
 
               Flexible(
                 child: Text(
-                  uid,
+                  'Link RFID',
 
                   maxLines: 1,
 
@@ -1686,76 +1799,14 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
                   style: TextStyle(
                     fontSize: 11,
 
-                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w600,
 
-                    fontWeight: FontWeight.w700,
-
-                    color: isDark
-                        ? const Color(0xFF5EEAD4)
-                        : const Color(0xFF0F766E),
+                    color: theme.colorScheme.primary,
                   ),
                 ),
               ),
             ],
           ),
-        ),
-      );
-    }
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-
-      onTap: () {
-        if (widget.onStartLinkingRfid != null) {
-          widget.onStartLinkingRfid!(student);
-        } else {
-          widget.onLinkRfidTap(student);
-        }
-      },
-
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.03)
-              : const Color(0xFFF8FAFC),
-
-          borderRadius: BorderRadius.circular(16),
-
-          border: Border.all(
-            color: theme.colorScheme.onSurface.withValues(
-              alpha: isDark ? 0.22 : 0.18,
-            ),
-          ),
-        ),
-
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-
-          children: [
-            Icon(LucideIcons.plus, size: 12, color: theme.colorScheme.primary),
-
-            const SizedBox(width: 3),
-
-            Flexible(
-              child: Text(
-                'Link RFID',
-
-                maxLines: 1,
-
-                overflow: TextOverflow.ellipsis,
-
-                style: TextStyle(
-                  fontSize: 11,
-
-                  fontWeight: FontWeight.w600,
-
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );

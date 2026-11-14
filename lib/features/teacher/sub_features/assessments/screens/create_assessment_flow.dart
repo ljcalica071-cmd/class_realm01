@@ -37,7 +37,7 @@ import 'package:class_realm/features/teacher/sub_features/assessments/services/l
 
 /// Active draft of an individual question during step 2 authoring.
 class QuestionDraft {
-  final int position;
+  int position;
   final QuestionType type;
   String statement;
   List<String> choices; // 4 choices for multiple choice
@@ -72,6 +72,23 @@ class QuestionDraft {
           null;
     }
     return false;
+  }
+
+  /// Removes the question at [index], renumbers remaining positions 1..N,
+  /// and returns the removed [QuestionType] so distribution counts can decrement.
+  /// Enforces a minimum of 1 remaining question.
+  static QuestionType? deleteAndRenumber(
+    List<QuestionDraft> questions,
+    int index,
+  ) {
+    if (questions.length <= 1 || index < 0 || index >= questions.length) {
+      return null;
+    }
+    final removed = questions.removeAt(index);
+    for (int i = 0; i < questions.length; i++) {
+      questions[i].position = i + 1;
+    }
+    return removed.type;
   }
 }
 
@@ -289,7 +306,7 @@ class _CreateAssessmentFlowDialogState
 
   bool get _areAllSlotsFilled => _isExam
       ? (_st1Created && _st2Created && _teCreated)
-      : (_occupiedWwSlots.where((s) => s <= _maxWwSlots).length >= _maxWwSlots);
+      : (_occupiedWwSlots.where((s) => s >= 1 && s <= 10).length >= 10);
 
   @override
   void initState() {
@@ -571,7 +588,7 @@ class _CreateAssessmentFlowDialogState
       if (!_isExam) {
         final occupied = summary.occupiedWwSlots;
         final maxWw = summary.maxWwSlot.clamp(3, 10);
-        int firstAvailable = 1;
+        int firstAvailable = 0;
         for (int i = 1; i <= maxWw; i++) {
           if (!occupied.contains(i)) {
             firstAvailable = i;
@@ -584,9 +601,10 @@ class _CreateAssessmentFlowDialogState
           _maxWwSlots = maxWw;
           _quizSlotIndex = firstAvailable;
           _isCheckingSlots = false;
-          if (_titleCtrl.text.isEmpty ||
-              _titleCtrl.text.startsWith('Quiz ') ||
-              _titleCtrl.text.startsWith('Summative')) {
+          if (firstAvailable > 0 &&
+              (_titleCtrl.text.isEmpty ||
+                  _titleCtrl.text.startsWith('Quiz ') ||
+                  _titleCtrl.text.startsWith('Summative'))) {
             _titleCtrl.text = 'Quiz $firstAvailable';
           }
         });
@@ -693,6 +711,18 @@ class _CreateAssessmentFlowDialogState
         message: _isExam
             ? 'All examination slots (ST1, ST2, TE) are already configured for this offering.'
             : 'All 10 Written Work slots are already configured for this offering.',
+      );
+      return;
+    }
+
+    if (!_isExam &&
+        (_quizSlotIndex < 1 || _occupiedWwSlots.contains(_quizSlotIndex))) {
+      AppModals.showWarningDialog(
+        context: context,
+        title: 'Select a Written Work Slot',
+        message: _maxWwSlots < 10
+            ? 'All visible WW slots are occupied. Click the "+" button next to the WW slots to add WW ${_maxWwSlots + 1}.'
+            : 'Please select an available Written Work (WW) slot before continuing.',
       );
       return;
     }
@@ -1049,6 +1079,47 @@ class _CreateAssessmentFlowDialogState
     _isLoadingQuestion = false;
   }
 
+  void _deleteQuestionAt(int index) {
+    if (_plannedQuestions.length <= 1) {
+      AppTopToast.warning(
+        context,
+        'At least 1 question is required.',
+      );
+      return;
+    }
+    final removedType = QuestionDraft.deleteAndRenumber(
+      _plannedQuestions,
+      index,
+    );
+    if (removedType == null) return;
+
+    final ctrl = switch (removedType) {
+      QuestionType.multipleChoice => _mcCountCtrl,
+      QuestionType.trueFalse => _tfCountCtrl,
+      QuestionType.identification => _idCountCtrl,
+      QuestionType.matching => null,
+    };
+    if (ctrl != null) {
+      final newCount = _plannedQuestions
+          .where((q) => q.type == removedType)
+          .length;
+      ctrl.text = newCount > 0 ? newCount.toString() : '';
+    }
+
+    final nextIndex = _activeQuestionIndex >= _plannedQuestions.length
+        ? _plannedQuestions.length - 1
+        : _activeQuestionIndex;
+
+    setState(() {
+      _activeQuestionIndex = nextIndex;
+      _statementError = null;
+      _choicesError = null;
+      _answerKeyError = null;
+      _editorError = null;
+    });
+    _loadQuestionIntoEditor(nextIndex);
+  }
+
   bool _saveCurrentEditorState() {
     if (_activeQuestionIndex < 0 ||
         _activeQuestionIndex >= _plannedQuestions.length) {
@@ -1248,6 +1319,12 @@ class _CreateAssessmentFlowDialogState
         final wwHps = Map<String, dynamic>.from(hps['ww'] as Map? ?? {});
         wwHps[_quizSlotIndex.toString()] = hpsPoints;
         hps['ww'] = wwHps;
+        final existingCols = hps['ww_columns'] is num
+            ? (hps['ww_columns'] as num).toInt()
+            : int.tryParse(hps['ww_columns']?.toString() ?? '') ?? 0;
+        if (_quizSlotIndex > existingCols) {
+          hps['ww_columns'] = _quizSlotIndex;
+        }
       }
       termSheet['hps'] = hps;
       termSheet['scores'] ??= <String, dynamic>{};
@@ -1483,6 +1560,12 @@ class _CreateAssessmentFlowDialogState
         final wwHps = Map<String, dynamic>.from(hps['ww'] as Map? ?? {});
         wwHps[_quizSlotIndex.toString()] = totalPoints.toInt();
         hps['ww'] = wwHps;
+        final existingCols = hps['ww_columns'] is num
+            ? (hps['ww_columns'] as num).toInt()
+            : int.tryParse(hps['ww_columns']?.toString() ?? '') ?? 0;
+        if (_quizSlotIndex > existingCols) {
+          hps['ww_columns'] = _quizSlotIndex;
+        }
       }
       termSheet['hps'] = hps;
       termSheet['scores'] ??= <String, dynamic>{};
@@ -1934,10 +2017,14 @@ class _CreateAssessmentFlowDialogState
       _loadQuestionIntoEditor(0);
       _saveDraftLocally();
     } catch (e) {
+      debugPrint('AI question generation error: $e');
       if (mounted) {
         setState(() {
           _isGeneratingAiQuestions = false;
-          _aiGenerationError = 'Unexpected error during AI generation: $e';
+          _aiGenerationError = GeminiService.formatUserFriendlyErrorMessage(
+            e.toString(),
+            isAssessment: true,
+          );
         });
       }
     }
@@ -3601,87 +3688,171 @@ class _CreateAssessmentFlowDialogState
   }
 
   Widget _buildQuizSlotSelector(ThemeData theme) {
+    final allVisibleOccupied =
+        _occupiedWwSlots.where((s) => s >= 1 && s <= _maxWwSlots).length >=
+            _maxWwSlots &&
+        _maxWwSlots < 10;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: List.generate(_maxWwSlots, (idx) {
-            final slot = idx + 1;
-            final isOccupied = _occupiedWwSlots.contains(slot);
-            final isSelected = _quizSlotIndex == slot;
+          children: [
+            ...List.generate(_maxWwSlots, (idx) {
+              final slot = idx + 1;
+              final isOccupied = _occupiedWwSlots.contains(slot);
+              final isSelected = _quizSlotIndex == slot;
 
-            return Tooltip(
-              message: isOccupied
-                  ? 'WW $slot is already used in Gradebook/Classwork'
-                  : 'Select WW $slot for this Quiz',
-              child: InkWell(
-                onTap: isOccupied ? null : () => _setQuizSlot(slot),
-                borderRadius: BorderRadius.circular(8),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? theme.colorScheme.primary.withValues(alpha: 0.1)
-                        : (isOccupied
-                            ? Colors.grey.shade100
-                            : theme.colorScheme.surface),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
+              return Tooltip(
+                message: isOccupied
+                    ? 'WW $slot is already used in Gradebook/Classwork'
+                    : 'Select WW $slot for this Quiz',
+                child: InkWell(
+                  onTap: isOccupied ? null : () => _setQuizSlot(slot),
+                  borderRadius: BorderRadius.circular(8),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
                       color: isSelected
-                          ? theme.colorScheme.primary
+                          ? theme.colorScheme.primary.withValues(alpha: 0.1)
                           : (isOccupied
-                              ? Colors.grey.shade300
-                              : theme.colorScheme.outline.withValues(
-                                  alpha: 0.3,
-                                )),
-                      width: isSelected ? 1.8 : 1.0,
+                              ? Colors.grey.shade100
+                              : theme.colorScheme.surface),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isSelected
+                            ? theme.colorScheme.primary
+                            : (isOccupied
+                                ? Colors.grey.shade300
+                                : theme.colorScheme.outline.withValues(
+                                    alpha: 0.3,
+                                  )),
+                        width: isSelected ? 1.8 : 1.0,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'WW $slot',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : (isOccupied
+                                    ? Colors.grey
+                                    : theme.colorScheme.onSurface),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isOccupied
+                              ? 'Occupied'
+                              : (isSelected ? 'Selected' : 'Available'),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight:
+                                isSelected ? FontWeight.w600 : FontWeight.normal,
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : (isOccupied
+                                    ? Colors.grey
+                                    : Colors.green.shade700),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'WW $slot',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected
-                              ? theme.colorScheme.primary
-                              : (isOccupied
-                                  ? Colors.grey
-                                  : theme.colorScheme.onSurface),
-                        ),
+                ),
+              );
+            }),
+            if (_maxWwSlots < 10)
+              Tooltip(
+                message: 'Add WW ${_maxWwSlots + 1} column (Max 10)',
+                child: InkWell(
+                  onTap: () {
+                    final nextSlot = _maxWwSlots + 1;
+                    setState(() {
+                      _maxWwSlots = nextSlot;
+                    });
+                    _setQuizSlot(nextSlot);
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.45),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        isOccupied
-                            ? 'Occupied'
-                            : (isSelected ? 'Selected' : 'Available'),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.normal,
-                          color: isSelected
-                              ? theme.colorScheme.primary
-                              : (isOccupied
-                                  ? Colors.grey
-                                  : Colors.green.shade700),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.add_circle_outline_rounded,
+                          size: 18,
+                          color: theme.colorScheme.primary,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Text(
+                          'Add WW ${_maxWwSlots + 1}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            );
-          }),
+          ],
         ),
-        if (_areAllSlotsFilled) ...[
+        if (allVisibleOccupied) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'WW 1–$_maxWwSlots are occupied. Click "+ Add WW ${_maxWwSlots + 1}" above to add a new column (up to 10 max).',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else if (_areAllSlotsFilled) ...[
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -3914,18 +4085,45 @@ class _CreateAssessmentFlowDialogState
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '1 Point',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurfaceVariant,
+                    Tooltip(
+                      message: _plannedQuestions.length > 1
+                          ? 'Delete Question ${currentDraft.position}'
+                          : 'At least 1 question is required',
+                      child: OutlinedButton.icon(
+                        onPressed: _plannedQuestions.length > 1
+                            ? () => _deleteQuestionAt(_activeQuestionIndex)
+                            : null,
+                        icon: Icon(
+                          Icons.delete_outline,
+                          size: 15,
+                          color: _plannedQuestions.length > 1
+                              ? const Color(0xFFDC2626)
+                              : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                        ),
+                        label: Text(
+                          'Delete',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _plannedQuestions.length > 1
+                                ? const Color(0xFFDC2626)
+                                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          minimumSize: const Size(0, 32),
+                          side: BorderSide(
+                            color: _plannedQuestions.length > 1
+                                ? const Color(0xFFDC2626).withValues(alpha: 0.4)
+                                : theme.colorScheme.outline.withValues(alpha: 0.2),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                     ),
@@ -4533,7 +4731,7 @@ class _CreateAssessmentFlowDialogState
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Click any question number to edit. Delete is prohibited to preserve test integrity.',
+                  'Click any question number to edit or delete from the editor.',
                   style: TextStyle(
                     fontSize: 11,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.6),

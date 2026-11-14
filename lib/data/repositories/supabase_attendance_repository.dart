@@ -881,6 +881,110 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     }
   }
 
+  @override
+  Future<void> clearAttendanceForDate({
+    required String subjectOfferingId,
+    required DateTime date,
+  }) async {
+    final dateStr = _formatDate(date);
+
+    // 1. Immediately clear local caches & offline queues for this offering + date
+    await LocalStorageService.saveAttendanceRecords(
+      subjectOfferingId,
+      dateStr,
+      const [],
+    );
+    await LocalStorageService.removeOfflineAttendance(
+      '${subjectOfferingId}_$dateStr',
+    );
+
+    final webScanQueueRaw = LocalStorageService.getJson(
+      'offline_rfid_scans_queue',
+    );
+    if (webScanQueueRaw is List && webScanQueueRaw.isNotEmpty) {
+      final filtered = webScanQueueRaw
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .where((p) {
+            if (p['subject_offering_id']?.toString() != subjectOfferingId) {
+              return true;
+            }
+            final ts = DateTime.tryParse(
+              p['scan_timestamp']?.toString() ?? '',
+            );
+            if (ts == null) return true;
+            final manila = ts.toUtc().add(const Duration(hours: 8));
+            return _formatDate(manila) != dateStr;
+          })
+          .toList();
+      await LocalStorageService.saveJson('offline_rfid_scans_queue', filtered);
+    }
+
+    if (!kIsWeb) {
+      try {
+        await AppDatabase.instance.deleteAttendanceForOfferingAndDate(
+          subjectOfferingId,
+          dateStr,
+        );
+      } catch (dbErr) {
+        debugPrint('Drift clearAttendanceForDate notice: $dbErr');
+      }
+    }
+
+    _invalidateAttendanceCaches();
+
+    // 2. Delete all attendance records for this offering + date in Supabase
+    try {
+      await _client
+          .from('attendance_records')
+          .delete()
+          .eq('subject_offering_id', subjectOfferingId)
+          .eq('attendance_date', dateStr);
+      _syncStatus = SyncStatus.online;
+    } catch (e) {
+      debugPrint('clearAttendanceForDate offline fallback, queuing delete: $e');
+      if (_isNetworkError(e)) {
+        _syncStatus = SyncStatus.pendingSync;
+        if (!kIsWeb) {
+          try {
+            await AppDatabase.instance.enqueueOfflineAction(
+              id: 'clear_date_${subjectOfferingId}_$dateStr',
+              action: 'clear_date',
+              targetTable: 'attendance_records',
+              payloadJson: jsonEncode({
+                'subject_offering_id': subjectOfferingId,
+                'date': dateStr,
+              }),
+            );
+          } catch (_) {}
+        } else {
+          final clearQueueRaw = LocalStorageService.getJson(
+            'offline_attendance_clear_queue',
+          );
+          final clearQueue = clearQueueRaw is List
+              ? clearQueueRaw
+                    .map((x) => Map<String, dynamic>.from(x as Map))
+                    .where(
+                      (x) =>
+                          !(x['subject_offering_id'] == subjectOfferingId &&
+                              x['date'] == dateStr),
+                    )
+                    .toList()
+              : <Map<String, dynamic>>[];
+          clearQueue.add({
+            'subject_offering_id': subjectOfferingId,
+            'date': dateStr,
+          });
+          await LocalStorageService.saveJson(
+            'offline_attendance_clear_queue',
+            clearQueue,
+          );
+        }
+        return;
+      }
+      rethrow;
+    }
+  }
+
   Future<void> _checkAndTriggerAbsenceAlerts(
     String subjectOfferingId,
     List<AttendanceWorkspaceRecord> records,
@@ -1226,9 +1330,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             }
           }
         } else {
-          // Unknown offline schedule: do not artificially lock teacher out
+          // Strict schedule guard: if no schedule is cached/set, keep locked
           hasPlottedScheduleAnyDay = false;
-          isScheduledOnDate = true;
+          isScheduledOnDate = false;
         }
       }
     }
@@ -1840,15 +1944,17 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       );
     }
 
-    // 4. Validate schedule & cutoff window
-    if (schedStatus.hasPlottedScheduleAnyDay &&
+    // 4. Validate schedule & cutoff window (strictly connected to My Schedule)
+    if (!schedStatus.hasPlottedScheduleAnyDay ||
         !schedStatus.isScheduledOnDate) {
       return RfidScanOutcome(
         success: false,
         code: 'NO_SCHEDULE_TODAY',
         studentId: studentId,
         studentName: studentName,
-        message: 'No class session is scheduled for this subject today.',
+        message:
+            schedStatus.lockReason ??
+            'No class session is scheduled for this subject today.',
       );
     }
 
@@ -2190,14 +2296,16 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       );
     }
 
-    if (schedStatus.hasPlottedScheduleAnyDay &&
+    if (!schedStatus.hasPlottedScheduleAnyDay ||
         !schedStatus.isScheduledOnDate) {
       return RfidScanOutcome(
         success: false,
         code: 'NO_SCHEDULE_TODAY',
         studentId: studentId,
         studentName: studentName,
-        message: 'No class session is scheduled for this subject today.',
+        message:
+            schedStatus.lockReason ??
+            'No class session is scheduled for this subject today.',
       );
     }
 
@@ -2430,6 +2538,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             rfidItems.add(item);
           } else if (item.action == 'batch_save' ||
               item.action == 'save_attendance' ||
+              item.action == 'clear_date' ||
               item.action == 'assign_student_rfid' ||
               item.action == 'save_cutoff_config') {
             otherItems.add(item);
@@ -2547,6 +2656,17 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
                   '${offeringId}_$dateStr',
                 );
               }
+            } else if (item.action == 'clear_date') {
+              final offeringId =
+                  payload['subject_offering_id']?.toString() ?? '';
+              final dateStr = payload['date']?.toString() ?? '';
+              if (offeringId.isNotEmpty && dateStr.isNotEmpty) {
+                await _client
+                    .from('attendance_records')
+                    .delete()
+                    .eq('subject_offering_id', offeringId)
+                    .eq('attendance_date', dateStr);
+              }
             } else if (item.action == 'assign_student_rfid') {
               await assignStudentRfid(
                 studentId: payload['student_id']?.toString() ?? '',
@@ -2603,6 +2723,36 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         await LocalStorageService.saveJson(
           'offline_rfid_scans_queue',
           remaining,
+        );
+      }
+
+      // Drain any offline clear_date requests on Web/LocalStorage
+      final clearQueueRaw = LocalStorageService.getJson(
+        'offline_attendance_clear_queue',
+      );
+      if (clearQueueRaw is List && clearQueueRaw.isNotEmpty) {
+        final remainingClears = <Map<String, dynamic>>[];
+        for (final raw in clearQueueRaw) {
+          final item = Map<String, dynamic>.from(raw as Map);
+          final offeringId = item['subject_offering_id']?.toString() ?? '';
+          final dateStr = item['date']?.toString() ?? '';
+          if (offeringId.isEmpty || dateStr.isEmpty) continue;
+          try {
+            await _client
+                .from('attendance_records')
+                .delete()
+                .eq('subject_offering_id', offeringId)
+                .eq('attendance_date', dateStr);
+            syncedCount++;
+          } catch (err) {
+            if (_isNetworkError(err)) {
+              remainingClears.add(item);
+            }
+          }
+        }
+        await LocalStorageService.saveJson(
+          'offline_attendance_clear_queue',
+          remainingClears,
         );
       }
 

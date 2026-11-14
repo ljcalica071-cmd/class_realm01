@@ -181,18 +181,20 @@ class TeacherProctorChannelService {
       kickStudent(studentId, details, writeToDb: false);
     } else if (eventType == 'retake_authorized' || eventType == 'reset') {
       authorizeRetake(studentId, writeToDb: false);
-    } else if (eventType == 'force_submit') {
-      forceSubmitStudent(studentId, writeToDb: false);
     } else if (eventType == 'entry_allowed') {
       toggleAllowStudent(studentId, true, writeToDb: false);
     } else if (eventType == 'entry_disallowed') {
       toggleAllowStudent(studentId, false, writeToDb: false);
-    } else {
-      // Focus lost / blur / tab switch / network violation
+    } else if (eventType == 'window_focus_lost' ||
+        eventType.contains('tab_switch') ||
+        eventType.contains('background') ||
+        eventType.contains('blur') ||
+        eventType.contains('focus')) {
+      // Focus lost / blur / tab switch violation (excludes network_disconnected, force_submit, etc.)
       final current = _studentStates[studentId];
       final vType = eventType.contains('background')
           ? ProctorViolationType.appBackgrounded
-          : (eventType.contains('blur') || eventType.contains('focus')
+          : (eventType.contains('blur')
                 ? ProctorViolationType.windowBlur
                 : ProctorViolationType.tabSwitch);
 
@@ -233,6 +235,12 @@ class TeacherProctorChannelService {
     if (current != null) {
       // Check for duplicate violation id
       if (current.violations.any((v) => v.id == violation.id)) return;
+      // Guard against duplicate twin events emitted within 2 seconds of each other
+      if (current.violations.any(
+        (v) => violation.timestamp.difference(v.timestamp).inSeconds.abs() < 2,
+      )) {
+        return;
+      }
       final updatedViolations = List<ProctorViolationLog>.from(
         current.violations,
       )..add(violation);
@@ -390,47 +398,6 @@ class TeacherProctorChannelService {
                   : 'Instructor disallowed test access',
               'event_at': DateTime.now().toUtc().toIso8601String(),
             })
-            .catchError((_) {});
-      } catch (_) {}
-    }
-  }
-
-  /// Teacher Action: Force auto-submit assessment for a specific student
-  /// Only the targeted student is submitted; others continue normally.
-  void forceSubmitStudent(
-    String studentId, {
-    String reason = 'Instructor triggered auto-submission',
-    bool writeToDb = true,
-  }) {
-    final current = _studentStates[studentId];
-    if (current != null) {
-      _studentStates[studentId] = current.copyWith(
-        status: ProctorSessionStatus.submitted,
-        lastActiveAt: DateTime.now(),
-      );
-      _broadcast();
-    }
-
-    if (writeToDb) {
-      try {
-        SupabaseService().client
-            .from('anti_cheating_logs')
-            .insert({
-              'assessment_id': assessmentId,
-              'student_id': studentId,
-              'event_type': 'force_submit',
-              'details': reason,
-              'event_at': DateTime.now().toUtc().toIso8601String(),
-            })
-            .catchError((_) {});
-
-        SupabaseService().client
-            .from('assessment_attempts')
-            .update({
-              'status': 'auto_submitted',
-            })
-            .eq('assessment_id', assessmentId)
-            .eq('student_id', studentId)
             .catchError((_) {});
       } catch (_) {}
     }

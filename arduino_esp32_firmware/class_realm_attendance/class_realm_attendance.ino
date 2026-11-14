@@ -68,6 +68,13 @@ const unsigned long DEBOUNCE_DELAY_MS = 2500;
 // Sync state flag to prevent blocking startup
 bool pendingSync = false;
 
+// Layer 1 Offline Schedule & Cutoff Cache (Loaded from NVS Preferences)
+bool cachedHasScheduleToday = false;
+bool cachedIsHoliday = false;
+int cachedStartMins = 480;   // Default 08:00 AM
+int cachedGraceMins = 15;    // Default +15m grace
+int cachedLateMins = 45;     // Default +45m late cutoff
+
 // =========================================================================
 // BUZZER PATTERNS
 // =========================================================================
@@ -299,7 +306,17 @@ void syncRegisteredStudentsCache() {
   http.end();
 }
 
-// Auto-detect and sync today's active schedule offering from Supabase
+// Parse HH:MM:SS or HH:MM into minutes since midnight
+int parseTimeToMins(String timeStr) {
+  if (timeStr.length() < 4) return -1;
+  int colonIdx = timeStr.indexOf(':');
+  if (colonIdx == -1) return -1;
+  int hh = timeStr.substring(0, colonIdx).toInt();
+  int mm = timeStr.substring(colonIdx + 1, colonIdx + 3).toInt();
+  return (hh * 60) + mm;
+}
+
+// Auto-detect and sync today's active schedule offering, cutoffs, & holiday from Supabase
 void fetchActiveSchedule() {
   if (WiFi.status() != WL_CONNECTED) return;
 
@@ -308,7 +325,27 @@ void fetchActiveSchedule() {
 
   // ISO Day of Week: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
   int isoDow = (timeinfo.tm_wday == 0) ? 7 : timeinfo.tm_wday;
+  char dateBuf[16];
+  strftime(dateBuf, sizeof(dateBuf), "%Y-%m-%d", &timeinfo);
+  String todayStr = String(dateBuf);
 
+  // 1. Check active holiday today
+  {
+    HTTPClient http;
+    String hUrl = String(SUPABASE_URL) + "/rest/v1/school_holidays?is_active=eq.true&holiday_date=eq." + todayStr + "&select=holiday_name&limit=1";
+    http.begin(hUrl);
+    http.addHeader("apikey", SUPABASE_ANON_KEY);
+    http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+    http.setTimeout(2500);
+    int hCode = http.GET();
+    if (hCode == 200) {
+      String hPayload = http.getString();
+      cachedIsHoliday = (hPayload.length() > 2 && hPayload != "[]");
+    }
+    http.end();
+  }
+
+  // 2. Check active schedule for today
   HTTPClient http;
   String url = String(SUPABASE_URL) + "/rest/v1/teacher_schedule?is_active=eq.true&day_of_week=eq." + String(isoDow) + "&select=subject_offering_id,start_time,end_time&order=start_time.asc&limit=1";
   http.begin(url);
@@ -321,16 +358,93 @@ void fetchActiveSchedule() {
     String payload = http.getString();
     if (payload.length() > 2 && payload != "[]") {
       String foundOffering = extractJsonField(payload, "subject_offering_id");
+      String startTimeStr = extractJsonField(payload, "start_time");
+      int parsedStart = parseTimeToMins(startTimeStr);
+
       if (foundOffering.length() > 0) {
         activeSubjectOfferingId = foundOffering;
-        prefs.begin("class_config", false);
-        prefs.putString("active_offering", activeSubjectOfferingId);
-        prefs.end();
-        Serial.println("[SCHEDULE] Auto-assigned active offering: " + activeSubjectOfferingId);
+        cachedHasScheduleToday = true;
+        if (parsedStart >= 0) {
+          cachedStartMins = parsedStart;
+        }
+        Serial.println("[SCHEDULE] Auto-assigned active offering: " + activeSubjectOfferingId + " @ " + startTimeStr);
       }
+    } else {
+      cachedHasScheduleToday = false;
+      Serial.println("[SCHEDULE] No active schedule plotted for today.");
     }
   }
   http.end();
+
+  // 3. Fetch cutoff configuration for active offering
+  if (activeSubjectOfferingId.length() > 0) {
+    HTTPClient cHttp;
+    String cUrl = String(SUPABASE_URL) + "/rest/v1/attendance_cutoffs?subject_offering_id=eq." + activeSubjectOfferingId + "&select=present_grace_mins,late_cutoff_mins&limit=1";
+    cHttp.begin(cUrl);
+    cHttp.addHeader("apikey", SUPABASE_ANON_KEY);
+    cHttp.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+    cHttp.setTimeout(2500);
+    int cCode = cHttp.GET();
+    if (cCode == 200) {
+      String cPayload = cHttp.getString();
+      if (cPayload.length() > 2 && cPayload != "[]") {
+        String gStr = extractJsonField(cPayload, "present_grace_mins");
+        String lStr = extractJsonField(cPayload, "late_cutoff_mins");
+        if (gStr.length() > 0) cachedGraceMins = gStr.toInt();
+        if (lStr.length() > 0) cachedLateMins = lStr.toInt();
+      }
+    }
+    cHttp.end();
+  }
+
+  prefs.begin("class_config", false);
+  prefs.putString("active_offering", activeSubjectOfferingId);
+  prefs.putBool("has_sched", cachedHasScheduleToday);
+  prefs.putBool("is_holiday", cachedIsHoliday);
+  prefs.putInt("start_mins", cachedStartMins);
+  prefs.putInt("grace_mins", cachedGraceMins);
+  prefs.putInt("late_mins", cachedLateMins);
+  prefs.end();
+}
+
+// Layer 1 Offline Validation: Checks Holiday, Schedule, Registration, & Cutoff Windows
+void handleOfflineValidatedScan(String uid) {
+  if (cachedIsHoliday || !cachedHasScheduleToday) {
+    buzzDenied();
+    showFeedbackScreen("SCHEDULE LOCKED", "NO CLASS", "No Class Today");
+    return;
+  }
+
+  String cachedName = getOfflineStudentName(uid);
+  if (cachedName.length() == 0) {
+    buzzDenied();
+    showFeedbackScreen("NOT REGISTERED", "UNREGISTERED", "UID: " + uid);
+    return;
+  }
+
+  // Evaluate current scan time against cached schedule start_time & cutoffs
+  saveOfflineScan(uid);
+
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo)) {
+    int scanMins = (timeinfo.tm_hour * 60) + timeinfo.tm_min;
+    int presentCutoff = cachedStartMins + cachedGraceMins;
+    int lateCutoff = cachedStartMins + cachedLateMins;
+
+    if (scanMins <= presentCutoff) {
+      buzzOnce();
+      showFeedbackScreen("OFFLINE SCAN", "PRESENT", cachedName);
+    } else if (scanMins <= lateCutoff) {
+      buzzTwice();
+      showFeedbackScreen("OFFLINE SCAN", "LATE", cachedName);
+    } else {
+      buzzDenied();
+      showFeedbackScreen("CUTOFF CLOSED", "TOO LATE", cachedName);
+    }
+  } else {
+    buzzOnce();
+    showFeedbackScreen("OFFLINE SCAN", "PRESENT", cachedName);
+  }
 }
 
 // Drain offline queue when WiFi reconnects by submitting true timestamps to record_rfid_attendance
@@ -410,21 +524,10 @@ void processRfidScan(String uid) {
   Serial.println(uid);
 
   // -------------------------------------------------------------
-  // SITUATION A: OFFLINE MODE (No WiFi / Standalone / No Laptop)
+  // SITUATION A: OFFLINE MODE (Layer 1 Local Schedule & Cutoff Validation)
   // -------------------------------------------------------------
   if (WiFi.status() != WL_CONNECTED) {
-    String cachedName = getOfflineStudentName(uid);
-
-    if (cachedName.length() > 0) {
-      // Registered student from local memory whitelist
-      saveOfflineScan(uid);
-      buzzOnce(); // 1 Beep: PRESENT
-      showFeedbackScreen("OFFLINE SCAN", "PRESENT", cachedName);
-    } else {
-      // Unregistered card: 3 fast beeps + STRICTLY NOT STORED IN DB QUEUE
-      buzzDenied();
-      showFeedbackScreen("NOT REGISTERED", "UNREGISTERED", "UID: " + uid);
-    }
+    handleOfflineValidatedScan(uid);
     delay(2000);
     showIdleScreen();
     return;
@@ -533,16 +636,8 @@ void processRfidScan(String uid) {
     }
   } else {
     Serial.println("[RPC ERROR] HTTP Code: " + String(httpCode));
-    // Fallback to local offline cache when cloud RPC fails/times out
-    String cachedName = getOfflineStudentName(uid);
-    if (cachedName.length() > 0) {
-      saveOfflineScan(uid);
-      buzzOnce();
-      showFeedbackScreen("OFFLINE SCAN", "PRESENT", cachedName);
-    } else {
-      buzzDenied();
-      showFeedbackScreen("ERROR", "ACCESS DENIED", "Check Network");
-    }
+    // Fallback to Layer 1 local offline validation when cloud RPC fails/times out
+    handleOfflineValidatedScan(uid);
   }
   http.end();
 
@@ -593,9 +688,14 @@ void setup() {
   delay(60);
   digitalWrite(BUZZER_PIN, LOW);
 
-  // Load saved offering & queue count from flash
+  // Load saved offering, schedule & cutoff cache, and queue count from flash
   prefs.begin("class_config", true);
   activeSubjectOfferingId = prefs.getString("active_offering", activeSubjectOfferingId);
+  cachedHasScheduleToday = prefs.getBool("has_sched", false);
+  cachedIsHoliday = prefs.getBool("is_holiday", false);
+  cachedStartMins = prefs.getInt("start_mins", 480);
+  cachedGraceMins = prefs.getInt("grace_mins", 15);
+  cachedLateMins = prefs.getInt("late_mins", 45);
   prefs.end();
 
   prefs.begin("offline_queue", true);

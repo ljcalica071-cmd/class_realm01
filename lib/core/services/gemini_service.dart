@@ -131,7 +131,7 @@ class GeminiAssessmentGenerationResult {
     return const GeminiAssessmentGenerationResult._(
       missingApiKeys: true,
       errorMessage:
-          'No Gemini API keys are configured in .env yet (GEMINI_API_KEY_1, GEMINI_API_KEY_2, GEMINI_API_KEY_3).',
+          'AI question generation is not set up yet. Please contact your school administrator, or add questions manually by clicking Continue.',
     );
   }
 
@@ -462,9 +462,14 @@ class GeminiService {
   static String formatUserFriendlyErrorMessage(
     String? rawError, {
     int totalKeys = 1,
+    bool isAssessment = false,
   }) {
+    final fallbackInstruction = isAssessment
+        ? 'add your questions manually by clicking Continue'
+        : 'click "Open Manual Template" to proceed without waiting';
+
     if (rawError == null || rawError.trim().isEmpty) {
-      return 'The AI service is temporarily unavailable. Please wait a moment and try again, or click "Open Manual Template" to proceed.';
+      return 'The AI assistant is temporarily unavailable right now. Please wait a moment and try again, or $fallbackInstruction.';
     }
 
     final lower = rawError.toLowerCase();
@@ -476,7 +481,7 @@ class GeminiService {
         lower.contains('unavailable') ||
         lower.contains('overloaded') ||
         lower.contains('server error')) {
-      return 'Gemini AI is currently experiencing high demand and temporary traffic spikes. Please wait a moment and try generating again, or click "Open Manual Template" to proceed without waiting.';
+      return 'The AI assistant is currently experiencing high demand. Please wait a moment and try again, or $fallbackInstruction.';
     }
 
     // 2. Rate limit / 429 / Quota / Exhausted
@@ -487,7 +492,7 @@ class GeminiService {
         lower.contains('resource has been exhausted') ||
         lower.contains('exhausted') ||
         lower.contains('rate limit')) {
-      return 'AI generation limit has been temporarily reached. Please wait about a minute before trying again, or click "Open Manual Template" to proceed without waiting.';
+      return 'The AI generation limit has been temporarily reached. Please wait a minute and try again, or $fallbackInstruction.';
     }
 
     // 3. Network / Connection errors
@@ -499,7 +504,7 @@ class GeminiService {
         lower.contains('clientexception') ||
         lower.contains('handshake') ||
         lower.contains('offline')) {
-      return 'Unable to reach the Gemini AI service. Please check your internet connection and try again, or click "Open Manual Template" to proceed.';
+      return 'Unable to connect to the AI service right now. Please check your internet connection and try again, or $fallbackInstruction.';
     }
 
     // 4. Authentication / Invalid key / 401 / 403
@@ -509,18 +514,20 @@ class GeminiService {
         lower.contains('api key not valid') ||
         lower.contains('permission_denied') ||
         lower.contains('unauthorized')) {
-      return 'The configured Gemini API key is invalid or unauthorized. Please verify your API key in settings or proceed with "Open Manual Template".';
+      return 'The AI service is currently unavailable. Please contact your school administrator, or $fallbackInstruction.';
     }
 
     // 5. Model retired / not found
     if (lower.contains('404') ||
         (lower.contains('model') && lower.contains('not found')) ||
         lower.contains('no longer available')) {
-      return 'The requested AI model version is currently unavailable. Please wait a moment and try again, or click "Open Manual Template" to proceed.';
+      return 'The AI assistant is temporarily unavailable right now. Please wait a moment and try again, or $fallbackInstruction.';
     }
 
     // 6. Generic friendly fallback
-    return 'The AI service encountered a temporary issue while preparing your lesson plan. Please wait a moment and try again, or click "Open Manual Template" to proceed.';
+    return isAssessment
+        ? 'The AI assistant encountered a temporary issue while preparing your questions. Please wait a moment and try again, or add your questions manually by clicking Continue.'
+        : 'The AI assistant encountered a temporary issue while preparing your lesson plan. Please wait a moment and try again, or click "Open Manual Template" to proceed.';
   }
 
   static String _buildShsIlawPrompt({
@@ -890,7 +897,7 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
           30,
         );
         return GeminiAssessmentGenerationResult.failure(
-          'Please wait $remaining second(s) before regenerating to protect your API quota.',
+          'Please wait $remaining second(s) before generating questions again.',
         );
       }
     }
@@ -986,6 +993,7 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
         formatUserFriendlyErrorMessage(
           lastRedactedError,
           totalKeys: keys.length,
+          isAssessment: true,
         ),
       );
     } finally {

@@ -327,6 +327,26 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// Delete cached attendance records and pending sync queue items for a specific offering and YYYY-MM-DD date
+  Future<void> deleteAttendanceForOfferingAndDate(
+    String offeringId,
+    String dateStr,
+  ) async {
+    if (kIsWeb) return;
+    await (delete(localAttendanceRecords)..where(
+          (t) =>
+              t.subjectOfferingId.equals(offeringId) &
+              t.attendanceDate.equals(dateStr),
+        ))
+        .go();
+    await (delete(offlineSyncQueue)..where(
+          (t) =>
+              t.id.equals('batch_save_${offeringId}_$dateStr') |
+              t.id.like('rfid_%_${offeringId}_${dateStr}_%'),
+        ))
+        .go();
+  }
+
   /// Upsert cutoff configuration for a subject offering
   Future<void> upsertCutoffConfig(LocalAttendanceCutoffsCompanion row) async {
     if (kIsWeb) return;

@@ -760,6 +760,15 @@ class _CreateRequirementFlowDialogState
 
         catMap[_gradebookColumnIndex.toString()] = maxScore;
         hps[categoryKey] = catMap;
+        final colMetaKey = widget.isPerformanceTask
+            ? 'pt_columns'
+            : 'ww_columns';
+        final existingCols = hps[colMetaKey] is num
+            ? (hps[colMetaKey] as num).toInt()
+            : int.tryParse(hps[colMetaKey]?.toString() ?? '') ?? 0;
+        if ((_gradebookColumnIndex ?? 0) > existingCols) {
+          hps[colMetaKey] = _gradebookColumnIndex;
+        }
         termSheet['hps'] = hps;
         termSheet['scores'] ??= <String, dynamic>{};
         await SubjectRepository.instance.saveGradebookTermSheet(
@@ -1338,10 +1347,15 @@ class _CreateRequirementFlowDialogState
                                         ),
                                       )
                                     else
-                                      DropdownButtonFormField<int?>(
-                                        key: ValueKey(
-                                          'column-$_termNumber-${_occupiedColumns.join(',')}',
-                                        ),
+                                      Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            child: DropdownButtonFormField<int?>(
+                                              key: ValueKey(
+                                                'column-$_termNumber-$_maxAvailableSlots-${_occupiedColumns.join(',')}',
+                                              ),
                                         initialValue:
                                             _occupiedColumns.contains(
                                               _gradebookColumnIndex,
@@ -1434,6 +1448,48 @@ class _CreateRequirementFlowDialogState
                                           return null;
                                         },
                                       ),
+                                          ),
+                                          if (_maxAvailableSlots < 10) ...[
+                                            const SizedBox(width: 8),
+                                            Tooltip(
+                                              message:
+                                                  'Add ${widget.isPerformanceTask ? 'PT' : 'WW'} ${_maxAvailableSlots + 1} column (Max 10)',
+                                              child: SizedBox(
+                                                height: 44,
+                                                child: OutlinedButton(
+                                                  onPressed: () {
+                                                    final nextSlot =
+                                                        _maxAvailableSlots + 1;
+                                                    setState(() {
+                                                      _maxAvailableSlots =
+                                                          nextSlot;
+                                                      _gradebookColumnIndex =
+                                                          nextSlot;
+                                                    });
+                                                  },
+                                                  style: OutlinedButton.styleFrom(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 10,
+                                                        ),
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
+                                                        ),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.add,
+                                                    size: 18,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                     if (_occupiedColumns.length >= 10)
                                       const Padding(
                                         padding: EdgeInsets.only(
@@ -1441,7 +1497,7 @@ class _CreateRequirementFlowDialogState
                                           left: 4,
                                         ),
                                         child: Text(
-                                          'All columns for this term are already used.',
+                                          'All 10 columns for this term are already used.',
                                           style: TextStyle(
                                             color: Color(0xFFEF4444),
                                             fontSize: 12,

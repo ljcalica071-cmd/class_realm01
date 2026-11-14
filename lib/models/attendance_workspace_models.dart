@@ -492,7 +492,7 @@ class AttendanceScheduleStatus {
   });
 
   bool get isLockedByDefault =>
-      isHoliday || (hasPlottedScheduleAnyDay && !isScheduledOnDate);
+      isHoliday || !hasPlottedScheduleAnyDay || !isScheduledOnDate;
 
   String? get lockReason {
     if (isHoliday) {
@@ -500,7 +500,10 @@ class AttendanceScheduleStatus {
           ? 'School Holiday: $holidayName — Attendance scans are locked for this date.'
           : 'Recognized School Holiday — Attendance scans are locked for this date.';
     }
-    if (hasPlottedScheduleAnyDay && !isScheduledOnDate) {
+    if (!hasPlottedScheduleAnyDay) {
+      return 'No class schedule is set for this subject and section in My Schedule. Set up a schedule before recording attendance.';
+    }
+    if (!isScheduledOnDate) {
       return 'No class session is plotted for this subject on the selected day.';
     }
     return null;

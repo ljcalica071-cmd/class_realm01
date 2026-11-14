@@ -163,6 +163,8 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
   bool _isSavingBatch = false;
 
+  bool _isClearingAll = false;
+
   bool _isOffline = false;
   Timer? _silentPollingTimer;
   bool _isSilentlySyncing = false;
@@ -287,11 +289,18 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   bool get _isDirty => _dirtyCount > 0;
 
   bool get _isEffectivelyLocked {
+    if (_selectedSubjectId == null) return true;
+
     final sched = _scheduleStatus;
 
     if (sched == null) return false;
 
     if (sched.isHoliday) return true; // Holidays stay strictly locked
+
+    if (!sched.hasPlottedScheduleAnyDay) {
+      // Strictly locked if no schedule is set in My Schedule at all
+      return true;
+    }
 
     return sched.isLockedByDefault && !_manualMakeupOverride;
   }
@@ -745,27 +754,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     }
 
     try {
-      var subjects = await SubjectRepository.instance.getTeacherSubjects(
+      final subjects = await SubjectRepository.instance.getTeacherSubjects(
         teacherId,
       );
-
-      try {
-        final schedRows = await Supabase.instance.client
-            .from('teacher_schedule')
-            .select('subject_offering_id')
-            .eq('is_active', true);
-
-        final scheduledOfferingIds = (schedRows as List)
-            .map((r) => r['subject_offering_id']?.toString())
-            .whereType<String>()
-            .toSet();
-
-        if (scheduledOfferingIds.isNotEmpty) {
-          subjects = subjects
-              .where((s) => scheduledOfferingIds.contains(s['id']?.toString()))
-              .toList();
-        }
-      } catch (_) {}
 
       if (!mounted) return;
 
@@ -773,6 +764,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         _teacherSubjects = subjects;
 
         _syncFilterSelection();
+
+        if (_selectedSubjectId == null) {
+          _rosterStudents = [];
+        }
 
         _isLoadingSubjects = false;
 
@@ -921,6 +916,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
       if ((isPastDay || isClassEndedToday) &&
           !scheduleStatus.isHoliday &&
+          scheduleStatus.hasPlottedScheduleAnyDay &&
           (!scheduleStatus.isLockedByDefault || effectiveRecords.isNotEmpty)) {
         final recordedIds = effectiveRecords.map((r) => r.studentId).toSet();
         final autoAbsentList = <AttendanceWorkspaceRecord>[];
@@ -963,6 +959,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         _scheduleStatus = scheduleStatus;
         if (isPastDay &&
             !scheduleStatus.isHoliday &&
+            scheduleStatus.hasPlottedScheduleAnyDay &&
             scheduleStatus.isLockedByDefault &&
             effectiveRecords.isNotEmpty) {
           _manualMakeupOverride = true;
@@ -1016,7 +1013,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       ]);
       final rosterResult = results[0] as AttendanceRosterResult;
       final scheduleStatus = results[1] as AttendanceScheduleStatus;
-      if (scheduleStatus.isHoliday) return;
+      if (scheduleStatus.isHoliday || !scheduleStatus.hasPlottedScheduleAnyDay) {
+        return;
+      }
       if (scheduleStatus.isLockedByDefault && rosterResult.records.isEmpty) {
         return;
       }
@@ -1821,6 +1820,94 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     });
   }
 
+  Future<void> _confirmAndClearAllAttendance() async {
+    if (_selectedSubjectId == null || _isEffectivelyLocked || _isClearingAll) {
+      return;
+    }
+
+    final readableDate = _formatReadableDate(_attendanceSelectedDate);
+    final isoDate = _formatDate(_attendanceSelectedDate);
+
+    final confirmed = await AppModals.showConfirmDialog(
+      context: context,
+      title: 'Clear All Attendance for $readableDate?',
+      message:
+          'This will clear all recorded attendance statuses, time-in logs, and remarks for $_selectedSubjectLabel on $readableDate ($isoDate) only.\n\nAll students on this date will be reset to an unmarked (empty) state, and the attendance records for this date will be permanently deleted from the database. Attendance records on other dates will not be affected.',
+      confirmLabel: 'Clear All Records',
+      cancelLabel: 'Cancel',
+      confirmColor: AppTheme.catRed,
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isClearingAll = true);
+
+    try {
+      await _repository.clearAttendanceForDate(
+        subjectOfferingId: _selectedSubjectId!,
+        date: _attendanceSelectedDate,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _existingRecordIds.clear();
+        _tempAttendanceStates.clear();
+        _initialAttendanceStates.clear();
+        _tempAttendanceSources.clear();
+        _tempAttendanceTimesIn.clear();
+        _tempAttendanceDeviceIds.clear();
+        _tempAttendanceRemarks.clear();
+        _initialAttendanceRemarks.clear();
+        _isClearingAll = false;
+        _inlineNotice = _WorkspaceInlineNotice(
+          tone: _WorkspaceNoticeTone.info,
+          title: 'Attendance Records Cleared',
+          message:
+              'All attendance records for $_selectedSubjectLabel on $readableDate have been cleared and removed from the database.',
+        );
+      });
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(
+                LucideIcons.rotateCcw,
+                color: Colors.white,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Cleared all attendance records for $readableDate.',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF0F172A),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.only(bottom: 24, left: 24, right: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isClearingAll = false);
+      await AppModals.showErrorDialog(
+        context: context,
+        title: 'Failed to Clear Attendance',
+        message: AppModals.sanitizeErrorMessage(e),
+      );
+    }
+  }
+
   void _autoAbsentUnmarked() {
     if (_isEffectivelyLocked) return;
 
@@ -2389,6 +2476,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
                   onMarkAllPresent: _markAllPresent,
 
+                  onClearAll: _confirmAndClearAllAttendance,
+
+                  isClearingAll: _isClearingAll,
+
                   onAutoAbsentUnmarked: _autoAbsentUnmarked,
 
                   linkingStudentId: _inlineLinkingStudentId,
@@ -2780,244 +2871,245 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: borderColor),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Wrap(
-            spacing: 14,
-            runSpacing: 12,
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.end,
-            children: [
+      child: SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          spacing: 14,
+          runSpacing: 12,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.end,
+          children: [
+            Wrap(
+              spacing: 14,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.end,
+              children: [
+                _buildFilterDropdown(
+                  label: 'Grade Level',
+                  icon: LucideIcons.graduationCap,
+                  value: _selectedGradeLevel,
+                  items: _gradeLevels,
+                  onChanged: _onGradeLevelChanged,
+                  itemLabel: (val) => val,
+                  theme: theme,
+                  isDark: isDark,
+                ),
+                _buildFilterDropdown(
+                  label: 'Subject',
+                  icon: LucideIcons.bookOpen,
+                  value: _selectedSubjectName,
+                  items: _availableSubjects,
+                  onChanged: _onSubjectNameChanged,
+                  itemLabel: (val) => val,
+                  theme: theme,
+                  isDark: isDark,
+                ),
+                _buildFilterDropdown(
+                  label: 'Section',
+                  icon: LucideIcons.users,
+                  value: _selectedSubjectId,
+                  items: _availableSections
+                      .map((s) => s['id']?.toString() ?? '')
+                      .toList(),
+                  onChanged: _onSectionChanged,
+                  itemLabel: (id) {
+                    final match = _availableSections.firstWhere(
+                      (s) => s['id']?.toString() == id,
+                      orElse: () => {},
+                    );
+                    return _formatSectionDisplay(
+                      match['section_name']?.toString() ?? 'Section',
+                    );
+                  },
+                  theme: theme,
+                  isDark: isDark,
+                ),
+              ],
+            ),
+            if (_selectedAttendanceView == 'Take Attendance')
               Wrap(
-                spacing: 14,
-                runSpacing: 12,
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
                 crossAxisAlignment: WrapCrossAlignment.end,
                 children: [
-                  _buildFilterDropdown(
-                    label: 'Grade Level',
-                    icon: LucideIcons.graduationCap,
-                    value: _selectedGradeLevel,
-                    items: _gradeLevels,
-                    onChanged: _onGradeLevelChanged,
-                    itemLabel: (val) => val,
-                    theme: theme,
-                    isDark: isDark,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Session Date',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.65,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: isDark ? 0.18 : 0.16,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: isEarliestAllowed
+                                  ? '2026 is the earliest allowed date'
+                                  : 'Previous Day',
+                              icon: Icon(
+                                LucideIcons.chevronLeft,
+                                size: 15,
+                                color: isEarliestAllowed
+                                    ? theme.colorScheme.onSurface.withValues(
+                                        alpha: 0.25,
+                                      )
+                                    : theme.colorScheme.onSurface,
+                              ),
+                              onPressed: isEarliestAllowed
+                                  ? null
+                                  : () => _onDateChanged(
+                                      _attendanceSelectedDate.subtract(
+                                        const Duration(days: 1),
+                                      ),
+                                    ),
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              constraints: const BoxConstraints(),
+                            ),
+                            InkWell(
+                              onTap: () async {
+                                final initial =
+                                    _attendanceSelectedDate.isBefore(min2026)
+                                    ? min2026
+                                    : (_attendanceSelectedDate.isAfter(today)
+                                          ? today
+                                          : _attendanceSelectedDate);
+                                final picked = await showAppDatePickerDialog(
+                                  context,
+                                  initialDate: initial,
+                                  firstDate: min2026,
+                                  lastDate: today,
+                                  title: 'Select Attendance Date',
+                                );
+                                if (picked != null) {
+                                  _onDateChanged(picked);
+                                }
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      LucideIcons.calendar,
+                                      size: 14,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _formatDate(_attendanceSelectedDate),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12.5,
+                                        color: theme.colorScheme.onSurface,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: isSelectedTodayOrFuture
+                                  ? 'Future dates are locked'
+                                  : 'Next Day',
+                              icon: Icon(
+                                LucideIcons.chevronRight,
+                                size: 15,
+                                color: isSelectedTodayOrFuture
+                                    ? theme.colorScheme.onSurface.withValues(
+                                        alpha: 0.25,
+                                      )
+                                    : theme.colorScheme.onSurface,
+                              ),
+                              onPressed: isSelectedTodayOrFuture
+                                  ? null
+                                  : () => _onDateChanged(
+                                      _attendanceSelectedDate.add(
+                                        const Duration(days: 1),
+                                      ),
+                                    ),
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  _buildFilterDropdown(
-                    label: 'Subject',
-                    icon: LucideIcons.bookOpen,
-                    value: _selectedSubjectName,
-                    items: _availableSubjects,
-                    onChanged: _onSubjectNameChanged,
-                    itemLabel: (val) => val,
-                    theme: theme,
-                    isDark: isDark,
+                  if (!isToday)
+                    SizedBox(
+                      height: 38,
+                      child: AppButton.outline(
+                        label: 'Today',
+                        isSmall: true,
+                        onPressed: () => _onDateChanged(DateTime.now()),
+                      ),
+                    ),
+                ],
+              )
+            else
+              // Right-aligned Analytics & History controls + inline custom date range on the right
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _buildAnalyticsPresetBtn(
+                    'This Week',
+                    AttendanceDatePreset.thisWeek,
+                    theme,
                   ),
-                  _buildFilterDropdown(
-                    label: 'Section',
-                    icon: LucideIcons.users,
-                    value: _selectedSubjectId,
-                    items: _availableSections
-                        .map((s) => s['id']?.toString() ?? '')
-                        .toList(),
-                    onChanged: _onSectionChanged,
-                    itemLabel: (id) {
-                      final match = _availableSections.firstWhere(
-                        (s) => s['id']?.toString() == id,
-                        orElse: () => {},
-                      );
-                      return _formatSectionDisplay(
-                        match['section_name']?.toString() ?? 'Section',
-                      );
-                    },
-                    theme: theme,
-                    isDark: isDark,
+                  _buildAnalyticsPresetBtn(
+                    'This Month',
+                    AttendanceDatePreset.thisMonth,
+                    theme,
+                  ),
+                  _buildAnalyticsPresetBtn(
+                    'Custom',
+                    AttendanceDatePreset.custom,
+                    theme,
+                  ),
+                  if (_selectedAnalyticsPreset == AttendanceDatePreset.custom)
+                    _buildAnalyticsCustomDateRangeRow(
+                      theme,
+                      isDark,
+                      today,
+                      min2026,
+                    ),
+                  AppButton.outline(
+                    label: 'Export Excel',
+                    icon: LucideIcons.fileSpreadsheet,
+                    isSmall: true,
+                    onPressed: () =>
+                        _analyticsViewKey.currentState?.exportSf2Csv(),
                   ),
                 ],
               ),
-              if (_selectedAttendanceView == 'Take Attendance')
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.end,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Session Date',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.65,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: isDark ? 0.18 : 0.16,
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                tooltip: isEarliestAllowed
-                                    ? '2026 is the earliest allowed date'
-                                    : 'Previous Day',
-                                icon: Icon(
-                                  LucideIcons.chevronLeft,
-                                  size: 15,
-                                  color: isEarliestAllowed
-                                      ? theme.colorScheme.onSurface.withValues(
-                                          alpha: 0.25,
-                                        )
-                                      : theme.colorScheme.onSurface,
-                                ),
-                                onPressed: isEarliestAllowed
-                                    ? null
-                                    : () => _onDateChanged(
-                                        _attendanceSelectedDate.subtract(
-                                          const Duration(days: 1),
-                                        ),
-                                      ),
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                constraints: const BoxConstraints(),
-                              ),
-                              InkWell(
-                                onTap: () async {
-                                  final initial =
-                                      _attendanceSelectedDate.isBefore(min2026)
-                                      ? min2026
-                                      : (_attendanceSelectedDate.isAfter(today)
-                                            ? today
-                                            : _attendanceSelectedDate);
-                                  final picked = await showAppDatePickerDialog(
-                                    context,
-                                    initialDate: initial,
-                                    firstDate: min2026,
-                                    lastDate: today,
-                                    title: 'Select Attendance Date',
-                                  );
-                                  if (picked != null) {
-                                    _onDateChanged(picked);
-                                  }
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 6,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        LucideIcons.calendar,
-                                        size: 14,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        _formatDate(_attendanceSelectedDate),
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 12.5,
-                                          color: theme.colorScheme.onSurface,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: isSelectedTodayOrFuture
-                                    ? 'Future dates are locked'
-                                    : 'Next Day',
-                                icon: Icon(
-                                  LucideIcons.chevronRight,
-                                  size: 15,
-                                  color: isSelectedTodayOrFuture
-                                      ? theme.colorScheme.onSurface.withValues(
-                                          alpha: 0.25,
-                                        )
-                                      : theme.colorScheme.onSurface,
-                                ),
-                                onPressed: isSelectedTodayOrFuture
-                                    ? null
-                                    : () => _onDateChanged(
-                                        _attendanceSelectedDate.add(
-                                          const Duration(days: 1),
-                                        ),
-                                      ),
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                constraints: const BoxConstraints(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (!isToday)
-                      SizedBox(
-                        height: 38,
-                        child: AppButton.outline(
-                          label: 'Today',
-                          isSmall: true,
-                          onPressed: () => _onDateChanged(DateTime.now()),
-                        ),
-                      ),
-                  ],
-                )
-              else
-                // Inside filter box for Analytics & History: presets + Export Excel
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _buildAnalyticsPresetBtn(
-                      'This Week',
-                      AttendanceDatePreset.thisWeek,
-                      theme,
-                    ),
-                    _buildAnalyticsPresetBtn(
-                      'This Month',
-                      AttendanceDatePreset.thisMonth,
-                      theme,
-                    ),
-                    _buildAnalyticsPresetBtn(
-                      'Custom',
-                      AttendanceDatePreset.custom,
-                      theme,
-                    ),
-                    AppButton.outline(
-                      label: 'Export Excel',
-                      icon: LucideIcons.fileSpreadsheet,
-                      isSmall: true,
-                      onPressed: () =>
-                          _analyticsViewKey.currentState?.exportSf2Csv(),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-          if (_selectedAttendanceView != 'Take Attendance' &&
-              _selectedAnalyticsPreset == AttendanceDatePreset.custom) ...[
-            const SizedBox(height: 12),
-            _buildAnalyticsCustomDateRangeRow(theme, isDark, today, min2026),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -3485,8 +3577,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     final sched = _scheduleStatus!;
 
     final isHoliday = sched.isHoliday;
+    final hasAnySchedule = sched.hasPlottedScheduleAnyDay;
 
-    if (_manualMakeupOverride && !isHoliday) {
+    if (_manualMakeupOverride && !isHoliday && hasAnySchedule) {
       return Container(
         margin: const EdgeInsets.only(bottom: 14),
 
@@ -3538,9 +3631,19 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
     final bannerColor = isHoliday ? AppTheme.catRed : AppTheme.catOrange;
 
-    final reason =
-        sched.lockReason ??
-        'Attendance is locked because no class session is scheduled on this date.';
+    final String bannerTitle;
+    if (isHoliday) {
+      bannerTitle = 'Holiday Lock Enforced';
+    } else if (!hasAnySchedule) {
+      bannerTitle = 'No Class Schedule Set Yet — Attendance Locked';
+    } else {
+      bannerTitle = 'Unscheduled Session — Attendance Locked';
+    }
+
+    final reason = !hasAnySchedule && !isHoliday
+        ? 'No class schedule is set for $_selectedSubjectLabel in My Schedule. Set up a schedule in the My Schedule tab before recording attendance.'
+        : (sched.lockReason ??
+              'Attendance is locked because no class session is scheduled on this date.');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -3593,9 +3696,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
                   children: [
                     Text(
-                      isHoliday
-                          ? 'Holiday Lock Enforced'
-                          : 'Unscheduled Session — Attendance Locked',
+                      bannerTitle,
 
                       style: TextStyle(
                         fontSize: 13,
@@ -3629,7 +3730,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             ],
           ),
 
-          if (!isHoliday)
+          if (!isHoliday && hasAnySchedule)
             AppButton(
               label: 'Enable Make-Up Class Override',
 

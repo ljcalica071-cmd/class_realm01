@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/gemini_service.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/models/proctor_violation_log.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/models/student_live_proctor_state.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/services/teacher_proctor_channel_service.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/widgets/student_proctor_card.dart';
+import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_assessment_flow.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_assessment_screen.dart';
 
 void main() {
@@ -142,30 +145,17 @@ void main() {
       expect(stuB.status, equals(ProctorSessionStatus.inProgress),
           reason: 'Student B MUST NOT be affected when Student A is reset!');
 
-      // Action 2: Teacher force auto-submits Student A
-      proctorService.forceSubmitStudent('stu_001', reason: 'Time expired or proctor submitted', writeToDb: false);
-
-      states = proctorService.currentStates;
-      stuA = states.firstWhere((s) => s.studentId == 'stu_001');
-      stuB = states.firstWhere((s) => s.studentId == 'stu_002');
-
-      expect(stuA.status, equals(ProctorSessionStatus.submitted),
-          reason: 'Student A status must be submitted');
-      expect(stuB.status, equals(ProctorSessionStatus.inProgress),
-          reason: 'Student B MUST NOT be affected when Student A is auto-submitted!');
-
       proctorService.dispose();
     });
   });
 
   group('3. Teacher Student Proctor Card Widget Interaction Test', () {
-    testWidgets('Renders 3 clean action buttons (Reset, Force Submit, Kick) for in-progress student', (tester) async {
+    testWidgets('Renders Reset & Kick action buttons (and no Force Auto-Submit) for in-progress student', (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
       bool resetTapped = false;
-      bool forceSubmitTapped = false;
       bool kickTapped = false;
 
       final inProgressState = StudentLiveProctorState(
@@ -185,7 +175,6 @@ void main() {
               child: StudentProctorCard(
                 state: inProgressState,
                 onRetake: () => resetTapped = true,
-                onForceSubmit: () => forceSubmitTapped = true,
                 onKick: () => kickTapped = true,
               ),
             ),
@@ -204,11 +193,8 @@ void main() {
       await tester.tap(resetBtnFinder);
       expect(resetTapped, isTrue);
 
-      // Verify Force Auto-Submit button
-      final forceSubmitBtnFinder = find.byTooltip('Force Auto-Submit');
-      expect(forceSubmitBtnFinder, findsOneWidget);
-      await tester.tap(forceSubmitBtnFinder);
-      expect(forceSubmitTapped, isTrue);
+      // Verify Force Auto-Submit was removed
+      expect(find.byTooltip('Force Auto-Submit'), findsNothing);
 
       // Verify Kick button
       final kickBtnFinder = find.byTooltip('Kick & Disqualify');
@@ -270,54 +256,122 @@ void main() {
       await tester.tap(startOverBtn);
       await tester.pumpAndSettle();
 
-      // Verify reset back to Question 1
+      // Verify reset back to Question 1 & student UI hides Violations and 1 Point
       expect(find.text('Question 1 of 3'), findsOneWidget);
+      expect(find.textContaining('Violations:'), findsNothing);
+      expect(find.text('1 Point'), findsNothing);
+    });
+  });
+
+  group('5. QuestionDraft Delete & Renumber Integrity Test', () {
+    test('Deleting Q5 decrements only that type, renumbers 1..N sequentially, and preserves >= 1 item', () {
+      final drafts = <QuestionDraft>[
+        for (int i = 1; i <= 5; i++)
+          QuestionDraft(position: i, type: QuestionType.multipleChoice, statement: 'MC $i'),
+        for (int i = 6; i <= 10; i++)
+          QuestionDraft(position: i, type: QuestionType.trueFalse, statement: 'TF $i'),
+        for (int i = 11; i <= 15; i++)
+          QuestionDraft(position: i, type: QuestionType.identification, statement: 'ID $i'),
+      ];
+
+      final deletedType = QuestionDraft.deleteAndRenumber(drafts, 4); // Q5
+      expect(deletedType, equals(QuestionType.multipleChoice));
+      expect(drafts.length, equals(14));
+      for (int i = 0; i < drafts.length; i++) {
+        expect(drafts[i].position, equals(i + 1));
+      }
+      expect(drafts[4].statement, equals('TF 6'));
+      expect(drafts[4].position, equals(5));
+
+      final singleList = [QuestionDraft(position: 1, type: QuestionType.multipleChoice)];
+      expect(QuestionDraft.deleteAndRenumber(singleList, 0), isNull);
+      expect(singleList.length, equals(1));
+    });
+  });
+
+  group('6. Anti-Cheating Violation Deduplication Tests', () {
+    test('Lifecycle violation only counts once per away transition and never on resumed', () {
+      final t0 = DateTime(2026, 11, 14, 10, 0, 0);
+      expect(
+        StudentAssessmentScreenState.shouldCountLifecycleViolation(
+          state: AppLifecycleState.inactive,
+          isAwayFromScreen: false,
+          lastRecordedAt: null,
+          now: t0,
+        ),
+        isTrue,
+      );
+      expect(
+        StudentAssessmentScreenState.shouldCountLifecycleViolation(
+          state: AppLifecycleState.paused,
+          isAwayFromScreen: true,
+          lastRecordedAt: t0,
+          now: t0.add(const Duration(milliseconds: 200)),
+        ),
+        isFalse,
+      );
+      expect(
+        StudentAssessmentScreenState.shouldCountLifecycleViolation(
+          state: AppLifecycleState.resumed,
+          isAwayFromScreen: false,
+          lastRecordedAt: t0,
+          now: t0.add(const Duration(seconds: 5)),
+        ),
+        isFalse,
+      );
     });
 
-    testWidgets('Student receives force submit action and transitions to Result View with score', (tester) async {
-      tester.view.physicalSize = const Size(1080, 1920);
-      tester.view.devicePixelRatio = 2.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+    test('TeacherProctorChannelService deduplicates twin violations within 2 seconds', () {
+      final proctorService = TeacherProctorChannelService(assessmentId: 'exam-dedup');
+      proctorService.initializeRoster([
+        {'id': 'stu_001', 'name': 'Juan Dela Cruz', 'lrn': '123', 'section': 'Sec A'},
+      ]);
 
-      final exam = createSampleExam(resultsReleased: false);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: StudentAssessmentScreen(assessment: exam),
-          ),
-        ),
+      final t0 = DateTime(2026, 11, 14, 10, 0, 0);
+      proctorService.recordViolation(ProctorViolationLog(
+        id: 'v1',
+        attemptId: 'att_1',
+        studentId: 'stu_001',
+        studentName: 'Juan Dela Cruz',
+        violationType: ProctorViolationType.tabSwitch,
+        durationSeconds: 0,
+        timestamp: t0,
+      ));
+      proctorService.recordViolation(ProctorViolationLog(
+        id: 'v2',
+        attemptId: 'att_1',
+        studentId: 'stu_001',
+        studentName: 'Juan Dela Cruz',
+        violationType: ProctorViolationType.windowBlur,
+        durationSeconds: 0,
+        timestamp: t0.add(const Duration(seconds: 1)),
+      ));
+      proctorService.recordViolation(ProctorViolationLog(
+        id: 'v3',
+        attemptId: 'att_1',
+        studentId: 'stu_001',
+        studentName: 'Juan Dela Cruz',
+        violationType: ProctorViolationType.tabSwitch,
+        durationSeconds: 0,
+        timestamp: t0.add(const Duration(seconds: 3)),
+      ));
+
+      final state = proctorService.currentStates.first;
+      expect(state.violationCount, equals(2));
+      proctorService.dispose();
+    });
+  });
+
+  group('7. Gemini User-Friendly Assessment Error Test', () {
+    test('Formats quota/429 error cleanly without technical jargon', () {
+      final msg = GeminiService.formatUserFriendlyErrorMessage(
+        'QuotaExceeded: 429 Too Many Requests for Gemini API key',
+        isAssessment: true,
       );
-      await tester.pumpAndSettle();
-
-      // Agree and start
-      final checkbox = find.byType(Checkbox);
-      await tester.ensureVisible(checkbox);
-      await tester.tap(checkbox);
-      await tester.pumpAndSettle();
-
-      final startBtn = find.widgetWithText(ElevatedButton, 'START ASSESSMENT');
-      await tester.ensureVisible(startBtn);
-      await tester.tap(startBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Question 1 of 3'), findsOneWidget);
-
-      // Answer question 1 correctly
-      await tester.tap(find.text('Crust'));
-      await tester.pumpAndSettle();
-
-      // Trigger Teacher Force Auto-Submit
-      final state = tester.state<StudentAssessmentScreenState>(find.byType(StudentAssessmentScreen));
-      state.handleTeacherForceSubmitForTesting('Periodical exam period ended.');
-      await tester.pumpAndSettle();
-
-      // Verify immediate transition to Result View
-      expect(find.text('Examination Completed & Submitted!'), findsOneWidget);
-      expect(find.textContaining('Score Obtained:'), findsOneWidget);
-      expect(find.textContaining('1 / 3 pts'), findsOneWidget);
-
-      // Answer Key locked notice displayed since resultsReleased is false
-      expect(find.text('Answer Key Locked: Your teacher has not released the item-by-item answer key review yet.'), findsOneWidget);
+      expect(msg.toLowerCase(), isNot(contains('gemini')));
+      expect(msg.toLowerCase(), isNot(contains('api')));
+      expect(msg, isNot(contains('429')));
+      expect(msg.toLowerCase(), isNot(contains('.env')));
     });
   });
 }

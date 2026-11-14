@@ -250,9 +250,11 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
         });
       }
     } catch (e) {
+      debugPrint('Failed to load exam review: $e');
       if (mounted) {
         setState(() {
-          _errorMessage = 'Failed to load exam review: $e';
+          _errorMessage =
+              'Unable to load the review right now. Please try again.';
           _isLoading = false;
         });
       }
@@ -362,18 +364,55 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
 
             // Tab Bar for Categories
             Container(
-              color: theme.colorScheme.surface,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                border: Border(
+                  bottom: BorderSide(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
               child: TabBar(
                 controller: _tabController,
+                isScrollable: true,
+                tabAlignment: TabAlignment.center,
                 indicatorColor: theme.colorScheme.primary,
+                indicatorWeight: 2.5,
                 labelColor: theme.colorScheme.primary,
                 unselectedLabelColor: theme.colorScheme.onSurface.withValues(
-                  alpha: 0.6,
+                  alpha: 0.65,
+                ),
+                labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+                labelStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
                 ),
                 tabs: [
-                  Tab(text: 'Multiple Choice (${_mcItems.length})'),
-                  Tab(text: 'True or False (${_tfItems.length})'),
-                  Tab(text: 'Identification (${_idItems.length})'),
+                  Tab(
+                    child: Text(
+                      'Multiple Choice (${_mcItems.length})',
+                      maxLines: 1,
+                      softWrap: false,
+                    ),
+                  ),
+                  Tab(
+                    child: Text(
+                      'True or False (${_tfItems.length})',
+                      maxLines: 1,
+                      softWrap: false,
+                    ),
+                  ),
+                  Tab(
+                    child: Text(
+                      'Identification (${_idItems.length})',
+                      maxLines: 1,
+                      softWrap: false,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -422,9 +461,9 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       itemCount: items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 16),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final item = items[index];
         return _buildQuestionCard(item);
@@ -439,7 +478,7 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
         : const Color(0xFFDC2626).withValues(alpha: 0.3);
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
@@ -451,17 +490,19 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
           // Question Header: Item # and Correct/Incorrect Badge
           Row(
             children: [
-              Text(
-                'Question #${item.position}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+              Expanded(
+                child: Text(
+                  'Question #${item.position}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
+                  horizontal: 9,
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
@@ -475,19 +516,17 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
                   children: [
                     Icon(
                       item.isCorrect ? Icons.check_circle : Icons.cancel,
-                      size: 15,
+                      size: 14,
                       color: item.isCorrect
                           ? const Color(0xFF0F8A48)
                           : const Color(0xFFDC2626),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 4),
                     Text(
-                      item.isCorrect
-                          ? 'Correct (+${item.points.round()} ${item.points.round() == 1 ? 'pt' : 'pts'})'
-                          : 'Incorrect (0 pts)',
+                      item.isCorrect ? 'Correct' : 'Incorrect',
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.5,
                         color: item.isCorrect
                             ? const Color(0xFF0F8A48)
                             : const Color(0xFFDC2626),
@@ -498,12 +537,17 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             item.questionText,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              height: 1.45,
+              color: theme.colorScheme.onSurface,
+            ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
           // Options breakdown for Multiple Choice
           if (item.questionType == 'multiple_choice' &&
@@ -528,71 +572,131 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
 
               Color optBg = Colors.transparent;
               Color optBorder = theme.colorScheme.onSurface.withValues(
-                alpha: 0.1,
+                alpha: 0.12,
               );
               if (isSelectedByStudent && isCorrectOpt) {
                 optBg = const Color(0xFF0F8A48).withValues(alpha: 0.08);
-                optBorder = const Color(0xFF0F8A48).withValues(alpha: 0.4);
+                optBorder = const Color(0xFF0F8A48).withValues(alpha: 0.45);
               } else if (isSelectedByStudent && !isCorrectOpt) {
                 optBg = const Color(0xFFDC2626).withValues(alpha: 0.08);
-                optBorder = const Color(0xFFDC2626).withValues(alpha: 0.4);
+                optBorder = const Color(0xFFDC2626).withValues(alpha: 0.45);
               } else if (isCorrectOpt) {
                 optBg = const Color(0xFF0F8A48).withValues(alpha: 0.06);
-                optBorder = const Color(0xFF0F8A48).withValues(alpha: 0.3);
+                optBorder = const Color(0xFF0F8A48).withValues(alpha: 0.35);
               }
 
               return Container(
-                margin: const EdgeInsets.only(bottom: 6),
+                margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 8,
+                  vertical: 9,
                 ),
                 decoration: BoxDecoration(
                   color: optBg,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: optBorder),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '[$label] $text',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: isSelectedByStudent || isCorrectOpt
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$label.',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            height: 1.4,
+                            color: (isSelectedByStudent || isCorrectOpt)
+                                ? (isSelectedByStudent && !isCorrectOpt
+                                    ? const Color(0xFFDC2626)
+                                    : const Color(0xFF0F8A48))
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.75,
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            text,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              height: 1.4,
+                              fontWeight: isSelectedByStudent || isCorrectOpt
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const Spacer(),
-                    if (isSelectedByStudent)
-                      Text(
-                        '(Your Answer)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isCorrectOpt
-                              ? const Color(0xFF0F8A48)
-                              : const Color(0xFFDC2626),
-                        ),
+                    if (isSelectedByStudent || isCorrectOpt) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (isSelectedByStudent)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: (isCorrectOpt
+                                        ? const Color(0xFF0F8A48)
+                                        : const Color(0xFFDC2626))
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                'Your Answer',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isCorrectOpt
+                                      ? const Color(0xFF0F8A48)
+                                      : const Color(0xFFDC2626),
+                                ),
+                              ),
+                            ),
+                          if (isCorrectOpt)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0F8A48).withValues(
+                                  alpha: 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: const Text(
+                                'Correct Answer',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF0F8A48),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    if (isCorrectOpt && !isSelectedByStudent)
-                      const Text(
-                        '★ Correct Key',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F8A48),
-                        ),
-                      ),
+                    ],
                   ],
                 ),
               );
             }),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
           ],
 
-          // True/False & Identification specific summary box
+          // Summary Answer Comparison Box
           Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest.withValues(
@@ -600,66 +704,86 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
               ),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final useColumn = constraints.maxWidth < 340;
+                final yourAnsWidget = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Your Answer',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      item.studentAnswer.isNotEmpty
+                          ? item.studentAnswer
+                          : '(No answer given)',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.35,
+                        fontWeight: FontWeight.w700,
+                        color: item.isCorrect
+                            ? const Color(0xFF0F8A48)
+                            : const Color(0xFFDC2626),
+                      ),
+                    ),
+                  ],
+                );
+                final correctAnsWidget = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Correct Answer Key',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0F8A48),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      item.correctAnswer,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        height: 1.35,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0F8A48),
+                      ),
+                    ),
+                  ],
+                );
+
+                if (item.isCorrect || useColumn) {
+                  return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Your Answer:',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item.studentAnswer.isNotEmpty
-                            ? item.studentAnswer
-                            : '(No answer given)',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: item.isCorrect
-                              ? const Color(0xFF0F8A48)
-                              : const Color(0xFFDC2626),
-                        ),
-                      ),
+                      yourAnsWidget,
+                      if (!item.isCorrect) ...[
+                        const Divider(height: 16),
+                        correctAnsWidget,
+                      ],
+                    ],
+                  );
+                }
+
+                return IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: yourAnsWidget),
+                      const VerticalDivider(width: 24),
+                      Expanded(child: correctAnsWidget),
                     ],
                   ),
-                ),
-                if (!item.isCorrect) ...[
-                  const VerticalDivider(width: 24),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Correct Answer Key:',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F8A48),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.correctAnswer,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F8A48),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
+                );
+              },
             ),
           ),
         ],

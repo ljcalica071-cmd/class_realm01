@@ -992,7 +992,7 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                   ),
           ),
 
-          // Column 5: Actions (Reset, Force Submit, Enable/Disable)
+          // Column 5: Actions (Reset, Enable/Disable)
           Expanded(
             flex: 3,
             child: Row(
@@ -1007,17 +1007,6 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                     color: AppTheme.catOrange,
                   ),
                   onPressed: () => _confirmResetStudent(student),
-                ),
-
-                // Force Auto-Submit Button
-                IconButton(
-                  tooltip: 'Force Auto-Submit',
-                  icon: const Icon(
-                    Icons.upload_file_outlined,
-                    size: 18,
-                    color: AppTheme.catGreen,
-                  ),
-                  onPressed: () => _confirmForceSubmit(student),
                 ),
 
                 // Allow / Disallow Button
@@ -1116,32 +1105,67 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
   }
 
   void _confirmResetStudent(StudentLiveProctorState student) {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
+        backgroundColor: theme.colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: theme.colorScheme.outline.withValues(alpha: 0.14),
+          ),
+        ),
+        title: Row(
           children: [
-            Icon(Icons.restart_alt_rounded, color: AppTheme.catOrange),
-            SizedBox(width: 8),
-            Text(
-              'Reset Test Attempt',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.restart_alt_rounded,
+                color: theme.colorScheme.primary,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Reset Student Progress',
+                style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
-        content: Text(
-          'Are you sure you want to reset the attempt for ${student.studentName}?\n\nThis will wipe their recorded responses and restart them from Question 1. If they are currently active, their screen will reset immediately. Other learners will not be affected.',
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Text(
+            'Are you sure you want to reset the attempt for ${student.studentName}?\n\n'
+            'This will wipe their recorded responses and restart them from Question 1. '
+            'If they are currently active, their screen will reset immediately. Other learners will not be affected.',
+            style: TextStyle(
+              fontSize: 13.5,
+              height: 1.5,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+            ),
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.catOrange,
-              foregroundColor: Colors.white,
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
+              elevation: 0,
             ),
             onPressed: () {
               Navigator.pop(ctx);
@@ -1151,48 +1175,6 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
               );
             },
             child: const Text('Reset Attempt'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmForceSubmit(StudentLiveProctorState student) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
-          children: [
-            Icon(Icons.upload_file_outlined, color: AppTheme.catGreen),
-            SizedBox(width: 8),
-            Text(
-              'Force Auto-Submit',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to force auto-submit for ${student.studentName}?\n\nThis will immediately finalize and grade their answers. Other learners will not be affected.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.catGreen,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _channelService.forceSubmitStudent(
-                student.studentId,
-                reason: 'Instructor forced submission',
-              );
-            },
-            child: const Text('Force Submit'),
           ),
         ],
       ),

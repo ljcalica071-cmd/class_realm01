@@ -12,7 +12,6 @@ class ProctoringRosterTable extends StatefulWidget {
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
   final void Function(StudentLiveProctorState student) onReset;
-  final void Function(StudentLiveProctorState student) onForceSubmit;
   final void Function(StudentLiveProctorState student) onToggleAllow;
   final bool isScheduleExpired;
   final VoidCallback? onUpdateSchedule;
@@ -25,7 +24,6 @@ class ProctoringRosterTable extends StatefulWidget {
     required this.searchQuery,
     required this.onSearchChanged,
     required this.onReset,
-    required this.onForceSubmit,
     required this.onToggleAllow,
     this.isScheduleExpired = false,
     this.onUpdateSchedule,
@@ -1139,10 +1137,7 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable>
     // 1. Reset progress: enabled when student is actively taking, completed, or disqualified (and schedule not expired)
     final canReset = !isExpired && (isInProgress || isCompleted || isKicked);
 
-    // 2. Force submit: enabled ONLY when student is actively answering (in_progress) and schedule not expired
-    final canForceSubmit = !isExpired && isInProgress;
-
-    // 3. Allow entry / disallow toggle:
+    // 2. Allow entry / disallow toggle:
     // Disabled if schedule expired, completed, or actively in progress (teacher cannot disallow active student)
     final canToggleAllow = !isExpired && !isCompleted && !isInProgress;
 
@@ -1192,48 +1187,8 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable>
             ),
           ),
         ),
-        const SizedBox(width: 6),
-        // Force Submit Button (Fixed 28x28)
-        Tooltip(
-          message: isCompleted
-              ? 'Assessment already completed'
-              : isExpired
-                  ? 'Examination schedule has ended'
-                  : !isInProgress
-                      ? 'Student is not currently answering'
-                      : 'Force Submit Assessment',
-          child: SizedBox(
-            width: 28,
-            height: 28,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(6),
-              onTap: canForceSubmit ? () => widget.onForceSubmit(student) : null,
-              child: Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: canForceSubmit
-                      ? AppTheme.catBlue.withValues(alpha: 0.08)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: canForceSubmit
-                        ? AppTheme.catBlue.withValues(alpha: 0.5)
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.08),
-                  ),
-                ),
-                child: Icon(
-                  LucideIcons.send,
-                  size: 14,
-                  color: canForceSubmit
-                      ? AppTheme.catBlue
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.25),
-                ),
-              ),
-            ),
-          ),
-        ),
         const SizedBox(width: 8),
-        // Allow / Disallow Toggle Pill Button (Fixed Width 92px so Reset & Force Submit NEVER shift)
+        // Allow / Disallow Toggle Pill Button (Fixed Width 92px so Reset NEVER shifts)
         Tooltip(
           message: isExpired
               ? 'Examination schedule has ended'

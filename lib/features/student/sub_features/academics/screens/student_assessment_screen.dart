@@ -61,6 +61,21 @@ class StudentAssessmentScreen extends StatefulWidget {
             Map<String, dynamic>.from(assessMap),
           );
           if (model.id.isNotEmpty && model.questions.isNotEmpty) {
+            // Do not auto-resume if teacher explicitly disallowed access
+            try {
+              final overrideLog = await SupabaseService().client
+                  .from('anti_cheating_logs')
+                  .select('event_type')
+                  .eq('assessment_id', model.id)
+                  .eq('student_id', studentId)
+                  .inFilter('event_type', ['entry_allowed', 'entry_disallowed'])
+                  .order('event_at', ascending: false)
+                  .limit(1)
+                  .maybeSingle();
+              if (overrideLog?['event_type'] == 'entry_disallowed') {
+                return null;
+              }
+            } catch (_) {}
             // Ensure the per-assessment vault key is also hydrated in memory cache
             final vKey = vaultKeyFor(model.id, studentId);
             AppDataCache.instance.set<String>(vKey, rawPointer);
@@ -113,6 +128,19 @@ class StudentAssessmentScreen extends StatefulWidget {
             .maybeSingle();
 
         if (rawAssess != null && rawAssess['is_archived'] != true) {
+          // Do not auto-resume if teacher explicitly disallowed access
+          final overrideLog = await client
+              .from('anti_cheating_logs')
+              .select('event_type')
+              .eq('assessment_id', assessId)
+              .eq('student_id', studentId)
+              .inFilter('event_type', ['entry_allowed', 'entry_disallowed'])
+              .order('event_at', ascending: false)
+              .limit(1)
+              .maybeSingle();
+          if (overrideLog?['event_type'] == 'entry_disallowed') {
+            return null;
+          }
           final qRows =
               (rawAssess['assessment_questions'] as List? ?? [])
                   .map((q) => Map<String, dynamic>.from(q as Map))
@@ -166,8 +194,24 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       _handleTeacherReset(reason);
 
   @visibleForTesting
-  void handleTeacherForceSubmitForTesting(String reason) =>
-      _handleTeacherForceSubmit(reason);
+  static bool shouldCountLifecycleViolation({
+    required AppLifecycleState state,
+    required bool isAwayFromScreen,
+    required DateTime? lastRecordedAt,
+    required DateTime now,
+  }) {
+    final isLeavingState =
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached;
+    if (!isLeavingState || isAwayFromScreen) return false;
+    if (lastRecordedAt != null &&
+        now.difference(lastRecordedAt) < const Duration(seconds: 2)) {
+      return false;
+    }
+    return true;
+  }
 
   int _currentStep =
       0; // 0: Rules Acknowledgment, 1: Answering Questions, 2: Result Summary
@@ -177,6 +221,8 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
   final Map<String, String> _studentAnswers = {};
   final Map<String, TextEditingController> _textControllers = {};
   int _violations = 0;
+  bool _isAwayFromScreen = false;
+  DateTime? _lastViolationRecordedAt;
   final List<Map<String, dynamic>> _violationLog = [];
   bool _isSubmitting = false;
   bool _isOffline = false;
@@ -292,8 +338,27 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       _applyDecodedVault(cachedVault, autoStartTimer: true);
     }
     _restorePersistedVault(studentId);
+    _verifyTeacherEntryAllowed(studentId);
 
     _setupProctorChannel(studentId);
+  }
+
+  Future<void> _verifyTeacherEntryAllowed(String studentId) async {
+    if (!_isSupabaseReady || studentId.isEmpty) return;
+    try {
+      final overrideLog = await SupabaseService().client
+          .from('anti_cheating_logs')
+          .select('event_type')
+          .eq('assessment_id', widget.assessment.id)
+          .eq('student_id', studentId)
+          .inFilter('event_type', ['entry_allowed', 'entry_disallowed'])
+          .order('event_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      if (overrideLog?['event_type'] == 'entry_disallowed') {
+        _handleTeacherDisallowed();
+      }
+    } catch (_) {}
   }
 
   void _applyDecodedVault(String rawJson, {required bool autoStartTimer}) {
@@ -633,17 +698,13 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                         ? details
                         : 'Violation of examination rules.',
                   );
+                } else if (ev == 'entry_disallowed') {
+                  _handleTeacherDisallowed();
                 } else if (ev == 'reset' || ev == 'retake_authorized') {
                   _handleTeacherReset(
                     details.isNotEmpty
                         ? details
                         : 'Instructor authorized fresh attempt.',
-                  );
-                } else if (ev == 'force_submit') {
-                  _handleTeacherForceSubmit(
-                    details.isNotEmpty
-                        ? details
-                        : 'Instructor finalized submission.',
                   );
                 }
               }
@@ -666,8 +727,6 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                   _handleDisqualified(
                     'This examination session was disqualified by your proctor.',
                   );
-                } else if (st == 'auto_submitted') {
-                  _handleTeacherForceSubmit('Instructor finalized submission.');
                 } else if (st == 'reset') {
                   _handleTeacherReset('Instructor reset attempt.');
                 }
@@ -738,6 +797,8 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       }
       _currentQuestionIndex = 0;
       _violations = 0;
+      _isAwayFromScreen = false;
+      _lastViolationRecordedAt = null;
       _violationLog.clear();
       _isSubmitting = false;
       _isConnectionFrozen = false;
@@ -832,15 +893,49 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     );
   }
 
-  void _handleTeacherForceSubmit(String reason) {
-    if (!mounted || _currentStep == 2) return;
+  void _handleTeacherDisallowed() {
+    if (!mounted || _currentStep == 2 || _isSubmitting) return;
     _timer?.cancel();
     _heartbeatTimer?.cancel();
     _offlineRetryTimer?.cancel();
+    _clearVault();
+    setState(() => _isSubmitting = true);
 
-    AppTopToast.info(context, 'Session auto-submitted by instructor: $reason');
-
-    _submitAssessment(autoSubmit: true);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.lock_outline_rounded, color: AppTheme.catRed),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Access Not Allowed',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'You cannot take this $_assessmentLabel right now because your teacher has disallowed your access.\n\nPlease ask your teacher for permission before trying again.',
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.primary,
+              foregroundColor: Theme.of(ctx).colorScheme.onPrimary,
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pop();
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -867,12 +962,21 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
           state == AppLifecycleState.hidden ||
           state == AppLifecycleState.detached) {
         _saveVault();
-        if (state == AppLifecycleState.paused ||
-            state == AppLifecycleState.inactive) {
+        final now = DateTime.now();
+        if (shouldCountLifecycleViolation(
+          state: state,
+          isAwayFromScreen: _isAwayFromScreen,
+          lastRecordedAt: _lastViolationRecordedAt,
+          now: now,
+        )) {
+          _isAwayFromScreen = true;
+          _lastViolationRecordedAt = now;
           _recordViolation('Tab/window focus lost (Backgrounded)');
+        } else {
+          _isAwayFromScreen = true;
         }
       } else if (state == AppLifecycleState.resumed) {
-        _recordViolation('Returned to assessment');
+        _isAwayFromScreen = false;
         _checkConnectivityAndSessionStatus();
       }
     }
@@ -917,9 +1021,11 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
   void _recordViolation(String event) {
     if (!mounted) return;
+    final now = DateTime.now();
+    _lastViolationRecordedAt = now;
     setState(() {
       _violations++;
-      _violationLog.add({'time': DateTime.now(), 'event': event});
+      _violationLog.add({'time': now, 'event': event});
     });
 
     // Background audit logging into anti_cheating_logs
@@ -1699,19 +1805,19 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                       spacing: 8,
                       runSpacing: 6,
                       children: [
+                        Text(
+                          'Question ${_currentQuestionIndex + 1} of $totalQ',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: onSurface,
+                          ),
+                        ),
                         Wrap(
                           spacing: 6,
                           runSpacing: 6,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Text(
-                              'Question ${_currentQuestionIndex + 1} of $totalQ',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: onSurface,
-                              ),
-                            ),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 7,
@@ -1751,39 +1857,47 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                               ),
                           ],
                         ),
-                        Row(
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (isLowTime ? AppTheme.catRed : primaryColor)
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: (isLowTime ? AppTheme.catRed : primaryColor)
+                                .withValues(alpha: 0.28),
+                          ),
+                        ),
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               Icons.timer_outlined,
-                              size: 14,
+                              size: 18,
                               color: isLowTime ? AppTheme.catRed : primaryColor,
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 6),
                             Text(
                               _formatTime(_secondsRemaining),
                               style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                                letterSpacing: 0.5,
                                 color: isLowTime
                                     ? AppTheme.catRed
-                                    : onSurface.withValues(alpha: 0.85),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Violations: $_violations',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 11,
-                                color: _violations > 0
-                                    ? AppTheme.catRed
-                                    : onSurface.withValues(alpha: 0.5),
+                                    : onSurface.withValues(alpha: 0.9),
                               ),
                             ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
                     const SizedBox(height: 8),
                     // Compact Question Pill Navigator
@@ -1885,25 +1999,6 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                     children: [
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: primaryColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              '${q.points.round()} ${q.points.round() == 1 ? 'Point' : 'Points'}',
-                              style: TextStyle(
-                                color: primaryColor,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
                           Text(
                             q.type.name.toUpperCase(),
                             style: TextStyle(

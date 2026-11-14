@@ -7,14 +7,12 @@ class StudentProctorCard extends StatelessWidget {
   final StudentLiveProctorState state;
   final VoidCallback onKick;
   final VoidCallback onRetake;
-  final VoidCallback? onForceSubmit;
 
   const StudentProctorCard({
     super.key,
     required this.state,
     required this.onKick,
     required this.onRetake,
-    this.onForceSubmit,
   });
 
   @override
@@ -189,13 +187,6 @@ class StudentProctorCard extends StatelessWidget {
               color: AppTheme.catBlue,
               onPressed: onRetake,
             ),
-            if (onForceSubmit != null)
-              IconButton(
-                tooltip: 'Force Auto-Submit',
-                icon: const Icon(Icons.file_upload_outlined, size: 20),
-                color: AppTheme.catGreen,
-                onPressed: onForceSubmit,
-              ),
             IconButton(
               tooltip: 'Kick & Disqualify',
               icon: const Icon(Icons.gavel, size: 20),
