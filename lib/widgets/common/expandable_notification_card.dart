@@ -4,6 +4,7 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
+import 'package:class_realm/data/repositories/supabase_notification_repository.dart';
 
 /// Minimalist Expandable Notification Card (60-30-10 System)
 /// - Strict 2-line preview clamp when collapsed with "See more" / "See less" toggle
@@ -18,6 +19,7 @@ class ExpandableNotificationCard extends StatefulWidget {
   final bool showDelete;
   final bool showEdit;
   final int maxCollapsedLines;
+  final bool showUnreadIndicator;
 
   const ExpandableNotificationCard({
     super.key,
@@ -28,6 +30,7 @@ class ExpandableNotificationCard extends StatefulWidget {
     this.showDelete = false,
     this.showEdit = false,
     this.maxCollapsedLines = 2,
+    this.showUnreadIndicator = true,
   });
 
   /// Injects zero-width spaces (\u200B) every 20 characters into strings without spaces
@@ -167,9 +170,13 @@ class _ExpandableNotificationCardState
   }
 
   void _markAsRead() {
-    final userId = AuthRepository.instance.currentUser?.id;
-    if (userId != null && widget.notification.id.isNotEmpty) {
-      LocalStorageService.markNotificationAsRead(userId, widget.notification.id);
+    final user = AuthRepository.instance.currentUser;
+    if (user != null && widget.notification.id.isNotEmpty) {
+      SupabaseNotificationRepository.instance.markAsRead(
+        user.id,
+        widget.notification.id,
+      );
+      SupabaseNotificationRepository.instance.calculateUnreadCount(user);
     }
   }
 
@@ -184,16 +191,20 @@ class _ExpandableNotificationCardState
     final iconData = _getIcon(warningLevel, n.type);
     final badgeLabel = _getBadgeLabel(warningLevel, n.targetAudience);
 
-    final formattedTitle = ExpandableNotificationCard.wrapUnbrokenString(_cleanTitle(n.title));
-    final formattedMessage = ExpandableNotificationCard.wrapUnbrokenString(n.message);
+    final formattedTitle = ExpandableNotificationCard.wrapUnbrokenString(
+      _cleanTitle(n.title),
+    );
+    final formattedMessage = ExpandableNotificationCard.wrapUnbrokenString(
+      n.message,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double textMaxWidth = (constraints.maxWidth - 36).clamp(100.0, 2000.0);
-        const textStyle = TextStyle(
-          fontSize: 13,
-          height: 1.45,
+        final double textMaxWidth = (constraints.maxWidth - 36).clamp(
+          100.0,
+          2000.0,
         );
+        const textStyle = TextStyle(fontSize: 13, height: 1.45);
 
         final textSpan = TextSpan(text: formattedMessage, style: textStyle);
         final textPainter = TextPainter(
@@ -210,20 +221,31 @@ class _ExpandableNotificationCardState
         return ValueListenableBuilder<int>(
           valueListenable: LocalStorageService.notificationReadStateEpoch,
           builder: (context, _, child) {
-            final isReadNow = n.isRead ||
-                LocalStorageService.isNotificationRead(currentUserId, n.id);
+            final isReadNow = !widget.showUnreadIndicator
+                ? true
+                : (n.isRead ||
+                      LocalStorageService.isNotificationRead(
+                        currentUserId,
+                        n.id,
+                      ));
 
             return Container(
               margin: const EdgeInsets.symmetric(vertical: 5),
               decoration: BoxDecoration(
                 color: isDark
-                    ? (isReadNow ? const Color(0xFF1E293B) : const Color(0xFF1E2B45))
+                    ? (isReadNow
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFF1E2B45))
                     : (isReadNow ? Colors.white : const Color(0xFFEFF6FF)),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isReadNow
-                      ? (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))
-                      : (isDark ? const Color(0xFF3B82F6).withValues(alpha: 0.7) : const Color(0xFF93C5FD)),
+                      ? (isDark
+                            ? const Color(0xFF334155)
+                            : const Color(0xFFE2E8F0))
+                      : (isDark
+                            ? const Color(0xFF3B82F6).withValues(alpha: 0.7)
+                            : const Color(0xFF93C5FD)),
                   width: isReadNow ? 1 : 1.4,
                 ),
                 boxShadow: [
@@ -239,7 +261,9 @@ class _ExpandableNotificationCardState
                 child: InkWell(
                   borderRadius: BorderRadius.circular(14),
                   onTap: () {
-                    _markAsRead();
+                    if (widget.showUnreadIndicator) {
+                      _markAsRead();
+                    }
                     if (widget.onTap != null) {
                       widget.onTap!();
                     } else if (canExpand) {
@@ -310,7 +334,9 @@ class _ExpandableNotificationCardState
                                   _formatTime(n.timestamp),
                                   style: TextStyle(
                                     fontSize: 11.5,
-                                    color: isDark ? const Color(0xFF94A3B8) : _crSlateMuted,
+                                    color: isDark
+                                        ? const Color(0xFF94A3B8)
+                                        : _crSlateMuted,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -331,7 +357,8 @@ class _ExpandableNotificationCardState
                                 ],
 
                                 // Optional Edit Action
-                                if (widget.showEdit && widget.onEdit != null) ...[
+                                if (widget.showEdit &&
+                                    widget.onEdit != null) ...[
                                   IconButton(
                                     icon: Icon(
                                       LucideIcons.pencil,
@@ -349,12 +376,15 @@ class _ExpandableNotificationCardState
                                 ],
 
                                 // Optional Delete Action
-                                if (widget.showDelete && widget.onDelete != null)
+                                if (widget.showDelete &&
+                                    widget.onDelete != null)
                                   IconButton(
                                     icon: Icon(
                                       LucideIcons.trash2,
                                       size: 16,
-                                      color: AppTheme.catRed.withValues(alpha: 0.8),
+                                      color: AppTheme.catRed.withValues(
+                                        alpha: 0.8,
+                                      ),
                                     ),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
@@ -383,7 +413,9 @@ class _ExpandableNotificationCardState
                             // Message Body (Strict 2-line preview when collapsed)
                             Text(
                               formattedMessage,
-                              maxLines: _isExpanded ? null : widget.maxCollapsedLines,
+                              maxLines: _isExpanded
+                                  ? null
+                                  : widget.maxCollapsedLines,
                               softWrap: true,
                               overflow: _isExpanded
                                   ? TextOverflow.visible
@@ -393,8 +425,12 @@ class _ExpandableNotificationCardState
                                     ? FontWeight.w400
                                     : FontWeight.w500,
                                 color: isDark
-                                    ? (isReadNow ? const Color(0xFFCBD5E1) : Colors.white)
-                                    : (isReadNow ? _crSlateBody : const Color(0xFF0F172A)),
+                                    ? (isReadNow
+                                          ? const Color(0xFFCBD5E1)
+                                          : Colors.white)
+                                    : (isReadNow
+                                          ? _crSlateBody
+                                          : const Color(0xFF0F172A)),
                               ),
                             ),
 
@@ -403,7 +439,9 @@ class _ExpandableNotificationCardState
                               const SizedBox(height: 8),
                               GestureDetector(
                                 onTap: () {
-                                  _markAsRead();
+                                  if (widget.showUnreadIndicator) {
+                                    _markAsRead();
+                                  }
                                   setState(() => _isExpanded = !_isExpanded);
                                 },
                                 child: Row(

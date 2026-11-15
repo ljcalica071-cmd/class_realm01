@@ -354,16 +354,15 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
     });
 
     final initialPath = _normalizeRoutePath(getBrowserUrlPath());
-    final tabIdxFromPath =
-        AppRoutes.teacherClassworkTabIndexForRoute(initialPath);
+    final tabIdxFromPath = AppRoutes.teacherClassworkTabIndexForRoute(
+      initialPath,
+    );
     if (tabIdxFromPath != null) {
       LocalStorageService.saveTeacherClassworkNavState(
         categoryTabIndex: tabIdxFromPath,
       );
     }
-    if (initialPath != AppRoutes.teacherClassworkSubmissions &&
-        initialPath != AppRoutes.teacherClassworkProctoring &&
-        initialPath != AppRoutes.teacherClassworkItemAnalysis) {
+    if (!AppRoutes.isTeacherClassworkSubViewRoute(initialPath)) {
       LocalStorageService.clearTeacherClassworkSubView();
     }
     const restorableRoutes = {
@@ -379,8 +378,14 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       AppRoutes.teacherManageParents,
       AppRoutes.teacherClasswork,
       AppRoutes.teacherClassworkWrittenWorks,
+      AppRoutes.teacherClassworkWwSubmissions,
+      AppRoutes.teacherClassworkWwProctoring,
+      AppRoutes.teacherClassworkWwItemAnalysis,
       AppRoutes.teacherClassworkPerformanceTasks,
+      AppRoutes.teacherClassworkPtSubmissions,
       AppRoutes.teacherClassworkExaminations,
+      AppRoutes.teacherClassworkExProctoring,
+      AppRoutes.teacherClassworkExItemAnalysis,
       AppRoutes.teacherClassworkSubmissions,
       AppRoutes.teacherClassworkProctoring,
       AppRoutes.teacherClassworkItemAnalysis,
@@ -617,11 +622,35 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
         allowedRoles: [UserRole.teacher],
         child: TeacherDashboardScreen(initialSelectedIndex: 1),
       ),
+      AppRoutes.teacherClassworkWwSubmissions: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
+      AppRoutes.teacherClassworkWwProctoring: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
+      AppRoutes.teacherClassworkWwItemAnalysis: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
       AppRoutes.teacherClassworkPerformanceTasks: (context) => const AuthGuard(
         allowedRoles: [UserRole.teacher],
         child: TeacherDashboardScreen(initialSelectedIndex: 1),
       ),
+      AppRoutes.teacherClassworkPtSubmissions: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
       AppRoutes.teacherClassworkExaminations: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
+      AppRoutes.teacherClassworkExProctoring: (context) => const AuthGuard(
+        allowedRoles: [UserRole.teacher],
+        child: TeacherDashboardScreen(initialSelectedIndex: 1),
+      ),
+      AppRoutes.teacherClassworkExItemAnalysis: (context) => const AuthGuard(
         allowedRoles: [UserRole.teacher],
         child: TeacherDashboardScreen(initialSelectedIndex: 1),
       ),

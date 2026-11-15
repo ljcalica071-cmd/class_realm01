@@ -823,6 +823,18 @@ class LocalStorageService {
     }
   }
 
+  static Future<void> mergeReadNotificationIds(String userId, Set<String> dbIds) async {
+    if (userId.isEmpty || dbIds.isEmpty) return;
+    final current = getReadNotificationIds(userId);
+    final beforeCount = current.length;
+    current.addAll(dbIds);
+    if (current.length > beforeCount) {
+      final prefs = await _prefs;
+      await prefs.setStringList('user_read_notifications_$userId', current.toList());
+      notificationReadStateEpoch.value = notificationReadStateEpoch.value + 1;
+    }
+  }
+
   static bool isNotificationRead(String userId, String notifId) {
     if (userId.isEmpty || notifId.isEmpty) return false;
     return getReadNotificationIds(userId).contains(notifId);

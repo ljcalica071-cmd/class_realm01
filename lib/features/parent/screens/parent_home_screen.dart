@@ -733,28 +733,48 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               fontSize: 11.5,
               fontWeight: FontWeight.w500,
             ),
-            items: const [
-              BottomNavigationBarItem(
+            items: [
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.home_outlined),
                 activeIcon: Icon(Icons.home_rounded),
                 label: 'Home',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.fact_check_outlined),
                 activeIcon: Icon(Icons.fact_check_rounded),
                 label: 'Attendance',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.calendar_month_outlined),
                 activeIcon: Icon(Icons.calendar_month_rounded),
                 label: 'Schedule',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.notifications_outlined),
-                activeIcon: Icon(Icons.notifications_rounded),
+                icon: ValueListenableBuilder<int>(
+                  valueListenable: NotificationBadgeManager.parentUnreadNotifier,
+                  builder: (context, unreadCount, _) {
+                    if (unreadCount <= 0) return const Icon(Icons.notifications_outlined);
+                    return Badge.count(
+                      count: unreadCount,
+                      backgroundColor: const Color(0xFFDC2626),
+                      child: const Icon(Icons.notifications_outlined),
+                    );
+                  },
+                ),
+                activeIcon: ValueListenableBuilder<int>(
+                  valueListenable: NotificationBadgeManager.parentUnreadNotifier,
+                  builder: (context, unreadCount, _) {
+                    if (unreadCount <= 0) return const Icon(Icons.notifications_rounded);
+                    return Badge.count(
+                      count: unreadCount,
+                      backgroundColor: const Color(0xFFDC2626),
+                      child: const Icon(Icons.notifications_rounded),
+                    );
+                  },
+                ),
                 label: 'Alerts',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.person_outline_rounded),
                 activeIcon: Icon(Icons.person_rounded),
                 label: 'Profile',

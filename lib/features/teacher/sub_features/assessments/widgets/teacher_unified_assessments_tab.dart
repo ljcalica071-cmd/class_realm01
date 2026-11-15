@@ -87,8 +87,8 @@ class _TeacherUnifiedAssessmentsTabState
         LocalStorageService.saveLastActiveRoute(cleanRoute);
       }
     });
-    if (currentPath != AppRoutes.teacherClassworkProctoring &&
-        currentPath != AppRoutes.teacherClassworkItemAnalysis) {
+    if (!AppRoutes.isTeacherClassworkProctoringRoute(currentPath) &&
+        !AppRoutes.isTeacherClassworkItemAnalysisRoute(currentPath)) {
       LocalStorageService.clearTeacherClassworkSubView();
       final cleanRoute = AppRoutes.teacherClassworkRouteForTabIndex(
         initialTabIdx,
@@ -96,6 +96,7 @@ class _TeacherUnifiedAssessmentsTabState
       updateBrowserUrl(cleanRoute);
       LocalStorageService.saveLastActiveRoute(cleanRoute);
     }
+    _hydrateInitialFilterFromStorage();
     _loadTeacherSections();
     _tryRestoreMonitoringAssessment();
     if (CreateAssessmentFlowDialog.creationCooldown.isActive) {
@@ -108,8 +109,8 @@ class _TeacherUnifiedAssessmentsTabState
     super.didUpdateWidget(oldWidget);
     final currentPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
     if (_monitoringAssessment != null &&
-        currentPath != AppRoutes.teacherClassworkProctoring &&
-        currentPath != AppRoutes.teacherClassworkItemAnalysis) {
+        !AppRoutes.isTeacherClassworkProctoringRoute(currentPath) &&
+        !AppRoutes.isTeacherClassworkItemAnalysisRoute(currentPath)) {
       _monitoringAssessment = null;
       final targetTab =
           AppRoutes.teacherClassworkTabIndexForRoute(currentPath) ?? 0;
@@ -131,16 +132,15 @@ class _TeacherUnifiedAssessmentsTabState
   void _startCreationCooldownTimer() {
     _creationCooldownTimer?.cancel();
     if (!CreateAssessmentFlowDialog.creationCooldown.isActive) return;
-    _creationCooldownTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (timer) {
-        if (!mounted || !CreateAssessmentFlowDialog.creationCooldown.isActive) {
-          timer.cancel();
-          _creationCooldownTimer = null;
-        }
-        if (mounted) setState(() {});
-      },
-    );
+    _creationCooldownTimer = Timer.periodic(const Duration(seconds: 1), (
+      timer,
+    ) {
+      if (!mounted || !CreateAssessmentFlowDialog.creationCooldown.isActive) {
+        timer.cancel();
+        _creationCooldownTimer = null;
+      }
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _openCreateAssessmentFlow({required bool isExam}) async {
@@ -180,7 +180,8 @@ class _TeacherUnifiedAssessmentsTabState
     required IconData icon,
     required VoidCallback onPressed,
   }) {
-    final remaining = CreateAssessmentFlowDialog.creationCooldown.remainingSeconds;
+    final remaining =
+        CreateAssessmentFlowDialog.creationCooldown.remainingSeconds;
     final inCooldown = remaining > 0;
 
     return Tooltip(
@@ -198,8 +199,8 @@ class _TeacherUnifiedAssessmentsTabState
 
   void _tryRestoreMonitoringAssessment() {
     final currentPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
-    if (currentPath != AppRoutes.teacherClassworkProctoring &&
-        currentPath != AppRoutes.teacherClassworkItemAnalysis) {
+    if (!AppRoutes.isTeacherClassworkProctoringRoute(currentPath) &&
+        !AppRoutes.isTeacherClassworkItemAnalysisRoute(currentPath)) {
       LocalStorageService.clearTeacherClassworkSubView();
       return;
     }
@@ -276,6 +277,21 @@ class _TeacherUnifiedAssessmentsTabState
     }
     final list = set.toList()..sort();
     return list;
+  }
+
+  void _hydrateInitialFilterFromStorage() {
+    final navState = LocalStorageService.getTeacherClassworkNavState();
+    final savedGrade = (navState['gradeLevel'] as num?)?.toInt();
+    final savedSubject = navState['subjectName']?.toString();
+    final savedSection = navState['sectionName']?.toString();
+
+    if (savedGrade != null) _selectedGrade = savedGrade;
+    if (savedSubject != null && savedSubject.isNotEmpty) {
+      _selectedSubject = savedSubject;
+    }
+    if (savedSection != null && savedSection.isNotEmpty) {
+      _selectedClassSection = savedSection;
+    }
   }
 
   Future<void> _loadTeacherSections() async {
@@ -378,6 +394,12 @@ class _TeacherUnifiedAssessmentsTabState
     String? itemSection,
     List<String> assignedSections,
   ) {
+    // If subjects are still loading and we have no confirmed subject filter, prevent leaking other subjects
+    if (_isLoadingSubjects &&
+        (_selectedSubject == null || _selectedSubject!.isEmpty)) {
+      return false;
+    }
+
     // If user has chosen a section
     if (_selectedClassSection != null && _selectedClassSection!.isNotEmpty) {
       final targetSec = _selectedClassSection!.trim().toLowerCase();
@@ -403,6 +425,9 @@ class _TeacherUnifiedAssessmentsTabState
           (!sub.contains(targetSub) && !targetSub.contains(sub))) {
         return false;
       }
+    } else if (_teacherSubjects.isNotEmpty) {
+      // If teacher has subjects defined but none is selected yet, do not leak all subjects
+      return false;
     }
     return true;
   }
@@ -581,134 +606,131 @@ class _TeacherUnifiedAssessmentsTabState
             child: TabBarView(
               controller: _categoryTabController,
               physics: const BouncingScrollPhysics(),
-                children: [
-                  _KeepAliveTabWrapper(
-                    child: _buildUnifiedCategoryView(
-                      label: 'Written Works',
-                      items: writtenWork,
-                      emptyTitle: 'No written works yet',
-                      emptyMessage: 'Create assignments, activities, and quizzes for your students.',
-                      icon: LucideIcons.fileText,
-                      actionButtons: [
-                        AppButton.primary(
-                          label: 'Create Activity',
-                          icon: Icons.assignment_outlined,
-                          onPressed: () {
-                            final sectionParam = _selectedClassSection ?? '';
-                            final offeringMatch = _teacherSubjects.firstWhere(
-                              (s) =>
-                                  (_selectedSubject == null ||
-                                      s['subject_name'] == _selectedSubject) &&
-                                  (_selectedClassSection == null ||
-                                      s['section_name'] ==
-                                          _selectedClassSection),
-                              orElse: () => _teacherSubjects.isNotEmpty
-                                  ? _teacherSubjects.first
-                                  : <String, dynamic>{},
-                            );
-                            CreateRequirementFlowDialog.show(
+              children: [
+                _KeepAliveTabWrapper(
+                  child: _buildUnifiedCategoryView(
+                    label: 'Written Works',
+                    items: writtenWork,
+                    emptyTitle: 'No written works yet',
+                    emptyMessage: 'Create assignments, activities, and quizzes for your students.',
+                    icon: LucideIcons.fileText,
+                    actionButtons: [
+                      AppButton.primary(
+                        label: 'Create Activity',
+                        icon: Icons.assignment_outlined,
+                        onPressed: () {
+                          final sectionParam = _selectedClassSection ?? '';
+                          final offeringMatch = _teacherSubjects.firstWhere(
+                            (s) =>
+                                (_selectedSubject == null ||
+                                    s['subject_name'] == _selectedSubject) &&
+                                (_selectedClassSection == null ||
+                                    s['section_name'] == _selectedClassSection),
+                            orElse: () => _teacherSubjects.isNotEmpty
+                                ? _teacherSubjects.first
+                                : <String, dynamic>{},
+                          );
+                          CreateRequirementFlowDialog.show(
+                            context,
+                            initialSection: sectionParam,
+                            initialSubject: _selectedSubject,
+                            initialOfferingId: offeringMatch['id']?.toString(),
+                            initialOfferings: _teacherSubjects,
+                            isPerformanceTask: false,
+                            repository: widget.repository,
+                            onRequirementCreated: () {
+                              widget.onRefresh?.call();
+                              setState(() {});
+                            },
+                          );
+                        },
+                        isSmall: true,
+                      ),
+                      _buildAssessmentCreateButton(
+                        baseLabel: 'Create Quiz',
+                        icon: Icons.quiz_outlined,
+                        onPressed: () =>
+                            _openCreateAssessmentFlow(isExam: false),
+                      ),
+                    ],
+                  ),
+                ),
+                _KeepAliveTabWrapper(
+                  child: _buildUnifiedCategoryView(
+                    label: 'Performance Tasks',
+                    items: performanceTasks,
+                    emptyTitle: 'No performance tasks yet',
+                    emptyMessage: 'Create hands-on tasks, portfolios, and graded projects.',
+                    icon: LucideIcons.presentation,
+                    actionButtons: [
+                      AppButton.primary(
+                        label: 'Create Performance Task',
+                        icon: Icons.add_task,
+                        onPressed: () {
+                          final sectionParam = _selectedClassSection ?? '';
+                          final offeringMatch = _teacherSubjects.firstWhere(
+                            (s) =>
+                                (_selectedSubject == null ||
+                                    s['subject_name'] == _selectedSubject) &&
+                                (_selectedClassSection == null ||
+                                    s['section_name'] == _selectedClassSection),
+                            orElse: () => _teacherSubjects.isNotEmpty
+                                ? _teacherSubjects.first
+                                : <String, dynamic>{},
+                          );
+                          CreateRequirementFlowDialog.show(
+                            context,
+                            initialSection: sectionParam,
+                            initialSubject: _selectedSubject,
+                            initialOfferingId: offeringMatch['id']?.toString(),
+                            initialOfferings: _teacherSubjects,
+                            isPerformanceTask: true,
+                            repository: widget.repository,
+                            onRequirementCreated: () {
+                              widget.onRefresh?.call();
+                              setState(() {});
+                            },
+                          );
+                        },
+                        isSmall: true,
+                      ),
+                    ],
+                  ),
+                ),
+                _KeepAliveTabWrapper(
+                  child: _buildUnifiedCategoryView(
+                    label: 'Examinations',
+                    items: examinations,
+                    emptyTitle: 'No examinations yet',
+                    emptyMessage: _isCurrentSubjectZeroExam
+                        ? 'This subject has no Examination component under DepEd Order No. 015, s. 2026. Initial Grades are computed 100% from Written Works and Performance Tasks.'
+                        : 'Create Summative Tests (ST1, ST2) and Term Examinations (TE).',
+                    icon: LucideIcons.award,
+                    isZeroExam: _isCurrentSubjectZeroExam,
+                    actionButtons: [
+                      _buildAssessmentCreateButton(
+                        baseLabel: 'Create Examination',
+                        icon: Icons.description_outlined,
+                        onPressed: () {
+                          if (_isCurrentSubjectZeroExam) {
+                            AppTopToast.info(
                               context,
-                              initialSection: sectionParam,
-                              initialSubject: _selectedSubject,
-                              initialOfferingId: offeringMatch['id']
-                                  ?.toString(),
-                              initialOfferings: _teacherSubjects,
-                              isPerformanceTask: false,
-                              repository: widget.repository,
-                              onRequirementCreated: () {
-                                widget.onRefresh?.call();
-                                setState(() {});
-                              },
+                              'This subject has no Examination component under DepEd Order No. 015, s. 2026.',
                             );
-                          },
-                          isSmall: true,
-                        ),
-                        _buildAssessmentCreateButton(
-                          baseLabel: 'Create Quiz',
-                          icon: Icons.quiz_outlined,
-                          onPressed: () => _openCreateAssessmentFlow(isExam: false),
-                        ),
-                      ],
-                    ),
+                            return;
+                          }
+                          _openCreateAssessmentFlow(isExam: true);
+                        },
+                      ),
+                    ],
                   ),
-                  _KeepAliveTabWrapper(
-                    child: _buildUnifiedCategoryView(
-                      label: 'Performance Tasks',
-                      items: performanceTasks,
-                      emptyTitle: 'No performance tasks yet',
-                      emptyMessage: 'Create hands-on tasks, portfolios, and graded projects.',
-                      icon: LucideIcons.presentation,
-                      actionButtons: [
-                        AppButton.primary(
-                          label: 'Create Performance Task',
-                          icon: Icons.add_task,
-                          onPressed: () {
-                            final sectionParam = _selectedClassSection ?? '';
-                            final offeringMatch = _teacherSubjects.firstWhere(
-                              (s) =>
-                                  (_selectedSubject == null ||
-                                      s['subject_name'] == _selectedSubject) &&
-                                  (_selectedClassSection == null ||
-                                      s['section_name'] ==
-                                          _selectedClassSection),
-                              orElse: () => _teacherSubjects.isNotEmpty
-                                  ? _teacherSubjects.first
-                                  : <String, dynamic>{},
-                            );
-                            CreateRequirementFlowDialog.show(
-                              context,
-                              initialSection: sectionParam,
-                              initialSubject: _selectedSubject,
-                              initialOfferingId: offeringMatch['id']
-                                  ?.toString(),
-                              initialOfferings: _teacherSubjects,
-                              isPerformanceTask: true,
-                              repository: widget.repository,
-                              onRequirementCreated: () {
-                                widget.onRefresh?.call();
-                                setState(() {});
-                              },
-                            );
-                          },
-                          isSmall: true,
-                        ),
-                      ],
-                    ),
-                  ),
-                  _KeepAliveTabWrapper(
-                    child: _buildUnifiedCategoryView(
-                      label: 'Examinations',
-                      items: examinations,
-                      emptyTitle: 'No examinations yet',
-                      emptyMessage: _isCurrentSubjectZeroExam
-                          ? 'This subject has no Examination component under DepEd Order No. 015, s. 2026. Initial Grades are computed 100% from Written Works and Performance Tasks.'
-                          : 'Create Summative Tests (ST1, ST2) and Term Examinations (TE).',
-                      icon: LucideIcons.award,
-                      isZeroExam: _isCurrentSubjectZeroExam,
-                      actionButtons: [
-                        _buildAssessmentCreateButton(
-                          baseLabel: 'Create Examination',
-                          icon: Icons.description_outlined,
-                          onPressed: () {
-                            if (_isCurrentSubjectZeroExam) {
-                              AppTopToast.info(
-                                context,
-                                'This subject has no Examination component under DepEd Order No. 015, s. 2026.',
-                              );
-                              return;
-                            }
-                            _openCreateAssessmentFlow(isExam: true);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildFilterCard({
@@ -1100,7 +1122,9 @@ class _TeacherUnifiedAssessmentsTabState
           : '${item.section} • Term ${item.termNumber} • ${item.totalPoints.toInt()} pts • Start ${_monthName(item.scheduleDate.month)} ${item.scheduleDate.day}, ${_formatTime(item.scheduleDate)}',
       icon: item.isExam ? Icons.description_outlined : Icons.quiz_outlined,
       resultsReleased: isInPerson ? null : item.resultsReleased,
-      onToggleReleaseKey: isInPerson ? null : () => _toggleResultsReleased(item),
+      onToggleReleaseKey: isInPerson
+          ? null
+          : () => _toggleResultsReleased(item),
       onPressed: isInPerson
           ? () {
               if (widget.onViewSubmissions != null) {
@@ -1130,10 +1154,11 @@ class _TeacherUnifiedAssessmentsTabState
                 categoryTabIndex: item.isExam ? 2 : 0,
                 activeAssessmentId: item.id,
               );
-              updateBrowserUrl(AppRoutes.teacherClassworkProctoring);
-              LocalStorageService.saveLastActiveRoute(
-                AppRoutes.teacherClassworkProctoring,
-              );
+              final proctorRoute = item.isExam
+                  ? AppRoutes.teacherClassworkExProctoring
+                  : AppRoutes.teacherClassworkWwProctoring;
+              updateBrowserUrl(proctorRoute);
+              LocalStorageService.saveLastActiveRoute(proctorRoute);
               setState(() => _monitoringAssessment = item);
             },
       actionLabel: isInPerson ? 'Record Scores' : null,
@@ -1189,10 +1214,7 @@ class _TeacherUnifiedAssessmentsTabState
           'Answer key for "${item.title}" released.',
         );
       } else {
-        AppTopToast.info(
-          context,
-          'Answer key for "${item.title}" hidden.',
-        );
+        AppTopToast.info(context, 'Answer key for "${item.title}" hidden.');
       }
     } catch (e) {
       if (mounted) {
@@ -1255,197 +1277,209 @@ class _TeacherUnifiedAssessmentsTabState
             ),
           ),
           child: Row(
-        children: [
-          Icon(icon, color: theme.colorScheme.primary, size: 34),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+            children: [
+              Icon(icon, color: theme.colorScheme.primary, size: 34),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: Text(
-                        title,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildAssessmentCategoryBadge(
-                      category,
-                      badgeBackground,
-                      badgeText,
-                    ),
-                    if (resultsReleased != null) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: resultsReleased
-                              ? AppTheme.catGreen.withValues(alpha: 0.12)
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.08,
-                                ),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: resultsReleased
-                                ? AppTheme.catGreen.withValues(alpha: 0.3)
-                                : theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.2,
-                                  ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: theme.colorScheme.onSurface,
+                            ),
                           ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              resultsReleased
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
-                              size: 12,
-                              color: resultsReleased
-                                  ? AppTheme.catGreen
-                                  : theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.6,
-                                    ),
+                        const SizedBox(width: 8),
+                        _buildAssessmentCategoryBadge(
+                          category,
+                          badgeBackground,
+                          badgeText,
+                        ),
+                        if (resultsReleased != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              resultsReleased ? 'Key Released' : 'Key Hidden',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                            decoration: BoxDecoration(
+                              color: resultsReleased
+                                  ? AppTheme.catGreen.withValues(alpha: 0.12)
+                                  : theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.08,
+                                    ),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
                                 color: resultsReleased
-                                    ? AppTheme.catGreen
+                                    ? AppTheme.catGreen.withValues(alpha: 0.3)
                                     : theme.colorScheme.onSurface.withValues(
-                                        alpha: 0.6,
+                                        alpha: 0.2,
                                       ),
                               ),
                             ),
-                          ],
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  resultsReleased
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                  size: 12,
+                                  color: resultsReleased
+                                      ? AppTheme.catGreen
+                                      : theme.colorScheme.onSurface.withValues(
+                                          alpha: 0.6,
+                                        ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  resultsReleased
+                                      ? 'Key Released'
+                                      : 'Key Hidden',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: resultsReleased
+                                        ? AppTheme.catGreen
+                                        : theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (description.trim().isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      ExpandableInstructionsText(
+                        text: description,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
+                          fontSize: 13,
                         ),
                       ),
                     ],
+                    const SizedBox(height: 6),
+                    Text(
+                      details,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
                   ],
                 ),
-                if (description.trim().isNotEmpty) ...[
-                  const SizedBox(height: 5),
-                  ExpandableInstructionsText(
-                    text: description,
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      fontSize: 13,
+              ),
+              const SizedBox(width: 12),
+              Wrap(
+                spacing: 4,
+                children: [
+                  if (actionLabel != null && actionLabel.isNotEmpty)
+                    AppButton.outline(
+                      label: actionLabel,
+                      icon: Icons.open_in_new,
+                      isSmall: true,
+                      onPressed: onPressed,
                     ),
-                  ),
+                  if (onToggleReleaseKey != null && resultsReleased != null)
+                    IconButton(
+                      tooltip: resultsReleased
+                          ? 'Answer Key: Released (Visible to students) — Tap to Hide'
+                          : 'Answer Key: Hidden from students — Tap to Release',
+                      icon: Icon(
+                        resultsReleased
+                            ? Icons.visibility
+                            : Icons.visibility_off_outlined,
+                        color: resultsReleased
+                            ? AppTheme.catGreen
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.5,
+                              ),
+                      ),
+                      onPressed: onToggleReleaseKey,
+                    ),
+                  if (onProctor != null)
+                    IconButton(
+                      tooltip: 'Live Proctoring Monitor',
+                      icon: const Icon(
+                        Icons.shield_outlined,
+                        color: AppTheme.catPurple,
+                      ),
+                      onPressed: onProctor,
+                    ),
+                  if (onItemAnalysis != null)
+                    IconButton(
+                      tooltip: isItemAnalysisLocked
+                          ? 'Item Analysis Locked ($typeLabel window active)'
+                          : '$typeLabel Item Analysis & DepEd Tiers',
+                      icon: Icon(
+                        isItemAnalysisLocked
+                            ? Icons.lock_clock_outlined
+                            : Icons.analytics_outlined,
+                        color: isItemAnalysisLocked
+                            ? theme.colorScheme.onSurface.withValues(
+                                alpha: 0.38,
+                              )
+                            : AppTheme.catTeal,
+                      ),
+                      onPressed: isItemAnalysisLocked ? null : onItemAnalysis,
+                    ),
+                  if (onReschedule != null)
+                    IconButton(
+                      tooltip: 'Update Schedule',
+                      icon: Icon(
+                        Icons.schedule,
+                        color: theme.colorScheme.primary,
+                      ),
+                      onPressed: onReschedule,
+                    ),
+                  if (onEdit != null)
+                    IconButton(
+                      tooltip: 'Edit',
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
+                      onPressed: onEdit,
+                    ),
+                  if (onCancel != null)
+                    IconButton(
+                      tooltip: 'Cancel $typeLabel',
+                      icon: const Icon(
+                        Icons.cancel_outlined,
+                        color: Color(0xFFD97706),
+                      ),
+                      onPressed: onCancel,
+                    ),
+                  if (onDelete != null)
+                    IconButton(
+                      tooltip: 'Delete',
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: AppTheme.catRed,
+                      ),
+                      onPressed: onDelete,
+                    ),
                 ],
-                const SizedBox(height: 6),
-                Text(
-                  details,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Wrap(
-            spacing: 4,
-            children: [
-              if (actionLabel != null && actionLabel.isNotEmpty)
-                AppButton.outline(
-                  label: actionLabel,
-                  icon: Icons.open_in_new,
-                  isSmall: true,
-                  onPressed: onPressed,
-                ),
-              if (onToggleReleaseKey != null && resultsReleased != null)
-                IconButton(
-                  tooltip: resultsReleased
-                      ? 'Answer Key: Released (Visible to students) — Tap to Hide'
-                      : 'Answer Key: Hidden from students — Tap to Release',
-                  icon: Icon(
-                    resultsReleased
-                        ? Icons.visibility
-                        : Icons.visibility_off_outlined,
-                    color: resultsReleased
-                        ? AppTheme.catGreen
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                  onPressed: onToggleReleaseKey,
-                ),
-              if (onProctor != null)
-                IconButton(
-                  tooltip: 'Live Proctoring Monitor',
-                  icon: const Icon(
-                    Icons.shield_outlined,
-                    color: AppTheme.catPurple,
-                  ),
-                  onPressed: onProctor,
-                ),
-              if (onItemAnalysis != null)
-                IconButton(
-                  tooltip: isItemAnalysisLocked
-                      ? 'Item Analysis Locked ($typeLabel window active)'
-                      : '$typeLabel Item Analysis & DepEd Tiers',
-                  icon: Icon(
-                    isItemAnalysisLocked
-                        ? Icons.lock_clock_outlined
-                        : Icons.analytics_outlined,
-                    color: isItemAnalysisLocked
-                        ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
-                        : AppTheme.catTeal,
-                  ),
-                  onPressed: isItemAnalysisLocked ? null : onItemAnalysis,
-                ),
-              if (onReschedule != null)
-                IconButton(
-                  tooltip: 'Update Schedule',
-                  icon: Icon(Icons.schedule, color: theme.colorScheme.primary),
-                  onPressed: onReschedule,
-                ),
-              if (onEdit != null)
-                IconButton(
-                  tooltip: 'Edit',
-                  icon: Icon(
-                    Icons.edit_outlined,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                  onPressed: onEdit,
-                ),
-              if (onCancel != null)
-                IconButton(
-                  tooltip: 'Cancel $typeLabel',
-                  icon: const Icon(
-                    Icons.cancel_outlined,
-                    color: Color(0xFFD97706),
-                  ),
-                  onPressed: onCancel,
-                ),
-              if (onDelete != null)
-                IconButton(
-                  tooltip: 'Delete',
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: AppTheme.catRed,
-                  ),
-                  onPressed: onDelete,
-                ),
+              ),
             ],
           ),
-        ],
+        ),
       ),
-    ),
-    ),
     );
   }
 
@@ -1497,11 +1531,8 @@ class _TeacherUnifiedAssessmentsTabState
           item.subjectOfferingId != null &&
           item.gradebookColumnIndex != null) {
         final term = item.termNumber > 0 ? item.termNumber : 1;
-        final termSheet =
-            await SubjectRepository.instance.getGradebookTermSheet(
-              item.subjectOfferingId!,
-              term,
-            );
+        final termSheet = await SubjectRepository.instance
+            .getGradebookTermSheet(item.subjectOfferingId!, term);
         if (termSheet != null && termSheet['scores'] is Map) {
           final scoresMap = termSheet['scores'] as Map;
           final catKey = item.effectiveGradingCategory;
@@ -1532,8 +1563,7 @@ class _TeacherUnifiedAssessmentsTabState
       AppModals.showWarningDialog(
         context: context,
         title: 'Cannot Delete Item',
-        message:
-            'This classwork activity already has recorded student scores or submissions. Items with existing student records cannot be deleted.',
+        message: 'This classwork activity already has recorded student scores or submissions. Items with existing student records cannot be deleted.',
       );
       return;
     }
@@ -1620,11 +1650,8 @@ class _TeacherUnifiedAssessmentsTabState
           (item.isExam ? 'ex' : 'ww');
 
       if (!hasRecords && offeringId != null && colIdx != null) {
-        final termSheet =
-            await SubjectRepository.instance.getGradebookTermSheet(
-              offeringId,
-              termNumber,
-            );
+        final termSheet = await SubjectRepository.instance
+            .getGradebookTermSheet(offeringId, termNumber);
         if (termSheet != null && termSheet['scores'] is Map) {
           final scoresMap = termSheet['scores'] as Map;
           final colKey = category == 'ex'
@@ -1717,11 +1744,8 @@ class _TeacherUnifiedAssessmentsTabState
               (item.isExam ? 'ex' : 'ww');
 
           if (offeringId != null && colIdx != null) {
-            final termSheet =
-                await SubjectRepository.instance.getGradebookTermSheet(
-                  offeringId,
-                  termNum,
-                );
+            final termSheet = await SubjectRepository.instance
+                .getGradebookTermSheet(offeringId, termNum);
             if (termSheet != null && termSheet['hps'] is Map) {
               final hps = Map<String, dynamic>.from(termSheet['hps'] as Map);
               if (hps[categoryKey] is Map) {
@@ -1745,7 +1769,10 @@ class _TeacherUnifiedAssessmentsTabState
               }
             }
             try {
-              await LocalStorageService.clearGradebookSheet(offeringId, termNum);
+              await LocalStorageService.clearGradebookSheet(
+                offeringId,
+                termNum,
+              );
             } catch (_) {}
           }
 
@@ -1803,7 +1830,10 @@ class _TeacherUnifiedAssessmentsTabState
             Expanded(
               child: Text(
                 'Cancel ${item.isExam ? "Examination" : "Quiz"}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
               ),
             ),
           ],
@@ -1890,10 +1920,7 @@ class _TeacherUnifiedAssessmentsTabState
       try {
         await client
             .from('digital_assessments')
-            .update({
-              'status': 'cancelled',
-              'is_published': false,
-            })
+            .update({'status': 'cancelled', 'is_published': false})
             .eq('id', item.id);
       } catch (e) {
         debugPrint('digital_assessments cancel notice: $e');
@@ -1903,10 +1930,7 @@ class _TeacherUnifiedAssessmentsTabState
       try {
         await client
             .from('classwork_items')
-            .update({
-              'status': 'cancelled',
-              'is_published': false,
-            })
+            .update({'status': 'cancelled', 'is_published': false})
             .eq('id', item.id);
       } catch (e) {
         debugPrint('classwork_items cancel notice: $e');
@@ -1958,11 +1982,8 @@ class _TeacherUnifiedAssessmentsTabState
           (item.isExam ? 'ex' : 'ww');
 
       if (offeringId != null && colIdx != null) {
-        final termSheet =
-            await SubjectRepository.instance.getGradebookTermSheet(
-              offeringId,
-              termNumber,
-            );
+        final termSheet = await SubjectRepository.instance
+            .getGradebookTermSheet(offeringId, termNumber);
         if (termSheet != null) {
           bool sheetModified = false;
 
@@ -1970,9 +1991,7 @@ class _TeacherUnifiedAssessmentsTabState
           if (termSheet['hps'] is Map) {
             final hps = Map<String, dynamic>.from(termSheet['hps'] as Map);
             if (hps[categoryKey] is Map) {
-              final catHps = Map<String, dynamic>.from(
-                hps[categoryKey] as Map,
-              );
+              final catHps = Map<String, dynamic>.from(hps[categoryKey] as Map);
               final colKey = categoryKey == 'ex'
                   ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
                   : colIdx.toString();
@@ -1986,8 +2005,9 @@ class _TeacherUnifiedAssessmentsTabState
 
           // Remove student scores for this column
           if (termSheet['scores'] is Map) {
-            final scoresMap =
-                Map<String, dynamic>.from(termSheet['scores'] as Map);
+            final scoresMap = Map<String, dynamic>.from(
+              termSheet['scores'] as Map,
+            );
             final colKey = categoryKey == 'ex'
                 ? (colIdx == 1 ? 'st1' : (colIdx == 2 ? 'st2' : 'te'))
                 : colIdx.toString();
@@ -1995,8 +2015,9 @@ class _TeacherUnifiedAssessmentsTabState
 
             for (final entry in scoresMap.entries) {
               if (entry.value is Map) {
-                final studentVal =
-                    Map<String, dynamic>.from(entry.value as Map);
+                final studentVal = Map<String, dynamic>.from(
+                  entry.value as Map,
+                );
                 if (studentVal[categoryKey] is Map) {
                   final catScores = Map<String, dynamic>.from(
                     studentVal[categoryKey] as Map,
@@ -2334,9 +2355,7 @@ class _TeacherUnifiedAssessmentsTabState
                   ] else if (isUnchanged) ...[
                     const SizedBox(height: 8),
                     Text(
-                      isInPerson
-                          ? 'Select a different date to update.'
-                          : 'Select a different date or time to update the schedule.',
+                      isInPerson ? 'Select a different date to update.' : 'Select a different date or time to update the schedule.',
                       style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -2400,8 +2419,7 @@ class _TeacherUnifiedAssessmentsTabState
                                 await AppModals.showWarningDialog(
                                   context: context,
                                   title: 'Assessment Removed',
-                                  message:
-                                      'This assessment has already been deleted from the database and can no longer be updated.',
+                                  message: 'This assessment has already been deleted from the database and can no longer be updated.',
                                 );
                               }
                             }

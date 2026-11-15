@@ -5,10 +5,13 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
+import 'package:class_realm/data/repositories/supabase_notification_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 
 /// Real-Time Paginated Teacher Notifications Tab
 /// - Search bar & handled subjects dropdown filter
@@ -93,6 +96,14 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
             _loadNotifications(initial: true);
           },
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'notification_recipients',
+          callback: (payload) {
+            if (mounted) setState(() {});
+          },
+        )
         .subscribe();
   }
 
@@ -117,6 +128,11 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
     }
 
     try {
+      final user = AuthRepository.instance.currentUser;
+      if (user != null) {
+        await SupabaseNotificationRepository.instance.getReadNotificationIds(user.id);
+      }
+
       final res = await Supabase.instance.client
           .from('notifications')
           .select()
@@ -140,6 +156,10 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
           _isLoading = false;
           _isLoadingMore = false;
         });
+
+        if (user != null) {
+          SupabaseNotificationRepository.instance.calculateUnreadCount(user);
+        }
       }
     } catch (e) {
       debugPrint('Error loading teacher notifications: $e');
@@ -170,64 +190,34 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
   /// 3. Apply subject filter dropdown
   List<AppNotificationModel> get _filteredNotifications {
     final currentUser = AuthRepository.instance.currentUser;
-    if (currentUser != null) {
-      if (currentUser.isArchived ||
-          currentUser.status == AccountStatus.archived ||
-          currentUser.status == AccountStatus.deactivated) {
-        return [];
-      }
-      final isEligible = currentUser.status == AccountStatus.active ||
-          currentUser.status == AccountStatus.pendingFirstLogin;
-      if (!isEligible) {
-        return [];
-      }
-    }
-
-    final handledSubjectNames = _distinctHandledSubjects.map((s) => s.toLowerCase()).toSet();
+    if (currentUser == null) return [];
 
     return _notifications.where((n) {
-      // Exclude announcements broadcasted before the teacher account existed
-      if (currentUser?.createdAt != null && n.type.toLowerCase() == 'announcement') {
-        if (n.timestamp.isBefore(currentUser!.createdAt!)) {
-          return false;
-        }
-      }
-
-      final title = n.title.toLowerCase();
-      final body = n.message.toLowerCase();
-      final fullText = '$title $body';
-
-      // If notification has a specific subject mentioned in message/title, ensure it matches handled subjects
-      // e.g. "Aguilar, Fiona has reached 3 recorded absences in Class (General)..."
-      final regex = RegExp(r'in\s+([A-Za-z0-9\s/&_-]+?)\s*\(([^)]+)\)', caseSensitive: false);
-      final match = regex.firstMatch('${n.title} ${n.message}');
-      if (match != null) {
-        final notifSubject = match.group(1)?.trim().toLowerCase() ?? '';
-        // If teacher has handled subjects and this notification is about a subject they DON'T teach, hide it
-        if (handledSubjectNames.isNotEmpty &&
-            notifSubject.isNotEmpty &&
-            !notifSubject.contains('general') &&
-            !handledSubjectNames.any((h) => notifSubject.contains(h) || h.contains(notifSubject))) {
-          return false;
-        }
+      if (!SupabaseNotificationRepository.instance.isNotificationVisibleForUser(
+        n,
+        currentUser,
+        handledOrEnrolledSubjects: _distinctHandledSubjects,
+      )) {
+        return false;
       }
 
       // Subject Filter Dropdown
       if (_selectedSubjectFilter != null && _selectedSubjectFilter != 'ALL') {
         final targetSubj = _selectedSubjectFilter!.toLowerCase();
-        final matchesSubject = fullText.contains(targetSubj);
+        final matchesSubject = '${n.title} ${n.message}'.toLowerCase().contains(targetSubj);
         if (!matchesSubject) return false;
       }
 
       // Search Query
       if (_searchQuery.trim().isNotEmpty) {
         final q = _searchQuery.trim().toLowerCase();
-        final matchesQuery = title.contains(q) || body.contains(q);
+        final matchesQuery = n.title.toLowerCase().contains(q) || n.message.toLowerCase().contains(q);
         if (!matchesQuery) return false;
       }
 
       return true;
     }).toList();
+  }
   }
 
   @override
@@ -386,6 +376,37 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
                   ),
                 ),
               ),
+              // Mark All As Read Button
+              Builder(builder: (btnCtx) {
+                final currentUserId = AuthRepository.instance.currentUser?.id ?? '';
+                final unreadInList = displayedNotifications
+                    .where((n) => !LocalStorageService.isNotificationRead(currentUserId, n.id))
+                    .map((n) => n.id)
+                    .toList();
+                if (unreadInList.isEmpty) return const SizedBox.shrink();
+
+                return OutlinedButton.icon(
+                  icon: const Icon(LucideIcons.checkCheck, size: 15),
+                  label: Text(
+                    'Mark all as read (${unreadInList.length})',
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () async {
+                    final user = AuthRepository.instance.currentUser;
+                    if (user != null) {
+                      await SupabaseNotificationRepository.instance.markAllAsRead(user.id, unreadInList);
+                      await SupabaseNotificationRepository.instance.calculateUnreadCount(user);
+                      if (btnCtx.mounted) {
+                        AppTopToast.success(btnCtx, 'All notifications marked as read.');
+                      }
+                    }
+                  },
+                );
+              }),
             ],
           ),
         ),

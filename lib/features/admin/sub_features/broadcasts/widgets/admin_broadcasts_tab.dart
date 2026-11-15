@@ -10,6 +10,7 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/email_service.dart';
 import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
@@ -35,6 +36,8 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   final _messageController = TextEditingController();
   String _selectedAudience = 'all'; // 'all', 'teachers', 'students_parents'
   bool _isSubmittingAnnouncement = false;
+  int _announcementCooldownSeconds = 0;
+  Timer? _announcementCooldownTimer;
   String? _titleError;
   String? _messageError;
 
@@ -79,6 +82,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   @override
   void dispose() {
     _cooldownTimer?.cancel();
+    _announcementCooldownTimer?.cancel();
     _titleController.dispose();
     _messageController.dispose();
     if (_realtimeChannel != null) {
@@ -252,17 +256,24 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
       limit: 50,
     );
     if (mounted) {
+      final seen = <String>{};
+      final uniqueList = <AppNotificationModel>[];
+      for (final item in list) {
+        if (seen.add(item.id)) {
+          uniqueList.add(item);
+        }
+      }
       setState(() {
-        _broadcasts = list;
+        _broadcasts = uniqueList;
         _isLoadingBroadcasts = false;
-        final maxPages = (list.length / _pageSize).ceil();
+        final maxPages = (uniqueList.length / _pageSize).ceil();
         if (_currentPage > (maxPages > 0 ? maxPages : 1)) {
           _currentPage = 1;
         }
       });
       AppDataCache.instance.setCache(
         'admin_broadcasts_history',
-        list.map((e) => e.toJson()).toList(),
+        uniqueList.map((e) => e.toJson()).toList(),
       );
     }
   }
@@ -287,13 +298,9 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     if (activeCooldown > 0) {
       _startCooldownTimer(activeCooldown);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppTheme.catRed,
-            content: Text(
-              'Maintenance toggle is on cooldown. Please wait ${_formatCooldown(activeCooldown)} before changing maintenance mode again.',
-            ),
-          ),
+        AppTopToast.warning(
+          context,
+          'Maintenance toggle is on cooldown. Please wait ${_formatCooldown(activeCooldown)} before changing maintenance mode again.',
         );
       }
       return;
@@ -346,28 +353,25 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           _isMaintenanceMode = updatedSettings.isMaintenanceMode;
           _isTogglingMaintenance = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: targetState ? AppTheme.catRed : AppTheme.catGreen,
-            content: Text(
-              targetState
-                  ? 'System Maintenance Mode is now ACTIVE. Teacher, Student, and Parent accounts are restricted.'
-                  : 'System Maintenance Mode has been DISABLED. Normal login access restored.',
-            ),
-          ),
-        );
+        if (targetState) {
+          AppTopToast.warning(
+            context,
+            'System Maintenance Mode is now ACTIVE. Teacher, Student, and Parent accounts are restricted.',
+          );
+        } else {
+          AppTopToast.success(
+            context,
+            'System Maintenance Mode has been DISABLED. Normal login access restored.',
+          );
+        }
       }
     } catch (e) {
       await _loadMaintenanceState();
       if (mounted) {
         setState(() => _isTogglingMaintenance = false); // UI rollback
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppTheme.catRed,
-            content: Text(
-              'Failed to update maintenance mode: ${e.toString().replaceAll('Bad state: ', '')}',
-            ),
-          ),
+        AppTopToast.error(
+          context,
+          'Failed to update maintenance mode: ${e.toString().replaceAll('Bad state: ', '')}',
         );
       }
     }
@@ -497,6 +501,8 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
   // =========================================================================
 
   Future<void> _handleSendAnnouncement() async {
+    if (_isSubmittingAnnouncement || _announcementCooldownSeconds > 0) return;
+
     final title = _titleController.text.trim();
     final message = _messageController.text.trim();
 
@@ -528,17 +534,6 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
       return;
     }
 
-    // Rate Limiting & Cooldown Check (30 seconds via RateLimitService)
-    final cooldownRemaining = await RateLimitService.instance
-        .checkAdminCooldown(actionKey: 'admin_broadcast', cooldownSeconds: 30);
-    if (cooldownRemaining > 0) {
-      setState(() {
-        _messageError =
-            'Please wait $cooldownRemaining seconds before sending another announcement.';
-      });
-      return;
-    }
-
     // Synchronous mutex lock BEFORE any await
     setState(() {
       _isSubmittingAnnouncement = true;
@@ -557,38 +552,52 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
         adminId: adminId,
       );
 
-      await RateLimitService.instance.recordAdminCooldown(
-        actionKey: 'admin_broadcast',
-        cooldownSeconds: 30,
-      );
       _titleController.clear();
       _messageController.clear();
 
       if (mounted) {
         setState(() {
-          _broadcasts.insert(0, sent);
+          if (!_broadcasts.any((b) => b.id == sent.id)) {
+            _broadcasts.insert(0, sent);
+          }
           _currentPage = 1;
           _isSubmittingAnnouncement = false;
+          _announcementCooldownSeconds = 5;
         });
+
+        _announcementCooldownTimer?.cancel();
+        _announcementCooldownTimer = Timer.periodic(
+          const Duration(seconds: 1),
+          (timer) {
+            if (!mounted) {
+              timer.cancel();
+              return;
+            }
+            if (_announcementCooldownSeconds > 1) {
+              setState(() => _announcementCooldownSeconds--);
+            } else {
+              timer.cancel();
+              setState(() => _announcementCooldownSeconds = 0);
+            }
+          },
+        );
+
         AppDataCache.instance.setCache(
           'admin_broadcasts_history',
           _broadcasts.map((e) => e.toJson()).toList(),
         );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: AppTheme.catGreen,
-            content: Text('Global Announcement sent successfully!'),
-          ),
+
+        AppTopToast.success(
+          context,
+          'Global Announcement sent successfully!',
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmittingAnnouncement = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppTheme.catRed,
-            content: Text('Error: $e'),
-          ),
+        AppTopToast.error(
+          context,
+          'Failed to send announcement: $e',
         );
       }
     }
@@ -614,11 +623,9 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
         'admin_broadcasts_history',
         _broadcasts.map((e) => e.toJson()).toList(),
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: AppTheme.catGreen,
-          content: Text('Announcement updated successfully!'),
-        ),
+      AppTopToast.success(
+        context,
+        'Announcement updated successfully!',
       );
     }
   }
@@ -632,7 +639,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
     if (confirmed != true) return;
 
     try {
-      await AdminRepository.instance.softDeleteAnnouncement(b.id);
+      await AdminRepository.instance.deleteAnnouncement(b.id);
       if (mounted) {
         setState(() {
           _broadcasts.removeWhere((item) => item.id == b.id);
@@ -641,20 +648,16 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
           'admin_broadcasts_history',
           _broadcasts.map((e) => e.toJson()).toList(),
         );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: AppTheme.catGreen,
-            content: Text('Announcement deleted successfully.'),
-          ),
+        AppTopToast.success(
+          context,
+          'Announcement permanently deleted.',
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppTheme.catRed,
-            content: Text('Failed to delete announcement: $e'),
-          ),
+        AppTopToast.error(
+          context,
+          'Failed to delete announcement: $e',
         );
       }
     }
@@ -1232,7 +1235,8 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                             elevation: 0,
                           ),
                           onPressed: (_isSubmittingAnnouncement ||
-                                  _selectedAudienceCount == 0)
+                                  _selectedAudienceCount == 0 ||
+                                  _announcementCooldownSeconds > 0)
                               ? null
                               : _handleSendAnnouncement,
                           icon: _isSubmittingAnnouncement
@@ -1244,7 +1248,9 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                           label: Text(
                             _isSubmittingAnnouncement
                                 ? 'Sending...'
-                                : 'Send Broadcast',
+                                : _announcementCooldownSeconds > 0
+                                    ? 'Send Broadcast (${_announcementCooldownSeconds}s)'
+                                    : 'Send Broadcast',
                             style: const TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 14,
@@ -1402,6 +1408,7 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                           onEdit: () => _handleEditAnnouncement(b),
                           showDelete: true,
                           onDelete: () => _handleDeleteAnnouncement(b),
+                          showUnreadIndicator: false,
                         );
                       },
                     ),
@@ -1855,7 +1862,7 @@ class _DeleteAnnouncementDialogState extends State<_DeleteAnnouncementDialog> {
               ),
               const SizedBox(height: 8),
               Text(
-                'This announcement will be archived and will no longer be visible to any recipient.',
+                'This announcement will be permanently deleted from the database and will no longer appear for teachers, students, or parents.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.45,
@@ -1933,6 +1940,19 @@ class _EditAnnouncementDialogState extends State<_EditAnnouncementDialog> {
   String? _titleError;
   String? _messageError;
   bool _isSaving = false;
+
+  bool get _hasChanges {
+    final currentTitle = _titleController.text.trim();
+    final currentMessage = _messageController.text.trim();
+    final initialAudience = ['all', 'teachers', 'students', 'parents']
+            .contains(widget.announcement.targetAudience.toLowerCase().trim())
+        ? widget.announcement.targetAudience.toLowerCase().trim()
+        : 'all';
+
+    return currentTitle != widget.announcement.title.trim() ||
+        currentMessage != widget.announcement.message.trim() ||
+        _selectedAudience != initialAudience;
+  }
 
   @override
   void initState() {
@@ -2258,13 +2278,17 @@ class _EditAnnouncementDialogState extends State<_EditAnnouncementDialog> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.colorScheme.primary,
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: isDark
+                          ? Colors.white12
+                          : Colors.grey.shade300,
+                      disabledForegroundColor: Colors.grey.shade500,
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                       elevation: 0,
                     ),
-                    onPressed: _isSaving ? null : _handleSave,
+                    onPressed: (_isSaving || !_hasChanges) ? null : _handleSave,
                     child: _isSaving
                         ? LoadingAnimationWidget.staggeredDotsWave(
                             color: Colors.white,

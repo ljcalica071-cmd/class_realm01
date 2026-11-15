@@ -75,9 +75,9 @@ class _AssessmentProctoringScreenState
     _resultsReleased = widget.assessment.resultsReleased;
 
     final initialPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
-    final startOnItemAnalysis =
-        initialPath == AppRoutes.teacherClassworkItemAnalysis &&
-        _isTestingFinished;
+    final isItemAnalysisUrl =
+        AppRoutes.isTeacherClassworkItemAnalysisRoute(initialPath);
+    final startOnItemAnalysis = isItemAnalysisUrl && _isTestingFinished;
     if (startOnItemAnalysis) {
       _activeTab = ProctorViewTab.itemAnalysis;
     }
@@ -106,16 +106,19 @@ class _AssessmentProctoringScreenState
         setState(() {
           _activeTab = newTab;
         });
+        final isExam = widget.assessment.isExam;
         if (newTab == ProctorViewTab.liveMonitor) {
-          updateBrowserUrl(AppRoutes.teacherClassworkProctoring);
-          LocalStorageService.saveLastActiveRoute(
-            AppRoutes.teacherClassworkProctoring,
-          );
+          final liveRoute = isExam
+              ? AppRoutes.teacherClassworkExProctoring
+              : AppRoutes.teacherClassworkWwProctoring;
+          updateBrowserUrl(liveRoute);
+          LocalStorageService.saveLastActiveRoute(liveRoute);
         } else {
-          updateBrowserUrl(AppRoutes.teacherClassworkItemAnalysis);
-          LocalStorageService.saveLastActiveRoute(
-            AppRoutes.teacherClassworkItemAnalysis,
-          );
+          final iaRoute = isExam
+              ? AppRoutes.teacherClassworkExItemAnalysis
+              : AppRoutes.teacherClassworkWwItemAnalysis;
+          updateBrowserUrl(iaRoute);
+          LocalStorageService.saveLastActiveRoute(iaRoute);
           _loadItemAnalysis();
         }
       }
@@ -601,6 +604,16 @@ class _AssessmentProctoringScreenState
       final pastLateCutoff = _isPastLateCutoff;
       final parsedList = <StudentLiveProctorState>[];
 
+      // Build lookup of existing state so violations & real-time counts are never wiped out during background polling
+      final existingStateMap = <String, StudentLiveProctorState>{
+        for (final s in _rosterStudents) s.studentId: s,
+      };
+      if (existingStateMap.isEmpty && _proctorService.currentStates.isNotEmpty) {
+        for (final s in _proctorService.currentStates) {
+          existingStateMap[s.studentId] = s;
+        }
+      }
+
       for (final row in uniqueEnrollData) {
         final profile =
             row['student_profiles'] as Map<String, dynamic>? ?? {};
@@ -658,6 +671,8 @@ class _AssessmentProctoringScreenState
           status = ProctorSessionStatus.notStarted;
         }
 
+        final existingStudent = existingStateMap[sId];
+
         parsedList.add(
           StudentLiveProctorState(
             studentId: sId,
@@ -665,7 +680,10 @@ class _AssessmentProctoringScreenState
             lrn: lrn,
             section: widget.assessment.section,
             status: status,
-            violationCount: 0,
+            violationCount: existingStudent?.violationCount ?? 0,
+            violations: existingStudent?.violations ?? const [],
+            lastActiveAt: existingStudent?.lastActiveAt,
+            kickedReason: existingStudent?.kickedReason,
             gender: gender,
             score: score,
             totalPoints: totalPoints,
@@ -697,6 +715,7 @@ class _AssessmentProctoringScreenState
         'section': s.section,
         'status': s.status,
         'violation_count': s.violationCount,
+        'violations': s.violations,
         'gender': s.gender,
         'last_name': s.lastName,
         'first_name': s.firstName,
@@ -708,8 +727,10 @@ class _AssessmentProctoringScreenState
         'current_question_number': s.currentQuestionNumber,
       }).toList());
 
-      // Load historical violations & session events AFTER roster is initialized so all logs match studentIds!
-      await _proctorService.loadHistoricalViolations();
+      // Only query historical violations on initial load or if empty; Realtime pushes any active logs without polling
+      if (!silent || _proctorService.currentStates.every((s) => s.violationCount == 0)) {
+        await _proctorService.loadHistoricalViolations();
+      }
 
       // Merge updated states from proctor service
       if (_proctorService.currentStates.isNotEmpty) {
@@ -1663,115 +1684,117 @@ class _AssessmentProctoringScreenState
           ),
           const SizedBox(height: 16),
 
-          // ── 15-MINUTE ENTRANCE WINDOW NOTICE ──
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFBFDBFE)),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  LucideIcons.clockAlert,
-                  size: 17,
-                  color: Color(0xFF2563EB),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '15-Minute Entrance Window: ${_formatTime(_scheduleDate)} – ${_formatTime(_lateCutoff)}. '
-                    'Students arriving past this window are automatically locked out unless manually allowed by instructor.',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1E40AF),
+          // ── 15-MINUTE ENTRANCE WINDOW NOTICE & STAT METRIC CARDS (LIVE MONITOR ONLY) ──
+          if (_activeTab == ProctorViewTab.liveMonitor) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    LucideIcons.clockAlert,
+                    size: 17,
+                    color: Color(0xFF2563EB),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '15-Minute Entrance Window: ${_formatTime(_scheduleDate)} – ${_formatTime(_lateCutoff)}. '
+                      'Students arriving past this window are automatically locked out unless manually allowed by instructor.',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E40AF),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // ── 4 STAT METRIC CARDS (Standardized Clean 60-30-10 Style) ──
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 700;
+            // ── 4 STAT METRIC CARDS (Standardized Clean 60-30-10 Style) ──
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 700;
 
-              final cardActive = _buildMetricCard(
-                context: context,
-                label: 'Active Learners',
-                value: '$activeCount',
-                icon: LucideIcons.users,
-                accentColor: const Color(0xFF2563EB),
-                subtitle: 'Real-time test takers',
-                onTap: () => setState(() => _searchQuery = ''),
-              );
+                final cardActive = _buildMetricCard(
+                  context: context,
+                  label: 'Active Learners',
+                  value: '$activeCount',
+                  icon: LucideIcons.users,
+                  accentColor: const Color(0xFF2563EB),
+                  subtitle: 'Real-time test takers',
+                  onTap: () => setState(() => _searchQuery = ''),
+                );
 
-              final cardCompleted = _buildMetricCard(
-                context: context,
-                label: 'Completed',
-                value: '$completedCount',
-                icon: LucideIcons.checkCircle,
-                accentColor: const Color(0xFF059669),
-                subtitle: 'Submitted & graded',
-              );
+                final cardCompleted = _buildMetricCard(
+                  context: context,
+                  label: 'Completed',
+                  value: '$completedCount',
+                  icon: LucideIcons.checkCircle,
+                  accentColor: const Color(0xFF059669),
+                  subtitle: 'Submitted & graded',
+                );
 
-              final cardViolations = _buildMetricCard(
-                context: context,
-                label: 'Flagged / Violations',
-                value: '$violationsCount',
-                icon: LucideIcons.alertTriangle,
-                accentColor: const Color(0xFFD97706),
-                subtitle: 'Integrity & switch alerts',
-              );
+                final cardViolations = _buildMetricCard(
+                  context: context,
+                  label: 'Flagged / Violations',
+                  value: '$violationsCount',
+                  icon: LucideIcons.alertTriangle,
+                  accentColor: const Color(0xFFD97706),
+                  subtitle: 'Integrity & switch alerts',
+                );
 
-              final cardLocked = _buildMetricCard(
-                context: context,
-                label: 'Late / Locked',
-                value: '$lockedLateCount',
-                icon: LucideIcons.lock,
-                accentColor: const Color(0xFFDC2626),
-                subtitle: 'Beyond 15-min window',
-              );
+                final cardLocked = _buildMetricCard(
+                  context: context,
+                  label: 'Late / Locked',
+                  value: '$lockedLateCount',
+                  icon: LucideIcons.lock,
+                  accentColor: const Color(0xFFDC2626),
+                  subtitle: 'Beyond 15-min window',
+                );
 
-              if (isNarrow) {
-                return Column(
+                if (isNarrow) {
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: cardActive),
+                          const SizedBox(width: 10),
+                          Expanded(child: cardCompleted),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(child: cardViolations),
+                          const SizedBox(width: 10),
+                          Expanded(child: cardLocked),
+                        ],
+                      ),
+                    ],
+                  );
+                }
+                return Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(child: cardActive),
-                        const SizedBox(width: 10),
-                        Expanded(child: cardCompleted),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: cardViolations),
-                        const SizedBox(width: 10),
-                        Expanded(child: cardLocked),
-                      ],
-                    ),
+                    Expanded(child: cardActive),
+                    const SizedBox(width: 12),
+                    Expanded(child: cardCompleted),
+                    const SizedBox(width: 12),
+                    Expanded(child: cardViolations),
+                    const SizedBox(width: 12),
+                    Expanded(child: cardLocked),
                   ],
                 );
-              }
-              return Row(
-                children: [
-                  Expanded(child: cardActive),
-                  const SizedBox(width: 12),
-                  Expanded(child: cardCompleted),
-                  const SizedBox(width: 12),
-                  Expanded(child: cardViolations),
-                  const SizedBox(width: 12),
-                  Expanded(child: cardLocked),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 16),
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
 
           // ── ACTIVE TAB CONTENT ──
           if (_activeTab == ProctorViewTab.liveMonitor)

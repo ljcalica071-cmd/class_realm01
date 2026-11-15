@@ -30,22 +30,26 @@ class TeacherProctorChannelService {
     for (final s in enrolledStudents) {
       final studentId = s['id']?.toString() ?? '';
       if (studentId.isEmpty) continue;
+      final existing = _studentStates[studentId];
       _studentStates[studentId] = StudentLiveProctorState(
         studentId: studentId,
-        studentName: s['name']?.toString() ?? 'Student',
-        lrn: s['lrn']?.toString() ?? 'N/A',
-        section: s['section']?.toString() ?? '',
-        status: (s['status'] as ProctorSessionStatus?) ?? ProctorSessionStatus.notStarted,
-        violationCount: (s['violation_count'] as num?)?.toInt() ?? 0,
-        gender: s['gender']?.toString(),
-        lastName: s['last_name']?.toString(),
-        firstName: s['first_name']?.toString(),
-        middleName: s['middle_name']?.toString(),
-        score: (s['score'] as num?)?.toDouble(),
-        totalPoints: (s['total_points'] as num?)?.toDouble(),
+        studentName: s['name']?.toString() ?? existing?.studentName ?? 'Student',
+        lrn: s['lrn']?.toString() ?? existing?.lrn ?? 'N/A',
+        section: s['section']?.toString() ?? existing?.section ?? '',
+        status: (s['status'] as ProctorSessionStatus?) ?? existing?.status ?? ProctorSessionStatus.notStarted,
+        violationCount: (s['violation_count'] as num?)?.toInt() ?? existing?.violationCount ?? 0,
+        violations: (s['violations'] as List<ProctorViolationLog>?) ?? existing?.violations ?? const [],
+        lastActiveAt: existing?.lastActiveAt,
+        kickedReason: existing?.kickedReason,
+        gender: s['gender']?.toString() ?? existing?.gender,
+        lastName: s['last_name']?.toString() ?? existing?.lastName,
+        firstName: s['first_name']?.toString() ?? existing?.firstName,
+        middleName: s['middle_name']?.toString() ?? existing?.middleName,
+        score: (s['score'] as num?)?.toDouble() ?? existing?.score,
+        totalPoints: (s['total_points'] as num?)?.toDouble() ?? existing?.totalPoints,
         isEntryAllowed: s['is_entry_allowed'] != false,
         isMissing: s['is_missing'] == true,
-        currentQuestionNumber: (s['current_question_number'] as num?)?.toInt(),
+        currentQuestionNumber: (s['current_question_number'] as num?)?.toInt() ?? existing?.currentQuestionNumber,
       );
     }
     _broadcast();

@@ -4290,7 +4290,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                   ),
                 const SizedBox(width: 6),
                 Text(
-                  _isExportingEcr ? 'Exporting...' : 'Export ECR',
+                  _isExportingEcr ? 'Exporting...' : 'Export Excel',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,

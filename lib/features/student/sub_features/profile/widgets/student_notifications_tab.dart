@@ -8,6 +8,9 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/data/repositories/supabase_notification_repository.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 
@@ -137,6 +140,14 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
           table: 'notifications',
           callback: (_) => _loadNotifications(initial: true, silent: true),
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'notification_recipients',
+          callback: (_) {
+            if (mounted) setState(() {});
+          },
+        )
         .subscribe();
   }
 
@@ -192,6 +203,13 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
     }
 
     try {
+      final user = AuthRepository.instance.currentUser;
+      if (user != null) {
+        await SupabaseNotificationRepository.instance.getReadNotificationIds(
+          user.id,
+        );
+      }
+
       final res = await Supabase.instance.client
           .from('notifications')
           .select()
@@ -219,6 +237,10 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
           _isLoading = false;
           _isLoadingMore = false;
         });
+
+        if (user != null) {
+          SupabaseNotificationRepository.instance.calculateUnreadCount(user);
+        }
       }
     } catch (e) {
       debugPrint('Error loading student notifications: $e');
@@ -234,68 +256,16 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
   /// Filter notifications: only show notifications for enrolled subjects + general broadcasts
   List<AppNotificationModel> get _filteredNotifications {
     final currentUser = AuthRepository.instance.currentUser;
-    if (currentUser != null) {
-      if (currentUser.isArchived ||
-          currentUser.status == AccountStatus.archived ||
-          currentUser.status == AccountStatus.deactivated) {
-        return [];
-      }
-      final isEligible =
-          currentUser.status == AccountStatus.active ||
-          currentUser.status == AccountStatus.pendingFirstLogin;
-      if (!isEligible) {
-        return [];
-      }
-    }
-
-    final currentStudentName = currentUser?.fullName.toLowerCase() ?? '';
+    if (currentUser == null) return [];
 
     return _notifications
         .where((n) {
-          // Exclude announcements broadcasted before the student account existed
-          if (currentUser?.createdAt != null &&
-              n.type.toLowerCase() == 'announcement') {
-            if (n.timestamp.isBefore(currentUser!.createdAt!)) {
-              return false;
-            }
-          }
-
-          final title = n.title.toLowerCase();
-          final body = n.message.toLowerCase();
-
-          // Extract subject and section if present
-          final regex = RegExp(
-            r'in\s+([A-Za-z0-9\s/&_-]+?)\s*\(([^)]+)\)',
-            caseSensitive: false,
-          );
-          final match = regex.firstMatch('${n.title} ${n.message}');
-
-          if (match != null) {
-            final notifSubject = match.group(1)?.trim().toLowerCase() ?? '';
-            // If it's a personalized absence warning for another student, hide it
-            if (body.contains('recorded absences') ||
-                body.contains('attendance check-in')) {
-              if (currentStudentName.isNotEmpty &&
-                  !body.contains(currentStudentName) &&
-                  !title.contains(currentStudentName)) {
-                return false;
-              }
-            }
-
-            // If enrolled subjects are known and this notification references a non-general subject the student isn't in
-            if (_enrolledSubjectNames.isNotEmpty &&
-                notifSubject.isNotEmpty &&
-                !notifSubject.contains('general') &&
-                !_enrolledSubjectNames.any(
-                  (enrolled) =>
-                      notifSubject.contains(enrolled) ||
-                      enrolled.contains(notifSubject),
-                )) {
-              return false;
-            }
-          }
-
-          return true;
+          return SupabaseNotificationRepository.instance
+              .isNotificationVisibleForUser(
+                n,
+                currentUser,
+                handledOrEnrolledSubjects: _enrolledSubjectNames,
+              );
         })
         .where((n) {
           // Subject dropdown filter
@@ -408,6 +378,62 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
               ),
             ),
           ),
+          Builder(
+            builder: (btnCtx) {
+              final currentUserId =
+                  AuthRepository.instance.currentUser?.id ?? '';
+              final unreadInList = displayedNotifications
+                  .where(
+                    (n) => !LocalStorageService.isNotificationRead(
+                      currentUserId,
+                      n.id,
+                    ),
+                  )
+                  .map((n) => n.id)
+                  .toList();
+              if (unreadInList.isEmpty) return const SizedBox.shrink();
+
+              return Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: OutlinedButton.icon(
+                  icon: const Icon(LucideIcons.checkCheck, size: 14),
+                  label: Text(
+                    '${unreadInList.length}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 0,
+                    ),
+                    minimumSize: const Size(0, 42),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  tooltip: 'Mark all as read',
+                  onPressed: () async {
+                    final user = AuthRepository.instance.currentUser;
+                    if (user != null) {
+                      await SupabaseNotificationRepository.instance
+                          .markAllAsRead(user.id, unreadInList);
+                      await SupabaseNotificationRepository.instance
+                          .calculateUnreadCount(user);
+                      if (btnCtx.mounted) {
+                        AppTopToast.success(
+                          btnCtx,
+                          'All notifications marked as read.',
+                        );
+                      }
+                    }
+                  },
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -433,7 +459,7 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
         constraints: const BoxConstraints(maxWidth: 540),
         child: Column(
           children: [
-            _buildFilterBar(theme, isDark),
+            _buildFilterBar(theme, isDark, displayedNotifications),
             Expanded(
               child: AppPullToRefresh(
                 onRefresh: () =>

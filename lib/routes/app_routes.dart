@@ -26,10 +26,26 @@ class AppRoutes {
   static const String teacherClasswork = '/teacher/classwork';
   static const String teacherClassworkWrittenWorks =
       '/teacher/classwork/written-works';
+  static const String teacherClassworkWwSubmissions =
+      '/teacher/classwork/written-works/submissions';
+  static const String teacherClassworkWwProctoring =
+      '/teacher/classwork/written-works/proctoring';
+  static const String teacherClassworkWwItemAnalysis =
+      '/teacher/classwork/written-works/item-analysis';
+
   static const String teacherClassworkPerformanceTasks =
       '/teacher/classwork/performance-tasks';
+  static const String teacherClassworkPtSubmissions =
+      '/teacher/classwork/performance-tasks/submissions';
+
   static const String teacherClassworkExaminations =
       '/teacher/classwork/examinations';
+  static const String teacherClassworkExProctoring =
+      '/teacher/classwork/examinations/proctoring';
+  static const String teacherClassworkExItemAnalysis =
+      '/teacher/classwork/examinations/item-analysis';
+
+  // Legacy/Fallback aliases (backward compatible)
   static const String teacherClassworkSubmissions =
       '/teacher/classwork/submissions';
   static const String teacherClassworkProctoring =
@@ -106,10 +122,49 @@ class AppRoutes {
 
   static int? teacherClassworkTabIndexForRoute(String route) {
     final clean = normalizeRoutePath(route);
-    if (clean == teacherClassworkWrittenWorks) return 0;
-    if (clean == teacherClassworkPerformanceTasks) return 1;
-    if (clean == teacherClassworkExaminations) return 2;
+    if (clean == teacherClassworkWrittenWorks ||
+        clean == teacherClassworkWwSubmissions ||
+        clean == teacherClassworkWwProctoring ||
+        clean == teacherClassworkWwItemAnalysis) {
+      return 0;
+    }
+    if (clean == teacherClassworkPerformanceTasks ||
+        clean == teacherClassworkPtSubmissions) {
+      return 1;
+    }
+    if (clean == teacherClassworkExaminations ||
+        clean == teacherClassworkExProctoring ||
+        clean == teacherClassworkExItemAnalysis) {
+      return 2;
+    }
     return null;
+  }
+
+  static bool isTeacherClassworkSubmissionsRoute(String route) {
+    final clean = normalizeRoutePath(route);
+    return clean == teacherClassworkWwSubmissions ||
+        clean == teacherClassworkPtSubmissions ||
+        clean == teacherClassworkSubmissions;
+  }
+
+  static bool isTeacherClassworkProctoringRoute(String route) {
+    final clean = normalizeRoutePath(route);
+    return clean == teacherClassworkWwProctoring ||
+        clean == teacherClassworkExProctoring ||
+        clean == teacherClassworkProctoring;
+  }
+
+  static bool isTeacherClassworkItemAnalysisRoute(String route) {
+    final clean = normalizeRoutePath(route);
+    return clean == teacherClassworkWwItemAnalysis ||
+        clean == teacherClassworkExItemAnalysis ||
+        clean == teacherClassworkItemAnalysis;
+  }
+
+  static bool isTeacherClassworkSubViewRoute(String route) {
+    return isTeacherClassworkSubmissionsRoute(route) ||
+        isTeacherClassworkProctoringRoute(route) ||
+        isTeacherClassworkItemAnalysisRoute(route);
   }
 
   /// Normalizes a route path by stripping query parameters, hash fragments, and trailing slashes.
@@ -183,8 +238,14 @@ class AppRoutes {
         teacherManageParents,
         teacherClasswork,
         teacherClassworkWrittenWorks,
+        teacherClassworkWwSubmissions,
+        teacherClassworkWwProctoring,
+        teacherClassworkWwItemAnalysis,
         teacherClassworkPerformanceTasks,
+        teacherClassworkPtSubmissions,
         teacherClassworkExaminations,
+        teacherClassworkExProctoring,
+        teacherClassworkExItemAnalysis,
         teacherClassworkSubmissions,
         teacherClassworkProctoring,
         teacherClassworkItemAnalysis,

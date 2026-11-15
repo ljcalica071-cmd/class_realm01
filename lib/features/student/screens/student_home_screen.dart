@@ -306,23 +306,43 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
           selectedItemColor: theme.colorScheme.primary,
           unselectedItemColor: theme.colorScheme.onSurfaceVariant,
-          items: const [
-            BottomNavigationBarItem(
+          items: [
+            const BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
               activeIcon: Icon(Icons.home),
               label: 'Home',
             ),
-            BottomNavigationBarItem(
+            const BottomNavigationBarItem(
               icon: Icon(Icons.assignment_outlined),
               activeIcon: Icon(Icons.assignment),
               label: 'Classwork',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.notifications_outlined),
-              activeIcon: Icon(Icons.notifications),
+              icon: ValueListenableBuilder<int>(
+                valueListenable: NotificationBadgeManager.studentUnreadNotifier,
+                builder: (context, unreadCount, _) {
+                  if (unreadCount <= 0) return const Icon(Icons.notifications_outlined);
+                  return Badge.count(
+                    count: unreadCount,
+                    backgroundColor: const Color(0xFFDC2626),
+                    child: const Icon(Icons.notifications_outlined),
+                  );
+                },
+              ),
+              activeIcon: ValueListenableBuilder<int>(
+                valueListenable: NotificationBadgeManager.studentUnreadNotifier,
+                builder: (context, unreadCount, _) {
+                  if (unreadCount <= 0) return const Icon(Icons.notifications);
+                  return Badge.count(
+                    count: unreadCount,
+                    backgroundColor: const Color(0xFFDC2626),
+                    child: const Icon(Icons.notifications),
+                  );
+                },
+              ),
               label: 'Alerts',
             ),
-            BottomNavigationBarItem(
+            const BottomNavigationBarItem(
               icon: Icon(Icons.person_outline),
               activeIcon: Icon(Icons.person),
               label: 'Profile',

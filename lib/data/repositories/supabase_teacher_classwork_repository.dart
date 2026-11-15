@@ -678,219 +678,238 @@ class SupabaseTeacherClassworkRepository implements TeacherClassworkRepository {
   Future<List<QuizOrExamModel>> getAssessments({
     String? subjectOfferingId,
     String? teacherId,
+    bool forceRefresh = false,
   }) async {
     final effectiveTeacherId =
         teacherId ?? AuthRepository.instance.currentUser?.id;
-    try {
-      // Pre-fetch matching classwork_items metadata for quiz/exam slots & in-person items
-      final cwMetaById = <String, Map<String, dynamic>>{};
-      try {
-        var cwQuery = _client
-            .from('classwork_items')
-            .select("""
-              id,
-              subject_offering_id,
-              classwork_type,
-              grading_category,
-              title,
-              instructions,
-              max_score,
-              deadline,
-              completion_mode,
-              term_number,
-              gradebook_column_index,
-              is_published,
-              subject_offerings!inner (
-                teacher_id,
-                subjects ( subject_name ),
-                sections ( section_name, grade_level )
-              )
-            """)
-            .inFilter('classwork_type', const ['quiz', 'exam'])
-            .eq('is_archived', false);
+    final cacheKey =
+        'teacher_assessments_${effectiveTeacherId ?? "all"}_${subjectOfferingId ?? "all"}';
+    return AppDataCache.instance.fetchWithSvr<List<QuizOrExamModel>>(
+      cacheKey: cacheKey,
+      forceRefresh: forceRefresh,
+      fetcher: () async {
+        try {
+          // Pre-fetch matching classwork_items metadata for quiz/exam slots & in-person items
+          final cwMetaById = <String, Map<String, dynamic>>{};
+          try {
+            var cwQuery = _client
+                .from('classwork_items')
+                .select("""
+                  id,
+                  subject_offering_id,
+                  classwork_type,
+                  grading_category,
+                  title,
+                  instructions,
+                  max_score,
+                  deadline,
+                  completion_mode,
+                  term_number,
+                  gradebook_column_index,
+                  is_published,
+                  subject_offerings!inner (
+                    teacher_id,
+                    subjects ( subject_name ),
+                    sections ( section_name, grade_level )
+                  )
+                """)
+                .inFilter('classwork_type', const ['quiz', 'exam'])
+                .eq('is_archived', false);
 
-        if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
-          cwQuery = cwQuery.eq('subject_offering_id', subjectOfferingId);
-        } else if (effectiveTeacherId != null &&
-            effectiveTeacherId.isNotEmpty) {
-          cwQuery = cwQuery.eq(
-            'subject_offerings.teacher_id',
-            effectiveTeacherId,
-          );
-        }
+            if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
+              cwQuery = cwQuery.eq('subject_offering_id', subjectOfferingId);
+            } else if (effectiveTeacherId != null &&
+                effectiveTeacherId.isNotEmpty) {
+              cwQuery = cwQuery.eq(
+                'subject_offerings.teacher_id',
+                effectiveTeacherId,
+              );
+            }
 
-        final cwRows = await cwQuery.order('created_at', ascending: false);
-        for (final raw in (cwRows as List? ?? [])) {
-          final r = Map<String, dynamic>.from(raw as Map);
-          if (r['status']?.toString().toLowerCase() == 'cancelled') continue;
-          cwMetaById[r['id'].toString()] = r;
-        }
-      } catch (cwErr) {
-        debugPrint('getAssessments classwork_items metadata notice: $cwErr');
-      }
+            final cwRows = await cwQuery.order('created_at', ascending: false);
+            for (final raw in (cwRows as List? ?? [])) {
+              final r = Map<String, dynamic>.from(raw as Map);
+              if (r['status']?.toString().toLowerCase() == 'cancelled') continue;
+              cwMetaById[r['id'].toString()] = r;
+            }
+          } catch (cwErr) {
+            debugPrint('getAssessments classwork_items metadata notice: $cwErr');
+          }
 
-      var query = _client
-          .from('digital_assessments')
-          .select("""
-            id,
-            subject_offering_id,
-            assessment_type,
-            grading_category,
-            title,
-            instructions,
-            time_limit_minutes,
-            available_from,
-            deadline,
-            is_published,
-            results_released,
-            is_archived,
-            subject_offerings!inner (
-              teacher_id,
-              subjects ( subject_name ),
-              sections ( section_name, grade_level )
-            ),
-            assessment_questions (
-              id,
-              position,
-              question_type,
-              question_text,
-              points,
-              assessment_question_options (
+          var query = _client
+              .from('digital_assessments')
+              .select("""
                 id,
-                position,
-                option_text,
-                is_correct
-              )
-            )
-          """)
-          .eq('is_archived', false);
+                subject_offering_id,
+                assessment_type,
+                grading_category,
+                title,
+                instructions,
+                time_limit_minutes,
+                available_from,
+                deadline,
+                is_published,
+                results_released,
+                is_archived,
+                subject_offerings!inner (
+                  teacher_id,
+                  subjects ( subject_name ),
+                  sections ( section_name, grade_level )
+                ),
+                assessment_questions (
+                  id,
+                  position,
+                  question_type,
+                  question_text,
+                  points,
+                  assessment_question_options (
+                    id,
+                    position,
+                    option_text,
+                    is_correct
+                  )
+                )
+              """)
+              .eq('is_archived', false);
 
-      if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
-        query = query.eq('subject_offering_id', subjectOfferingId);
-      } else if (effectiveTeacherId != null && effectiveTeacherId.isNotEmpty) {
-        query = query.eq('subject_offerings.teacher_id', effectiveTeacherId);
-      }
+          if (subjectOfferingId != null && subjectOfferingId.isNotEmpty) {
+            query = query.eq('subject_offering_id', subjectOfferingId);
+          } else if (effectiveTeacherId != null && effectiveTeacherId.isNotEmpty) {
+            query = query.eq('subject_offerings.teacher_id', effectiveTeacherId);
+          }
 
-      final rows = await query.order('created_at', ascending: false);
-      final list = <QuizOrExamModel>[];
-      final seenIds = <String>{};
+          final rows = await query.order('created_at', ascending: false);
+          final list = <QuizOrExamModel>[];
+          final seenIds = <String>{};
 
-      for (final raw in (rows as List? ?? [])) {
-        final r = Map<String, dynamic>.from(raw as Map);
-        if (r['status']?.toString().toLowerCase() == 'cancelled') continue;
-        final id = r['id'].toString();
-        seenIds.add(id);
+          for (final raw in (rows as List? ?? [])) {
+            final r = Map<String, dynamic>.from(raw as Map);
+            if (r['status']?.toString().toLowerCase() == 'cancelled') continue;
+            final id = r['id'].toString();
+            seenIds.add(id);
 
-        final off = r['subject_offerings'] as Map<String, dynamic>? ?? {};
-        final sub = off['subjects'] as Map<String, dynamic>? ?? {};
-        final sec = off['sections'] as Map<String, dynamic>? ?? {};
+            final off = r['subject_offerings'] as Map<String, dynamic>? ?? {};
+            final sub = off['subjects'] as Map<String, dynamic>? ?? {};
+            final sec = off['sections'] as Map<String, dynamic>? ?? {};
 
-        final qRows = (r['assessment_questions'] as List? ?? [])
-            .map((q) => Map<String, dynamic>.from(q as Map))
-            .toList()
-          ..sort(
-            (a, b) => ((a['position'] as num?) ?? 0).compareTo(
-              (b['position'] as num?) ?? 0,
-            ),
-          );
+            final qRows = (r['assessment_questions'] as List? ?? [])
+                .map((q) => Map<String, dynamic>.from(q as Map))
+                .toList()
+              ..sort(
+                (a, b) => ((a['position'] as num?) ?? 0).compareTo(
+                  (b['position'] as num?) ?? 0,
+                ),
+              );
 
-        final questions = qRows.map(QuestionModel.fromSupabaseMap).toList();
+            final questions = qRows.map(QuestionModel.fromSupabaseMap).toList();
 
-        final schedDateStr = r['available_from'] ?? r['deadline'];
-        final schedDate = schedDateStr != null
-            ? DateTime.tryParse(schedDateStr.toString())?.toLocal() ??
-                  DateTime.now()
-            : DateTime.now();
+            final schedDateStr = r['available_from'] ?? r['deadline'];
+            final schedDate = schedDateStr != null
+                ? DateTime.tryParse(schedDateStr.toString())?.toLocal() ??
+                      DateTime.now()
+                : DateTime.now();
 
-        final aType = r['assessment_type']?.toString().toLowerCase();
-        final isExam =
-            aType == 'st1' ||
-            aType == 'st2' ||
-            aType == 'term_exam' ||
-            r['grading_category'] == 'ex';
+            final aType = r['assessment_type']?.toString().toLowerCase();
+            final isExam =
+                aType == 'st1' ||
+                aType == 'st2' ||
+                aType == 'term_exam' ||
+                r['grading_category'] == 'ex';
 
-        final cwMeta = cwMetaById[id];
-        final termNum = (cwMeta?['term_number'] as num?)?.toInt() ?? 1;
-        final colIdx =
-            (cwMeta?['gradebook_column_index'] as num?)?.toInt() ??
-            (aType == 'st1'
-                ? 1
-                : (aType == 'st2' ? 2 : (aType == 'term_exam' ? 3 : null)));
+            final cwMeta = cwMetaById[id];
+            final termNum = (cwMeta?['term_number'] as num?)?.toInt() ?? 1;
+            final colIdx =
+                (cwMeta?['gradebook_column_index'] as num?)?.toInt() ??
+                (aType == 'st1'
+                    ? 1
+                    : (aType == 'st2' ? 2 : (aType == 'term_exam' ? 3 : null)));
 
-        list.add(
-          QuizOrExamModel(
-            id: id,
-            title: r['title']?.toString() ?? '',
-            description: r['instructions']?.toString() ?? '',
-            subject: sub['subject_name']?.toString() ?? '',
-            section: sec['section_name']?.toString() ?? '',
-            isExam: isExam,
-            durationMinutes: (r['time_limit_minutes'] as num?)?.toInt() ?? 60,
-            scheduleDate: schedDate,
-            isPublished: r['is_published'] != false,
-            resultsReleased: r['results_released'] == true,
-            questions: questions,
-            completionMode: 'online',
-            termNumber: termNum,
-            gradebookColumnIndex: colIdx,
-            subjectOfferingId: r['subject_offering_id']?.toString(),
-            examType: aType,
-          ),
-        );
-      }
+            list.add(
+              QuizOrExamModel(
+                id: id,
+                title: r['title']?.toString() ?? '',
+                description: r['instructions']?.toString() ?? '',
+                subject: sub['subject_name']?.toString() ?? '',
+                section: sec['section_name']?.toString() ?? '',
+                isExam: isExam,
+                durationMinutes: (r['time_limit_minutes'] as num?)?.toInt() ?? 60,
+                scheduleDate: schedDate,
+                isPublished: r['is_published'] != false,
+                resultsReleased: r['results_released'] == true,
+                questions: questions,
+                completionMode: 'online',
+                termNumber: termNum,
+                gradebookColumnIndex: colIdx,
+                subjectOfferingId: r['subject_offering_id']?.toString(),
+                examType: aType,
+              ),
+            );
+          }
 
-      // Append In-Person Quizzes & Exams from classwork_items
-      for (final entry in cwMetaById.entries) {
-        if (seenIds.contains(entry.key)) continue;
-        final r = entry.value;
-        if (r['status']?.toString().toLowerCase() == 'cancelled') continue;
-        if (r['completion_mode']?.toString() != 'in_person') continue;
+          // Append In-Person Quizzes & Exams from classwork_items
+          for (final entry in cwMetaById.entries) {
+            if (seenIds.contains(entry.key)) continue;
+            final r = entry.value;
+            if (r['status']?.toString().toLowerCase() == 'cancelled') continue;
+            if (r['completion_mode']?.toString() != 'in_person') continue;
 
-        final off = r['subject_offerings'] as Map<String, dynamic>? ?? {};
-        final sub = off['subjects'] as Map<String, dynamic>? ?? {};
-        final sec = off['sections'] as Map<String, dynamic>? ?? {};
-        final deadlineStr = r['deadline'];
-        final schedDate = deadlineStr != null
-            ? DateTime.tryParse(deadlineStr.toString())?.toLocal() ??
-                  DateTime.now()
-            : DateTime.now();
-        final isExam =
-            r['grading_category'] == 'ex' || r['classwork_type'] == 'exam';
+            final off = r['subject_offerings'] as Map<String, dynamic>? ?? {};
+            final sub = off['subjects'] as Map<String, dynamic>? ?? {};
+            final sec = off['sections'] as Map<String, dynamic>? ?? {};
+            final deadlineStr = r['deadline'];
+            final schedDate = deadlineStr != null
+                ? DateTime.tryParse(deadlineStr.toString())?.toLocal() ??
+                      DateTime.now()
+                : DateTime.now();
+            final isExam =
+                r['grading_category'] == 'ex' || r['classwork_type'] == 'exam';
 
-        list.add(
-          QuizOrExamModel(
-            id: entry.key,
-            title: r['title']?.toString() ?? '',
-            description: r['instructions']?.toString() ?? '',
-            subject: sub['subject_name']?.toString() ?? '',
-            section: sec['section_name']?.toString() ?? '',
-            isExam: isExam,
-            durationMinutes: 0,
-            scheduleDate: schedDate,
-            isPublished: r['is_published'] != false,
-            resultsReleased: false,
-            questions: const [],
-            completionMode: 'in_person',
-            termNumber: (r['term_number'] as num?)?.toInt() ?? 1,
-            gradebookColumnIndex:
-                (r['gradebook_column_index'] as num?)?.toInt(),
-            subjectOfferingId: r['subject_offering_id']?.toString(),
-            maxScore: (r['max_score'] as num?)?.toDouble() ?? 100.0,
-            examType: isExam
-                ? ((r['gradebook_column_index'] as num?)?.toInt() == 1
-                      ? 'st1'
-                      : ((r['gradebook_column_index'] as num?)?.toInt() == 2
-                            ? 'st2'
-                            : 'term_exam'))
-                : 'quiz',
-          ),
-        );
-      }
+            list.add(
+              QuizOrExamModel(
+                id: entry.key,
+                title: r['title']?.toString() ?? '',
+                description: r['instructions']?.toString() ?? '',
+                subject: sub['subject_name']?.toString() ?? '',
+                section: sec['section_name']?.toString() ?? '',
+                isExam: isExam,
+                durationMinutes: 0,
+                scheduleDate: schedDate,
+                isPublished: r['is_published'] != false,
+                resultsReleased: false,
+                questions: const [],
+                completionMode: 'in_person',
+                termNumber: (r['term_number'] as num?)?.toInt() ?? 1,
+                gradebookColumnIndex:
+                    (r['gradebook_column_index'] as num?)?.toInt(),
+                subjectOfferingId: r['subject_offering_id']?.toString(),
+                maxScore: (r['max_score'] as num?)?.toDouble() ?? 100.0,
+                examType: isExam
+                    ? ((r['gradebook_column_index'] as num?)?.toInt() == 1
+                          ? 'st1'
+                          : ((r['gradebook_column_index'] as num?)?.toInt() == 2
+                                ? 'st2'
+                                : 'term_exam'))
+                    : 'quiz',
+              ),
+            );
+          }
 
-      return list;
-    } catch (e) {
-      debugPrint('getAssessments notice: $e');
-      return [];
-    }
+          return list;
+        } catch (e) {
+          debugPrint('getAssessments notice: $e');
+          return [];
+        }
+      },
+      fromJson: (json) {
+        if (json is List) {
+          return json
+              .map((e) => QuizOrExamModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList();
+        }
+        return <QuizOrExamModel>[];
+      },
+      toJson: (list) => list.map((q) => q.toJson()).toList(),
+      ttl: const Duration(minutes: 5),
+    );
   }
 }

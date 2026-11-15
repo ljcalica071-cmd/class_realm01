@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -109,8 +110,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         return 19;
       case AppRoutes.teacherClasswork:
       case AppRoutes.teacherClassworkWrittenWorks:
+      case AppRoutes.teacherClassworkWwSubmissions:
+      case AppRoutes.teacherClassworkWwProctoring:
+      case AppRoutes.teacherClassworkWwItemAnalysis:
       case AppRoutes.teacherClassworkPerformanceTasks:
+      case AppRoutes.teacherClassworkPtSubmissions:
       case AppRoutes.teacherClassworkExaminations:
+      case AppRoutes.teacherClassworkExProctoring:
+      case AppRoutes.teacherClassworkExItemAnalysis:
       case AppRoutes.teacherClassworkSubmissions:
       case AppRoutes.teacherClassworkProctoring:
       case AppRoutes.teacherClassworkItemAnalysis:
@@ -200,7 +207,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ? widget.initialSelectedIndex
         : (savedTab > 0 ? savedTab : 0);
     _loadedTabIndices.add(_selectedIndex);
-    final initialBrowserPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
+    final initialBrowserPath = AppRoutes.normalizeRoutePath(
+      getBrowserUrlPath(),
+    );
     final currentRoute = _routeForIndex(_selectedIndex);
     if (_selectedIndex == 1) {
       if (initialBrowserPath == AppRoutes.teacherClassworkSubmissions ||
@@ -313,7 +322,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         );
         final canRestoreSubmissions =
             _selectedIndex == 1 &&
-            currentBrowserPath == AppRoutes.teacherClassworkSubmissions;
+            AppRoutes.isTeacherClassworkSubmissionsRoute(currentBrowserPath);
         final savedActId =
             canRestoreSubmissions && navState['activeActivityId'] != null
             ? '${navState['activeActivityId']}'
@@ -592,10 +601,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               height: 1,
             ),
             Container(
-              margin: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 4,
-              ),
+              margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               child: Material(
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
@@ -615,8 +621,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         AppModals.showConfirmationDialog(
                           context: context,
                           title: 'Confirm Logout',
-                          message:
-                              'Are you sure you want to log out of the teacher portal?',
+                          message: 'Are you sure you want to log out of the teacher portal?',
                           confirmLabel: 'Logout',
                           confirmColor: Colors.redAccent,
                           onConfirm: () async {
@@ -700,8 +705,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
               _selectedIndex == 0
                   ? (isMobile
-                      ? const Flexible(child: SchoolYearSelectorWidget())
-                      : const SchoolYearSelectorWidget())
+                        ? const Flexible(child: SchoolYearSelectorWidget())
+                        : const SchoolYearSelectorWidget())
                   : Expanded(
                       child: Text(
                         _getTeacherTitle(_selectedIndex),
@@ -941,6 +946,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   ) {
     final isSelected = _selectedIndex == index;
     final isGradebook = index == 18;
+    final isNotificationItem = index == 15;
     final isLocked = isGradebook && _isGradebookLocked;
     final isMobile = MediaQuery.of(context).size.width < 900;
     final isExpanded = isMobile || _isSidebarExpanded;
@@ -949,85 +955,166 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ? 'Gradebook feature is not yet available. Please add subjects and enroll students in Classroom Setup first.'
         : (!isExpanded ? label : '');
 
-    final item = Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      child: Material(
-        color: isSelected
-            ? theme.colorScheme.primary.withValues(alpha: 0.1)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        clipBehavior: Clip.antiAlias,
-        child: Tooltip(
-          message: tooltipMessage,
-          waitDuration: const Duration(milliseconds: 300),
-          child: Builder(
-            builder: (itemContext) => InkWell(
-              onTap: isLocked
-                  ? null
-                  : () {
-                      if (isMobile) {
-                        final scaffold = Scaffold.maybeOf(itemContext);
-                        if (scaffold?.isDrawerOpen == true) {
-                          scaffold!.closeDrawer();
+    Widget buildItemContent([int unreadCount = 0]) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+        child: Material(
+          color: isSelected
+              ? theme.colorScheme.primary.withValues(alpha: 0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          clipBehavior: Clip.antiAlias,
+          child: Tooltip(
+            message: tooltipMessage,
+            waitDuration: const Duration(milliseconds: 300),
+            child: Builder(
+              builder: (itemContext) => InkWell(
+                onTap: isLocked
+                    ? null
+                    : () {
+                        if (isMobile) {
+                          final scaffold = Scaffold.maybeOf(itemContext);
+                          if (scaffold?.isDrawerOpen == true) {
+                            scaffold!.closeDrawer();
+                          }
                         }
-                      }
-                      _onSelectTab(index);
-                      if (!isGradebook) {
-                        _checkGradebookLockStatus();
-                      }
-                    },
-              hoverColor: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-              splashColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-              child: SizedBox(
-                height: 40,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 56,
-                      child: Center(
-                        child: Icon(
-                          isLocked ? LucideIcons.lock : icon,
-                          color: isLocked
-                              ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-                              : (isSelected
-                                    ? theme.colorScheme.primary
-                                    : theme.colorScheme.onSurface.withValues(
-                                        alpha: 0.75,
-                                      )),
-                          size: 20,
+                        _onSelectTab(index);
+                        if (!isGradebook) {
+                          _checkGradebookLockStatus();
+                        }
+                      },
+                hoverColor: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                splashColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                child: SizedBox(
+                  height: 40,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 56,
+                        child: Center(
+                          child: (!isExpanded && unreadCount > 0)
+                              ? Stack(
+                                  clipBehavior: Clip.none,
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Icon(
+                                      isLocked ? LucideIcons.lock : icon,
+                                      color: isSelected
+                                          ? theme.colorScheme.primary
+                                          : theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.75),
+                                      size: 20,
+                                    ),
+                                    Positioned(
+                                      top: -3,
+                                      right: -6,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 1,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFDC2626),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        constraints: const BoxConstraints(
+                                          minWidth: 14,
+                                          minHeight: 14,
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            unreadCount > 9
+                                                ? '9+'
+                                                : '$unreadCount',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.bold,
+                                              height: 1.0,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Icon(
+                                  isLocked ? LucideIcons.lock : icon,
+                                  color: isLocked
+                                      ? theme.colorScheme.onSurface.withValues(
+                                          alpha: 0.4,
+                                        )
+                                      : (isSelected
+                                            ? theme.colorScheme.primary
+                                            : theme.colorScheme.onSurface
+                                                  .withValues(alpha: 0.75)),
+                                  size: 20,
+                                ),
                         ),
                       ),
-                    ),
-                    if (isExpanded)
-                      Expanded(
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            color: isLocked
-                                ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-                                : (isSelected
-                                      ? theme.colorScheme.primary
-                                      : theme.colorScheme.onSurface.withValues(
-                                          alpha: 0.9,
-                                        )),
-                            fontWeight: isSelected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            fontSize: 13,
+                      if (isExpanded)
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              color: isLocked
+                                  ? theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.4,
+                                    )
+                                  : (isSelected
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.9)),
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: false,
                         ),
-                      ),
-                  ],
+                      if (isExpanded && unreadCount > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              unreadCount > 9 ? '9+' : '$unreadCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    }
+
+    final item = isNotificationItem
+        ? ValueListenableBuilder<int>(
+            valueListenable: NotificationBadgeManager.teacherUnreadNotifier,
+            builder: (context, count, _) => buildItemContent(count),
+          )
+        : buildItemContent();
 
     if (isGradebook) {
       return MouseRegion(
@@ -1080,10 +1167,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     categoryTabIndex: catIdx,
                     activeActivityId: act.id,
                   );
-                  updateBrowserUrl(AppRoutes.teacherClassworkSubmissions);
-                  LocalStorageService.saveLastActiveRoute(
-                    AppRoutes.teacherClassworkSubmissions,
-                  );
+                  final submissionRoute = act.isRequirement
+                      ? AppRoutes.teacherClassworkPtSubmissions
+                      : AppRoutes.teacherClassworkWwSubmissions;
+                  updateBrowserUrl(submissionRoute);
+                  LocalStorageService.saveLastActiveRoute(submissionRoute);
                   setState(() => _viewingSubmissionsFor = act);
                 },
               )
@@ -1210,8 +1298,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           if (category != 'PT')
             Builder(
               builder: (context) {
-                final cooldownSec =
-                    CreateAssessmentFlowDialog.creationCooldown.remainingSeconds;
+                final cooldownSec = CreateAssessmentFlowDialog
+                    .creationCooldown
+                    .remainingSeconds;
                 final baseLabel = category == 'EX' ? 'Exam' : 'Quiz';
                 return TextButton(
                   onPressed: cooldownSec > 0
@@ -1227,7 +1316,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           );
                         },
                   child: Text(
-                    cooldownSec > 0 ? '$baseLabel (${cooldownSec}s)' : baseLabel,
+                    cooldownSec > 0
+                        ? '$baseLabel (${cooldownSec}s)'
+                        : baseLabel,
                   ),
                 );
               },
@@ -1357,13 +1448,14 @@ class _SchoolYearSelectorWidgetState extends State<SchoolYearSelectorWidget> {
                       'S.Y. $sy ${isCurrent ? "(Current Active)" : "(Archived)"}',
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight:
-                            isCurrent ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: isCurrent
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                         color: isCurrent
                             ? (isDark ? Colors.white : const Color(0xFF0F172A))
                             : (isDark
-                                ? Colors.white70
-                                : const Color(0xFF64748B)),
+                                  ? Colors.white70
+                                  : const Color(0xFF64748B)),
                       ),
                     ),
                   ],

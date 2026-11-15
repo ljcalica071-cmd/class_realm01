@@ -777,11 +777,15 @@ class AdminRepository {
     return AppNotificationModel.fromJson(res);
   }
 
-  Future<void> softDeleteAnnouncement(String id) async {
+  Future<void> deleteAnnouncement(String id) async {
     await _client
         .from('notifications')
-        .update({'is_archived': true})
+        .delete()
         .eq('id', id);
+  }
+
+  Future<void> softDeleteAnnouncement(String id) async {
+    await deleteAnnouncement(id);
   }
 
   // =========================================================================

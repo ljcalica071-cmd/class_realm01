@@ -8,6 +8,9 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/data/repositories/supabase_notification_repository.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 
@@ -66,7 +69,8 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
     if (parentId == null) return;
 
     try {
-      final children = await SupabaseParentRepository().getLinkedStudentsForParent(parentId);
+      final children = await SupabaseParentRepository()
+          .getLinkedStudentsForParent(parentId);
       if (mounted) {
         setState(() {
           _linkedChildren = children;
@@ -85,6 +89,14 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
           schema: 'public',
           table: 'notifications',
           callback: (_) => _loadNotifications(initial: true, silent: true),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'notification_recipients',
+          callback: (_) {
+            if (mounted) setState(() {});
+          },
         )
         .subscribe();
   }
@@ -116,6 +128,13 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
     }
 
     try {
+      final user = AuthRepository.instance.currentUser;
+      if (user != null) {
+        await SupabaseNotificationRepository.instance.getReadNotificationIds(
+          user.id,
+        );
+      }
+
       final res = await Supabase.instance.client
           .from('notifications')
           .select()
@@ -143,6 +162,10 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
           _isLoading = false;
           _isLoadingMore = false;
         });
+
+        if (user != null) {
+          SupabaseNotificationRepository.instance.calculateUnreadCount(user);
+        }
       }
     } catch (e) {
       debugPrint('Error loading parent notifications: $e');
@@ -158,28 +181,7 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
   /// Filter notifications: only show notifications relevant to linked children (+ general announcements)
   List<AppNotificationModel> get _filteredNotifications {
     final currentUser = AuthRepository.instance.currentUser;
-    if (currentUser != null) {
-      if (currentUser.isArchived ||
-          currentUser.status == AccountStatus.archived ||
-          currentUser.status == AccountStatus.deactivated) {
-        return [];
-      }
-      final isEligible = currentUser.status == AccountStatus.active ||
-          currentUser.status == AccountStatus.pendingFirstLogin;
-      if (!isEligible) {
-        return [];
-      }
-    }
-
-    final childNames = _linkedChildren.map((c) => c.fullName.toLowerCase()).toList();
-    final childFirstNames = _linkedChildren
-        .map((c) => (c.firstName ?? '').toLowerCase())
-        .where((f) => f.length > 2)
-        .toList();
-    final childLastNames = _linkedChildren
-        .map((c) => (c.lastName ?? '').toLowerCase())
-        .where((l) => l.length > 2)
-        .toList();
+    if (currentUser == null) return [];
 
     UserModel? specificChild;
     if (_selectedChildId != null && _selectedChildId != 'ALL') {
@@ -190,48 +192,15 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
     }
 
     return _items.where((n) {
-      // Exclude announcements broadcasted before the parent account existed
-      if (currentUser?.createdAt != null && n.type.toLowerCase() == 'announcement') {
-        if (n.timestamp.isBefore(currentUser!.createdAt!)) {
-          return false;
-        }
-      }
-
-      final title = n.title.toLowerCase();
-      final body = n.message.toLowerCase();
-      final fullText = '$title $body';
-
-      // If specific child is selected, strictly require this notification to reference that child or be a general broadcast
-      if (specificChild != null) {
-        final cFull = specificChild.fullName.toLowerCase();
-        final cLast = (specificChild.lastName ?? '').toLowerCase();
-        final cFirst = (specificChild.firstName ?? '').toLowerCase();
-
-        final isGeneralBroadcast = n.targetAudience == 'all';
-        final mentionsSpecificChild = fullText.contains(cFull) ||
-            (cLast.length > 2 && fullText.contains(cLast)) ||
-            (cFirst.length > 2 && fullText.contains(cFirst));
-
-        if (!isGeneralBroadcast && !mentionsSpecificChild) {
-          return false;
-        }
-      } else {
-        // "All Children" view:
-        // If it's an absence warning or student-specific alert, make sure it matches at least one linked child
-        final isStudentAlert = body.contains('recorded absences') ||
-            body.contains('attendance check-in') ||
-            body.contains('has reached');
-        if (isStudentAlert && _linkedChildren.isNotEmpty) {
-          final matchesAnyChild = childNames.any((name) => fullText.contains(name)) ||
-              childLastNames.any((last) => fullText.contains(last)) ||
-              childFirstNames.any((first) => fullText.contains(first));
-          if (!matchesAnyChild) {
-            return false;
-          }
-        }
-      }
-
-      return true;
+      final childrenToCheck = specificChild != null
+          ? [specificChild]
+          : _linkedChildren;
+      return SupabaseNotificationRepository.instance
+          .isNotificationVisibleForUser(
+            n,
+            currentUser,
+            linkedChildren: childrenToCheck,
+          );
     }).toList();
   }
 
@@ -276,11 +245,18 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                           fontWeight: FontWeight.w600,
                           color: theme.colorScheme.onSurface,
                         ),
-                        dropdownColor: isDark ? const Color(0xFF263040) : Colors.white,
+                        dropdownColor: isDark
+                            ? const Color(0xFF263040)
+                            : Colors.white,
                         decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 0,
+                          ),
                           filled: true,
-                          fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                          fillColor: isDark
+                              ? const Color(0xFF1E293B)
+                              : Colors.white,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                             borderSide: BorderSide(
@@ -332,10 +308,71 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                 ),
               ),
 
+            // Mark All As Read Button
+            Builder(
+              builder: (btnCtx) {
+                final currentUserId =
+                    AuthRepository.instance.currentUser?.id ?? '';
+                final unreadInList = displayedItems
+                    .where(
+                      (n) => !LocalStorageService.isNotificationRead(
+                        currentUserId,
+                        n.id,
+                      ),
+                    )
+                    .map((n) => n.id)
+                    .toList();
+                if (unreadInList.isEmpty) return const SizedBox.shrink();
+
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(LucideIcons.checkCheck, size: 14),
+                      label: Text(
+                        'Mark all as read (${unreadInList.length})',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 0,
+                        ),
+                        minimumSize: const Size(0, 36),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final user = AuthRepository.instance.currentUser;
+                        if (user != null) {
+                          await SupabaseNotificationRepository.instance
+                              .markAllAsRead(user.id, unreadInList);
+                          await SupabaseNotificationRepository.instance
+                              .calculateUnreadCount(user);
+                          if (btnCtx.mounted) {
+                            AppTopToast.success(
+                              btnCtx,
+                              'All notifications marked as read.',
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+
             // Notification List
             Expanded(
               child: AppPullToRefresh(
-                onRefresh: () => _loadNotifications(initial: true, silent: true),
+                onRefresh: () =>
+                    _loadNotifications(initial: true, silent: true),
                 child: displayedItems.isEmpty
                     ? AppPullToRefresh.scrollableState(
                         child: Container(
@@ -345,7 +382,9 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                             vertical: 32,
                           ),
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF263040) : Colors.white,
+                            color: isDark
+                                ? const Color(0xFF263040)
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(18),
                             border: Border.all(
                               color: theme.colorScheme.onSurface.withValues(
@@ -398,7 +437,10 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                     : ListView.builder(
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         itemCount: displayedItems.length + (_hasMore ? 1 : 0),
                         itemBuilder: (context, index) {
                           if (index == displayedItems.length) {
