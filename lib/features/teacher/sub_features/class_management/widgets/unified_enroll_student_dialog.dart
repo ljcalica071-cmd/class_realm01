@@ -462,7 +462,10 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       ].join(' ');
 
       if (mounted) {
-        final rootNavContext = Navigator.of(context, rootNavigator: true).context;
+        final rootNavContext = Navigator.of(
+          context,
+          rootNavigator: true,
+        ).context;
         Navigator.of(context).pop();
         widget.onStudentCreated();
         if (!rootNavContext.mounted) return;
@@ -1074,7 +1077,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       if (mounted) {
         setState(() {
           _batchProgress = 0.25;
-          _batchPhase = 'Validating ${nonEmptyRows.length} record${nonEmptyRows.length == 1 ? "" : "s"}...';
+          _batchPhase =
+              'Validating ${nonEmptyRows.length} record${nonEmptyRows.length == 1 ? "" : "s"}...';
         });
       }
       await Future.delayed(Duration.zero);
@@ -2399,7 +2403,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
               phase: 'Enrolling in database',
               currentIdx: completedCount.clamp(1, students.length),
               totalCount: students.length,
-              currentStudentName: '${s.firstName} ${s.lastName} (LRN: ${s.lrn})',
+              currentStudentName:
+                  '${s.firstName} ${s.lastName} (LRN: ${s.lrn})',
             );
 
             if (result.studentId.isNotEmpty) {
@@ -2755,10 +2760,12 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
+                          color: const Color(0xFF0F8A48)
+                              .withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: const Color(0xFF0F8A48).withValues(alpha: 0.25),
+                            color: const Color(0xFF0F8A48)
+                                .withValues(alpha: 0.25),
                           ),
                         ),
                         child: Row(

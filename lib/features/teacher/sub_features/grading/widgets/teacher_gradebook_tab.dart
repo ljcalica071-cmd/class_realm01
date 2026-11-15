@@ -1328,8 +1328,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
     final activeTermsList = _activeTerms.isEmpty ? const [1] : _activeTerms;
     for (final student in _students) {
       final termGrades = {
-        for (final term in activeTermsList)
-          term: _termGrade(student.id, term),
+        for (final term in activeTermsList) term: _termGrade(student.id, term),
       };
       final fg = DepEdGradingEngine.computeFinalGrade(
         termsTaught: _termsTaught,
@@ -1900,7 +1899,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
               _buildPublishButton(theme, isDark),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: AppTheme.catGreen.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
@@ -4039,12 +4041,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
             },
         ];
         if (termRows.isNotEmpty) {
-          await client
-              .from('term_grades')
-              .upsert(
-                termRows,
-                onConflict: 'id',
-              );
+          await client.from('term_grades').upsert(termRows, onConflict: 'id');
         }
         await client
             .from('term_grades')
@@ -4091,13 +4088,11 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         if (errStr.contains('23505') ||
             errStr.contains('unique') ||
             errStr.contains('duplicate')) {
-          friendlyMsg =
-              'Unable to update publication: Grade records conflict. Please refresh the page.';
+          friendlyMsg = 'Unable to update publication: Grade records conflict. Please refresh the page.';
         } else if (errStr.contains('socket') ||
             errStr.contains('network') ||
             errStr.contains('timeout')) {
-          friendlyMsg =
-              'Connection error. Please check your internet connection and try again.';
+          friendlyMsg = 'Connection error. Please check your internet connection and try again.';
         } else {
           friendlyMsg =
               'Failed to update publication status. Please try again.';
@@ -4194,7 +4189,9 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
   }
 
   Widget _buildExportEcrButton(ThemeData theme, bool isDark) {
-    final isTemplate = DepEdEcrExportService.isTemplateSubject(_selectedSubject);
+    final isTemplate = DepEdEcrExportService.isTemplateSubject(
+      _selectedSubject,
+    );
     final hasStudents = _students.isNotEmpty;
     final isDisabled =
         _isExportingEcr ||
@@ -4234,15 +4231,13 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
 
     final String tooltipMessage;
     if (!isTemplate) {
-      tooltipMessage =
-          'Official DepEd ECR export is only available for standard Strengthened SHS template subjects.';
+      tooltipMessage = 'Official DepEd ECR export is only available for standard Strengthened SHS template subjects.';
     } else if (!hasStudents) {
       tooltipMessage = 'Enroll students first before exporting E-Class Record.';
     } else if (_isExportingEcr) {
       tooltipMessage = 'Generating official DepEd ECR spreadsheet...';
     } else {
-      tooltipMessage =
-          'Download official DepEd Order 15, s. 2026 Strengthened SHS E-Class Record (.xlsx)';
+      tooltipMessage = 'Download official DepEd Order 15, s. 2026 Strengthened SHS E-Class Record (.xlsx)';
     }
 
     return Padding(
@@ -4350,12 +4345,8 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
     final Border? effectiveBorder;
 
     if (isDisabled) {
-      effectiveFg = isDark
-          ? Colors.white60
-          : const Color(0xFF475569);
-      effectiveBg = isDark
-          ? Colors.white10
-          : const Color(0xFFF1F5F9);
+      effectiveFg = isDark ? Colors.white60 : const Color(0xFF475569);
+      effectiveBg = isDark ? Colors.white10 : const Color(0xFFF1F5F9);
       effectiveBorder = Border.all(
         color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
       );
