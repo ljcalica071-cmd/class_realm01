@@ -3,8 +3,10 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
+import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/supabase_attendance_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
@@ -37,12 +39,54 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   String? _selectedSubject;
   List<String> _enrolledSubjectNames = [];
   Timer? _pollingTimer;
+  RealtimeChannel? _attendanceRealtimeChannel;
+
+  String? _resolveStudentId() {
+    final authId = AuthRepository.instance.currentUser?.id;
+    if (authId != null && authId.isNotEmpty) return authId;
+    final cachedId = LocalStorageService.getCachedUser()?.id;
+    if (cachedId != null && cachedId.isNotEmpty) return cachedId;
+    try {
+      return Supabase.instance.client.auth.currentUser?.id;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _subscribeRealtimeAttendance() {
+    final studentId = _resolveStudentId();
+    if (studentId == null || studentId.isEmpty) return;
+    try {
+      final client = Supabase.instance.client;
+      _attendanceRealtimeChannel = client
+          .channel('student_attendance_rt_$studentId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'attendance_records',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'student_id',
+              value: studentId,
+            ),
+            callback: (_) {
+              if (!mounted) return;
+              AppDataCache.instance.invalidatePrefix('my_attendance_summary_');
+              _loadInitialData(silent: true);
+            },
+          )
+          .subscribe();
+    } catch (_) {
+      // Safe fallback in test or offline environment
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _repo = widget.repository ?? SupabaseAttendanceRepository.instance;
     _loadInitialData();
+    _subscribeRealtimeAttendance();
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (mounted && !_isLoading) {
         _loadInitialData(silent: true);
@@ -53,6 +97,12 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    if (_attendanceRealtimeChannel != null) {
+      try {
+        Supabase.instance.client.removeChannel(_attendanceRealtimeChannel!);
+      } catch (_) {}
+      _attendanceRealtimeChannel = null;
+    }
     super.dispose();
   }
 
@@ -79,8 +129,8 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       // Attempt to load active enrolled subjects for this student
       try {
         final client = Supabase.instance.client;
-        final user = client.auth.currentUser;
-        if (user != null) {
+        final studentId = _resolveStudentId();
+        if (studentId != null && studentId.isNotEmpty) {
           final enrollments = await client
               .from('student_enrollments')
               .select('''
@@ -89,7 +139,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                   subjects!inner ( subject_name, is_archived )
                 )
               ''')
-              .eq('student_id', user.id)
+              .eq('student_id', studentId)
               .eq('status', 'enrolled')
               .eq('subject_offerings.is_archived', false)
               .eq('subject_offerings.subjects.is_archived', false);

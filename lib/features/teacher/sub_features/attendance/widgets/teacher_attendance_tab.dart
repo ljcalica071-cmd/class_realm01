@@ -1062,6 +1062,25 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
     _isSilentlySyncing = true;
     try {
+      final queuedBefore = LocalStorageService.getOfflineAttendanceQueue().length;
+      int syncedCount = 0;
+      if (queuedBefore > 0) {
+        if (mounted && _isOffline) {
+          setState(() {
+            _inlineNotice = _WorkspaceInlineNotice(
+              tone: _WorkspaceNoticeTone.info,
+              title: '[ SYNCING TO CLOUD ] UPLOADING...',
+              message:
+                  'Syncing $queuedBefore offline attendance scan${queuedBefore == 1 ? '' : 's'} to cloud...',
+              code: 'SYNCING_QUEUE',
+            );
+          });
+        }
+        syncedCount = await _repository
+            .syncOfflineAttendanceQueue()
+            .catchError((_) => 0);
+      }
+
       final offeringId = _selectedSubjectId!;
       final date = _attendanceSelectedDate;
       AppDataCache.instance.invalidatePrefix('attendance_workspace_');
@@ -1075,6 +1094,21 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
           _attendanceSelectedDate != date) {
         _isSilentlySyncing = false;
         return;
+      }
+
+      if (_isOffline || syncedCount > 0) {
+        setState(() {
+          _isOffline = false;
+          if (syncedCount > 0) {
+            _inlineNotice = _WorkspaceInlineNotice(
+              tone: _WorkspaceNoticeTone.success,
+              title: '[ SYNC COMPLETE ] ALL SYNCED!',
+              message:
+                  'Uploaded $syncedCount offline attendance log${syncedCount == 1 ? '' : 's'} to cloud • Student & Parent Portals Updated.',
+              code: 'SYNC_COMPLETE',
+            );
+          }
+        });
       }
 
       bool hasChanges = false;
@@ -1319,6 +1353,27 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     return false;
   }
 
+  void _triggerScanHaptic({required String pattern}) {
+    if (kIsWeb) return;
+    switch (pattern) {
+      case 'present':
+        unawaited(HapticFeedback.mediumImpact());
+        break;
+      case 'late':
+      case 'already_marked':
+        unawaited(() async {
+          await HapticFeedback.lightImpact();
+          await Future<void>.delayed(const Duration(milliseconds: 110));
+          await HapticFeedback.lightImpact();
+        }());
+        break;
+      case 'error':
+      case 'cutoff':
+        unawaited(HapticFeedback.heavyImpact());
+        break;
+    }
+  }
+
   Future<void> _processScannedRfid(
     String scannedUid, {
 
@@ -1327,6 +1382,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     if (_selectedSubjectId == null || _isProcessingScan) return;
 
     if (!_hexUidRegex.hasMatch(scannedUid)) {
+      _triggerScanHaptic(pattern: 'error');
       setState(() {
         _inlineNotice = _WorkspaceInlineNotice(
           tone: _WorkspaceNoticeTone.warning,
@@ -1343,15 +1399,23 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     }
 
     if (_isEffectivelyLocked) {
+      _triggerScanHaptic(pattern: 'error');
+      final isHoliday = _scheduleStatus?.isHoliday == true;
       setState(() {
         _inlineNotice = _WorkspaceInlineNotice(
-          tone: _WorkspaceNoticeTone.warning,
+          tone: isHoliday
+              ? _WorkspaceNoticeTone.error
+              : _WorkspaceNoticeTone.warning,
 
-          title: 'RFID Scan Blocked — Session Locked',
+          title: isHoliday
+              ? '[ SCHOOL HOLIDAY ] NO CLASS — Class Suspended'
+              : '[ SCHEDULE LOCKED ] NO CLASS TODAY',
 
-          message: _scheduleStatus?.lockReason ?? 'Enable Make-Up Class Override to record RFID scans for this unscheduled session.',
+          message:
+              _scheduleStatus?.lockReason ??
+              'Enable Make-Up Class Override to record RFID scans for this unscheduled session.',
 
-          code: 'SCHEDULE_LOCKED',
+          code: isHoliday ? 'HOLIDAY_LOCKED' : 'SCHEDULE_LOCKED',
 
           scannedUid: scannedUid,
         );
@@ -1386,6 +1450,24 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             orElse: () => null,
           );
 
+      final isPhoneNfc = deviceId == 'MOBILE_NFC';
+      final terminalTag = isPhoneNfc ? 'PHONE NFC' : 'SCANNER';
+
+      if (outcome.success) {
+        final effectiveStatus = outcome.status ?? AttendanceStatus.present;
+        if (outcome.code == 'IDEMPOTENT_ALREADY_RECORDED') {
+          _triggerScanHaptic(pattern: 'already_marked');
+        } else if (effectiveStatus == AttendanceStatus.absent) {
+          _triggerScanHaptic(pattern: 'cutoff');
+        } else if (effectiveStatus == AttendanceStatus.late) {
+          _triggerScanHaptic(pattern: 'late');
+        } else {
+          _triggerScanHaptic(pattern: 'present');
+        }
+      } else {
+        _triggerScanHaptic(pattern: 'error');
+      }
+
       setState(() {
         _isProcessingScan = false;
 
@@ -1415,21 +1497,56 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
           final studentDisplay =
               outcome.studentName ?? matchedStudent?.displayName ?? scannedUid;
+          final formattedClock = _formatClockFromAny(effectiveTime);
+
+          String noticeTitle;
+          String noticeMessage;
+          _WorkspaceNoticeTone noticeTone = _WorkspaceNoticeTone.success;
+
+          if (outcome.code == 'IDEMPOTENT_ALREADY_RECORDED') {
+            noticeTone = _WorkspaceNoticeTone.info;
+            noticeTitle = '[ ALREADY SCANNED ] ALREADY MARKED';
+            noticeMessage =
+                '$studentDisplay • Recorded Today (${effectiveStatus.name.toUpperCase()}) at $formattedClock.';
+          } else if (outcome.isOfflineQueued) {
+            final qCount = LocalStorageService.getOfflineAttendanceQueue().length;
+            if (effectiveStatus == AttendanceStatus.absent) {
+              noticeTone = _WorkspaceNoticeTone.error;
+              noticeTitle = '[ CUTOFF CLOSED ] TOO LATE — Marked Absent';
+              noticeMessage =
+                  '$studentDisplay • Past Cutoff at $formattedClock (Queued Offline • Will Sync: $qCount).';
+            } else if (effectiveStatus == AttendanceStatus.late) {
+              noticeTone = _WorkspaceNoticeTone.warning;
+              noticeTitle = '[ OFFLINE QUEUED ] SAVED: LATE';
+              noticeMessage =
+                  '$studentDisplay • $formattedClock (Queued • Will Sync when Online: $qCount).';
+            } else {
+              noticeTone = _WorkspaceNoticeTone.warning;
+              noticeTitle = '[ OFFLINE QUEUED ] SAVED: PRESENT';
+              noticeMessage =
+                  '$studentDisplay • $formattedClock (Queued • Will Sync when Online: $qCount).';
+            }
+          } else if (effectiveStatus == AttendanceStatus.absent) {
+            noticeTone = _WorkspaceNoticeTone.error;
+            noticeTitle = '[ CUTOFF CLOSED ] TOO LATE — Marked Absent';
+            noticeMessage =
+                '$studentDisplay • Marked Absent (Past Cutoff) at $formattedClock.';
+          } else if (effectiveStatus == AttendanceStatus.late) {
+            noticeTone = _WorkspaceNoticeTone.warning;
+            noticeTitle = '[ VERIFIED • $terminalTag ] LATE';
+            noticeMessage = '$studentDisplay • $formattedClock';
+          } else {
+            noticeTone = _WorkspaceNoticeTone.success;
+            noticeTitle = '[ VERIFIED • $terminalTag ] PRESENT';
+            noticeMessage = '$studentDisplay • $formattedClock';
+          }
 
           _inlineNotice = _WorkspaceInlineNotice(
-            tone: outcome.isOfflineQueued
-                ? _WorkspaceNoticeTone.warning
-                : _WorkspaceNoticeTone.success,
+            tone: noticeTone,
 
-            title: outcome.isOfflineQueued
-                ? 'RFID Scan Queued Offline'
-                : (outcome.code == 'PROMOTED_PRESENT'
-                      ? 'RFID Scan Recorded — Status Promoted'
-                      : 'RFID Scan Recorded (${deviceId == 'MOBILE_NFC' ? 'Phone NFC' : 'Scanner'})'),
+            title: noticeTitle,
 
-            message: outcome.message.isNotEmpty
-                ? outcome.message
-                : '$studentDisplay marked ${effectiveStatus.name.toUpperCase()} at ${_formatClockFromAny(effectiveTime)}.',
+            message: noticeMessage,
 
             code: outcome.code,
 
@@ -1441,15 +1558,37 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
           );
         } else {
           final isUnregistered = outcome.code == 'UNREGISTERED_CARD';
+          String rejectTitle;
+          switch (outcome.code) {
+            case 'UNREGISTERED_CARD':
+              rejectTitle = '[ CARD SCAN ] UNREGISTERED — Ready to Link!';
+              break;
+            case 'BEFORE_WINDOW_OPENS':
+              rejectTitle = '[ SCHEDULE CHECK ] TOO EARLY';
+              break;
+            case 'AFTER_CLASS_ENDS':
+              rejectTitle = '[ SCHEDULE CHECK ] CLASS ENDED — Scans Closed';
+              break;
+            case 'NO_SCHEDULE_TODAY':
+              rejectTitle = '[ SCHEDULE LOCKED ] NO CLASS TODAY';
+              break;
+            case 'HOLIDAY_LOCKED':
+              rejectTitle = '[ SCHOOL HOLIDAY ] NO CLASS — Class Suspended';
+              break;
+            case 'CROSS_SECTION_TAP':
+              rejectTitle =
+                  '[ ENROLLMENT CHECK ] WRONG SECTION — Not in this Class';
+              break;
+            default:
+              rejectTitle = 'RFID Scan Not Recorded';
+          }
 
           _inlineNotice = _WorkspaceInlineNotice(
             tone: isUnregistered
                 ? _WorkspaceNoticeTone.warning
                 : _WorkspaceNoticeTone.error,
 
-            title: isUnregistered
-                ? 'Unregistered RFID Card'
-                : 'RFID Scan Not Recorded',
+            title: rejectTitle,
 
             message: outcome.message.isNotEmpty
                 ? outcome.message
@@ -2536,7 +2675,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
       scannerIcon = LucideIcons.lock;
     } else if (_isOffline) {
-      scannerLabel = 'Offline Spool';
+      final qCount = LocalStorageService.getOfflineAttendanceQueue().length;
+      scannerLabel = qCount > 0
+          ? 'Offline Mode [Queued: $qCount]'
+          : 'Offline Mode';
 
       scannerColor = AppTheme.catOrange;
 

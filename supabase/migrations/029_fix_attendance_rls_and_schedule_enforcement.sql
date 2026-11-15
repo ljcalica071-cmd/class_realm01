@@ -16,11 +16,17 @@
 --    `attendance_cutoffs`, `student_profiles`, `rfid_devices`, and `rfid_pending_scans`.
 -- 4. Adds `attendance_records`, `student_profiles`, `teacher_schedule`, and
 --    `school_holidays` to the `supabase_realtime` publication so ESP32 hardware
---    taps immediately appear in the Teacher & Student UI.
+--    and Phone NFC taps immediately appear in Teacher, Student, & Parent UIs.
 -- 5. Adds Sudden Holiday / Suspension cleanup trigger on `public.school_holidays`.
--- 6. Upgrades `public.record_rfid_attendance` to insert unregistered taps into
---    `public.rfid_pending_scans` (for instant UI card linking) and strictly
---    enforce `public.teacher_schedule` (`NO_SCHEDULE_TODAY`) and cutoff windows.
+-- 6. Upgrades `public.record_rfid_attendance` RPC to enforce the Master Chart:
+--    - HOLIDAY_LOCKED ([ HOLIDAY ] NO CLASS)
+--    - UNREGISTERED_CARD ([ CARD SCAN ] UNREGISTERED + inserts rfid_pending_scans)
+--    - CROSS_SECTION_TAP ([ ENROLLMENT ] WRONG SECTION)
+--    - NO_SCHEDULE_TODAY ([ SCHEDULE ] NO CLASS TODAY)
+--    - BEFORE_WINDOW_OPENS ([ SCHEDULE ] TOO EARLY)
+--    - AFTER_CLASS_ENDS ([ SCHEDULE ] CLASS ENDED)
+--    - RECORDED_SUCCESS ('present' / 'late' / 'absent' for past cutoff)
+--    - IDEMPOTENT_ALREADY_RECORDED ([ VERIFIED ] ALREADY MARKED)
 -- ============================================================================
 
 BEGIN;
@@ -332,7 +338,7 @@ WHEN (NEW.is_active = true)
 EXECUTE FUNCTION public.cleanup_attendance_on_active_holiday();
 
 -- ============================================================================
--- PART 7: Strict Schedule-Connected RFID Attendance RPC
+-- PART 7: Strict Schedule-Connected RFID Attendance RPC (ESP32 & Phone NFC)
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.record_rfid_attendance(
     p_rfid_uid varchar,
@@ -353,13 +359,19 @@ DECLARE
     v_attendance_date date := (v_effective_ts AT TIME ZONE 'Asia/Manila')::date;
     v_scan_time time := (v_effective_ts AT TIME ZONE 'Asia/Manila')::time;
     v_dow smallint := EXTRACT(ISODOW FROM v_attendance_date)::smallint;
+    v_effective_offering_id uuid := p_subject_offering_id;
     v_holiday_name varchar(120);
     v_student_id varchar(30);
     v_student_name text;
+    v_student_full_name text;
+    v_subject_name text;
+    v_section_name text;
+    v_subject_label text;
     v_has_any_schedule boolean := false;
     v_schedule record;
     v_cutoffs record;
     v_existing record;
+    v_present_open_time time;
     v_present_grace_cutoff time;
     v_late_cutoff time;
     v_calculated_status varchar(10);
@@ -372,7 +384,7 @@ BEGIN
     SET last_sync_at = now()
     WHERE device_uid = v_effective_device;
 
-    -- 1. HOLIDAY CHECK
+    -- 1. HOLIDAY CHECK ([ HOLIDAY ] NO CLASS)
     SELECT holiday_name
     INTO v_holiday_name
     FROM public.school_holidays
@@ -385,15 +397,16 @@ BEGIN
             'success', false,
             'code', 'HOLIDAY_LOCKED',
             'holiday_name', v_holiday_name,
-            'message', 'School Holiday (' || v_holiday_name || '). Attendance scans are disabled.'
+            'message', 'Class Suspended / Active Holiday (' || v_holiday_name || ').'
         );
     END IF;
 
     -- 2. STUDENT LOOKUP BY RFID UID (Single RFID Card across all subjects)
     SELECT
         sp.student_id,
-        TRIM(sp.last_name || ', ' || sp.first_name)
-    INTO v_student_id, v_student_name
+        TRIM(sp.last_name || ', ' || sp.first_name),
+        TRIM(sp.first_name || ' ' || sp.last_name)
+    INTO v_student_id, v_student_name, v_student_full_name
     FROM public.student_profiles sp
     WHERE sp.rfid_uid IS NOT NULL
       AND (
@@ -414,16 +427,56 @@ BEGIN
             'success', false,
             'code', 'UNREGISTERED_CARD',
             'rfid_uid', v_normalized_uid,
-            'message', 'This RFID card UID is not registered to any student.'
+            'message', 'UID: ' || v_normalized_uid || ' • Ready to link in Teacher App.'
         );
     END IF;
 
-    -- 3. SECTION ENROLLMENT CHECK
+    -- If hardware ESP32 passed a default/stale offering UUID that doesn't exist in subject_offerings,
+    -- auto-resolve the active scheduled offering for today if one exists.
+    IF v_effective_offering_id IS NULL OR NOT EXISTS (
+        SELECT 1 FROM public.subject_offerings so WHERE so.id = v_effective_offering_id AND so.is_archived = false
+    ) THEN
+        SELECT ts.subject_offering_id
+        INTO v_effective_offering_id
+        FROM public.teacher_schedule ts
+        JOIN public.subject_offerings so ON so.id = ts.subject_offering_id
+        WHERE ts.day_of_week = v_dow
+          AND ts.is_active = true
+          AND so.is_archived = false
+        ORDER BY
+            CASE
+                WHEN EXISTS (
+                    SELECT 1 FROM public.student_enrollments se
+                    WHERE se.student_id = v_student_id
+                      AND se.subject_offering_id = ts.subject_offering_id
+                      AND LOWER(TRIM(se.status)) = 'enrolled'
+                ) THEN 0
+                ELSE 1
+            END ASC,
+            CASE
+                WHEN v_scan_time BETWEEN (ts.start_time - INTERVAL '30 minutes') AND ts.end_time THEN 0
+                ELSE 1
+            END ASC,
+            ts.start_time ASC
+        LIMIT 1;
+    END IF;
+
+    IF v_effective_offering_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'code', 'NO_SCHEDULE_TODAY',
+            'student_id', v_student_id,
+            'student_name', v_student_name,
+            'message', 'No class schedule set for today.'
+        );
+    END IF;
+
+    -- 3. SECTION ENROLLMENT CHECK ([ ENROLLMENT ] WRONG SECTION)
     IF NOT EXISTS (
         SELECT 1
         FROM public.student_enrollments se
         WHERE se.student_id = v_student_id
-          AND se.subject_offering_id = p_subject_offering_id
+          AND se.subject_offering_id = v_effective_offering_id
           AND LOWER(TRIM(se.status)) = 'enrolled'
     ) THEN
         RETURN jsonb_build_object(
@@ -431,15 +484,15 @@ BEGIN
             'code', 'CROSS_SECTION_TAP',
             'student_id', v_student_id,
             'student_name', v_student_name,
-            'message', v_student_name || ' is not enrolled in this class section.'
+            'message', v_student_name || ' is not enrolled in this section.'
         );
     END IF;
 
-    -- 4. STRICT SCHEDULE CHECK (Must be connected to My Schedule / teacher_schedule)
+    -- 4. STRICT SCHEDULE CHECK ([ SCHEDULE ] NO CLASS TODAY)
     SELECT EXISTS (
         SELECT 1
         FROM public.teacher_schedule ts
-        WHERE ts.subject_offering_id = p_subject_offering_id
+        WHERE ts.subject_offering_id = v_effective_offering_id
           AND ts.is_active = true
     ) INTO v_has_any_schedule;
 
@@ -449,19 +502,19 @@ BEGIN
             'code', 'NO_SCHEDULE_TODAY',
             'student_id', v_student_id,
             'student_name', v_student_name,
-            'message', 'No class schedule is set for this subject and section in My Schedule.'
+            'message', 'No class schedule is set for this subject in My Schedule.'
         );
     END IF;
 
     SELECT *
     INTO v_schedule
     FROM public.teacher_schedule ts
-    WHERE ts.subject_offering_id = p_subject_offering_id
+    WHERE ts.subject_offering_id = v_effective_offering_id
       AND ts.day_of_week = v_dow
       AND ts.is_active = true
     ORDER BY
         CASE
-            WHEN v_scan_time BETWEEN (ts.start_time - INTERVAL '60 minutes') AND ts.end_time THEN 0
+            WHEN v_scan_time BETWEEN (ts.start_time - INTERVAL '30 minutes') AND ts.end_time THEN 0
             ELSE 1
         END ASC,
         ts.start_time ASC
@@ -473,7 +526,7 @@ BEGIN
             'code', 'NO_SCHEDULE_TODAY',
             'student_id', v_student_id,
             'student_name', v_student_name,
-            'message', 'No class session is scheduled for this subject on the selected day.'
+            'message', 'No class schedule set for this subject today.'
         );
     END IF;
 
@@ -481,14 +534,41 @@ BEGIN
     SELECT *
     INTO v_cutoffs
     FROM public.attendance_cutoffs ac
-    WHERE ac.subject_offering_id = p_subject_offering_id
+    WHERE ac.subject_offering_id = v_effective_offering_id
     LIMIT 1;
 
+    v_present_open_time := v_schedule.start_time
+        - (COALESCE(v_cutoffs.present_start_mins_before, 15) * INTERVAL '1 minute');
     v_present_grace_cutoff := v_schedule.start_time
         + (COALESCE(v_cutoffs.present_grace_mins, 15) * INTERVAL '1 minute');
     v_late_cutoff := v_schedule.start_time
         + (COALESCE(v_cutoffs.late_cutoff_mins, 45) * INTERVAL '1 minute');
 
+    -- Rule 10: Too Early ([ SCHEDULE ] TOO EARLY)
+    IF v_scan_time < v_present_open_time THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'code', 'BEFORE_WINDOW_OPENS',
+            'student_id', v_student_id,
+            'student_name', v_student_name,
+            'open_time', to_char(v_present_open_time, 'HH12:MI AM'),
+            'message', 'Attendance window opens at ' || to_char(v_present_open_time, 'HH12:MI AM') || '.'
+        );
+    END IF;
+
+    -- Rule 11: Class Ended ([ SCHEDULE ] CLASS ENDED)
+    IF v_schedule.end_time IS NOT NULL AND v_scan_time > v_schedule.end_time THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'code', 'AFTER_CLASS_ENDS',
+            'student_id', v_student_id,
+            'student_name', v_student_name,
+            'end_time', to_char(v_schedule.end_time, 'HH12:MI AM'),
+            'message', 'Class session ended • Scans are closed.'
+        );
+    END IF;
+
+    -- Rule 1, 2, 3: On-Time Present, Late, or Past Cutoff (Marked Absent)
     IF v_scan_time <= v_present_grace_cutoff THEN
         v_calculated_status := 'present';
     ELSIF v_scan_time <= v_late_cutoff THEN
@@ -497,33 +577,17 @@ BEGIN
         v_calculated_status := 'absent';
     END IF;
 
-    -- 6. DETERMINISTIC CONFLICT RESOLUTION
+    -- 6. DETERMINISTIC CONFLICT RESOLUTION (Anti-Cheat & Idempotency)
     SELECT *
     INTO v_existing
     FROM public.attendance_records ar
     WHERE ar.student_id = v_student_id
-      AND ar.subject_offering_id = p_subject_offering_id
+      AND ar.subject_offering_id = v_effective_offering_id
       AND ar.attendance_date = v_attendance_date
     FOR UPDATE;
 
     IF v_existing IS NOT NULL THEN
-        -- Rule 1: Teacher Manual Override or Excused mark is strictly preserved
-        IF v_existing.recording_method = 'Manual' OR v_existing.status = 'excused' THEN
-            RETURN jsonb_build_object(
-                'success', true,
-                'code', 'MANUAL_OVERRIDE_PRESERVED',
-                'status', v_existing.status,
-                'student_id', v_student_id,
-                'student_name', v_student_name,
-                'time_in', CASE
-                    WHEN v_existing.time_in IS NOT NULL THEN to_char(v_existing.time_in, 'HH12:MI AM')
-                    ELSE NULL
-                END,
-                'message', 'Existing manual teacher mark preserved.'
-            );
-        END IF;
-
-        -- Rule 2A: Promote System Auto-Absent when student taps RFID
+        -- Promote System Auto-Absent when delayed offline RFID tap arrives
         IF v_existing.recording_method = 'System' AND v_existing.status = 'absent' THEN
             UPDATE public.attendance_records
             SET status = v_calculated_status,
@@ -540,15 +604,21 @@ BEGIN
                 'student_id', v_student_id,
                 'student_name', v_student_name,
                 'time_in', to_char(v_scan_time, 'HH12:MI AM'),
-                'message', 'Attendance promoted from Auto-Absent to ' || INITCAP(v_calculated_status) || '.'
+                'message', v_student_name || ' • Recorded at ' || to_char(v_scan_time, 'HH12:MI AM')
             );
         END IF;
 
-        -- Rule 2B: Physical RFID tap upgrades 'absent' to 'present' or 'late'
-        IF v_existing.status = 'absent' AND v_calculated_status IN ('present', 'late') THEN
+        -- Delayed offline sync: earlier physical tap wins if it was on-time
+        IF v_existing.recording_method = 'RFID'
+           AND v_existing.time_in IS NOT NULL
+           AND v_scan_time < v_existing.time_in
+           AND (
+               (v_existing.status = 'late' AND v_calculated_status = 'present')
+               OR (v_existing.status = 'absent' AND v_calculated_status IN ('present', 'late'))
+               OR (v_existing.status = v_calculated_status)
+           ) THEN
             UPDATE public.attendance_records
             SET status = v_calculated_status,
-                recording_method = 'RFID',
                 time_in = v_scan_time,
                 device_id = v_effective_device,
                 updated_at = now()
@@ -556,37 +626,17 @@ BEGIN
 
             RETURN jsonb_build_object(
                 'success', true,
-                'code', 'PROMOTED_TO_PRESENT',
+                'code', 'RECORDED_SUCCESS',
                 'status', v_calculated_status,
                 'student_id', v_student_id,
                 'student_name', v_student_name,
                 'time_in', to_char(v_scan_time, 'HH12:MI AM'),
-                'message', 'Attendance promoted based on physical RFID tap.'
+                'message', v_student_name || ' • Recorded at ' || to_char(v_scan_time, 'HH12:MI AM')
             );
         END IF;
 
-        -- Rule 2C: Earlier physical tap wins for matching status
-        IF v_existing.status = v_calculated_status
-           AND v_existing.time_in IS NOT NULL
-           AND v_scan_time < v_existing.time_in THEN
-            UPDATE public.attendance_records
-            SET time_in = v_scan_time,
-                device_id = v_effective_device,
-                updated_at = now()
-            WHERE id = v_existing.id;
-
-            RETURN jsonb_build_object(
-                'success', true,
-                'code', v_existing.status || '_TIMESTAMP_PROMOTED',
-                'status', v_existing.status,
-                'student_id', v_student_id,
-                'student_name', v_student_name,
-                'time_in', to_char(v_scan_time, 'HH12:MI AM'),
-                'message', 'Timestamp updated to earlier physical RFID tap.'
-            );
-        END IF;
-
-        -- Rule 3: Idempotent no-op
+        -- Rule 8: Re-Tap on the same day ([ VERIFIED ] ALREADY MARKED)
+        -- Strictly locks the student's first valid record / manual teacher mark so students cannot cheat by re-tapping!
         RETURN jsonb_build_object(
             'success', true,
             'code', 'IDEMPOTENT_ALREADY_RECORDED',
@@ -597,7 +647,7 @@ BEGIN
                 WHEN v_existing.time_in IS NOT NULL THEN to_char(v_existing.time_in, 'HH12:MI AM')
                 ELSE to_char(v_scan_time, 'HH12:MI AM')
             END,
-            'message', 'Attendance was already recorded for this student today.'
+            'message', v_student_name || ' was already recorded at ' || COALESCE(to_char(v_existing.time_in, 'HH12:MI AM'), to_char(v_scan_time, 'HH12:MI AM'))
         );
     END IF;
 
@@ -615,7 +665,7 @@ BEGIN
         updated_at
     ) VALUES (
         v_student_id,
-        p_subject_offering_id,
+        v_effective_offering_id,
         v_attendance_date,
         v_calculated_status,
         'RFID',
@@ -627,6 +677,41 @@ BEGIN
     )
     ON CONFLICT (student_id, subject_offering_id, attendance_date) DO NOTHING;
 
+    -- 8. INSERT SCOPED NOTIFICATION FOR STUDENT & LINKED PARENT
+    BEGIN
+        SELECT s.subject_name, sec.section_name
+        INTO v_subject_name, v_section_name
+        FROM public.subject_offerings so
+        LEFT JOIN public.subjects s ON s.id = so.subject_id
+        LEFT JOIN public.sections sec ON sec.id = so.section_id
+        WHERE so.id = v_effective_offering_id
+        LIMIT 1;
+
+        v_subject_label := COALESCE(NULLIF(TRIM(v_subject_name), ''), 'Class Session')
+            || ' (' || COALESCE(NULLIF(TRIM(v_section_name), ''), 'General') || ')';
+
+        INSERT INTO public.notifications (
+            title,
+            message,
+            notification_type,
+            target_audience,
+            is_archived,
+            created_at
+        ) VALUES (
+            'RFID Attendance: ' || UPPER(v_calculated_status) || ' — ' || COALESCE(NULLIF(TRIM(v_subject_name), ''), 'Class Session'),
+            'Attendance check-in for ' || COALESCE(v_student_full_name, v_student_name) || ' in ' || v_subject_label || ': Marked '
+                || UPPER(v_calculated_status) || ' at ' || to_char(v_scan_time, 'HH12:MI AM')
+                || ' (' || to_char(v_attendance_date, 'Mon DD, YYYY') || ').',
+            'attendance',
+            'students_parents',
+            false,
+            now()
+        );
+    EXCEPTION WHEN OTHERS THEN
+        -- Never block attendance recording if notification insert encounters any issue
+        NULL;
+    END;
+
     RETURN jsonb_build_object(
         'success', true,
         'code', 'RECORDED_SUCCESS',
@@ -634,11 +719,54 @@ BEGIN
         'student_id', v_student_id,
         'student_name', v_student_name,
         'time_in', to_char(v_scan_time, 'HH12:MI AM'),
-        'message', 'Attendance recorded as ' || INITCAP(v_calculated_status) || '.'
+        'message', CASE
+            WHEN v_calculated_status = 'absent' THEN v_student_name || ' • Marked Absent (Past Cutoff)'
+            ELSE v_student_name || ' • Recorded at ' || to_char(v_scan_time, 'HH12:MI AM')
+        END
     );
 END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.record_rfid_attendance(varchar, uuid, timestamptz, varchar) TO anon, authenticated, service_role;
+
+-- ============================================================================
+-- PART 8: Automatic Broadcast Notification on School Holiday / Class Suspension
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.fn_notify_school_holiday()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    IF (TG_OP = 'INSERT' AND NEW.is_active = true)
+       OR (TG_OP = 'UPDATE' AND NEW.is_active = true AND COALESCE(OLD.is_active, false) = false) THEN
+        INSERT INTO public.notifications (
+            title,
+            message,
+            notification_type,
+            target_audience,
+            is_archived,
+            created_at
+        ) VALUES (
+            'No Classes / School Suspension: ' || COALESCE(NEW.holiday_name, 'School Holiday'),
+            'Classes and RFID attendance are suspended on ' || to_char(NEW.holiday_date, 'FMMonth DD, YYYY')
+                || ' due to ' || COALESCE(NEW.holiday_name, 'a recognized school holiday')
+                || '. All students are excused and no absences will be recorded for this date.',
+            'announcement',
+            'all',
+            false,
+            now()
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_notify_school_holiday ON public.school_holidays;
+CREATE TRIGGER trg_notify_school_holiday
+AFTER INSERT OR UPDATE ON public.school_holidays
+FOR EACH ROW
+EXECUTE FUNCTION public.fn_notify_school_holiday();
 
 COMMIT;

@@ -158,7 +158,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
 
   static AttendanceSource _safeParseSource(Object? raw) {
     try {
-      return _safeParseSource(raw?.toString());
+      return AttendanceSource.parse(raw?.toString());
     } catch (_) {
       final lower = (raw?.toString() ?? '').toLowerCase();
       if (lower.contains('rfid')) return AttendanceSource.rfid;
@@ -1770,23 +1770,6 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
           : <String, dynamic>{};
       final outcome = RfidScanOutcome.fromJson(map);
 
-      // If remote cloud RPC rejected due to schedule window (e.g. legacy RPC deployed in cloud),
-      // seamlessly auto-recover via schedule-connected auto-mark.
-      if (!outcome.success &&
-          (outcome.code == 'AFTER_CLASS_ENDS' ||
-              outcome.code == 'SCANS_CLOSED' ||
-              outcome.code == 'BEFORE_WINDOW_OPENS')) {
-        debugPrint(
-          'Cloud RPC returned schedule cutoff rejection [${outcome.code}]. Auto-recovering via schedule auto-mark...',
-        );
-        return await _recordRfidScanDartOnline(
-          cleanUid: cleanUid,
-          subjectOfferingId: subjectOfferingId,
-          scanTimestamp: effectiveTimestamp,
-          deviceId: deviceId,
-        );
-      }
-
       if (outcome.success &&
           outcome.studentId != null &&
           outcome.status != null) {
@@ -1917,6 +1900,16 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     }
 
     if (studentId == null || studentId.isEmpty) {
+      try {
+        await _client.from('rfid_pending_scans').insert({
+          'rfid_uid': cleanUid,
+          'device_id': deviceId,
+          'subject_offering_id': subjectOfferingId,
+          'scanned_at': scanTimestamp.toUtc().toIso8601String(),
+          'is_claimed': false,
+        });
+      } catch (_) {}
+
       return const RfidScanOutcome(
         success: false,
         code: 'UNREGISTERED_CARD',
@@ -2433,18 +2426,50 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
   }) {
     final scanMins = _parseTimeToMinutesSinceMidnight(scanTime24);
     final startMins = _parseTimeToMinutesSinceMidnight(startTime);
+    final endMins = _parseTimeToMinutesSinceMidnight(endTime);
 
     if (scanMins == null || startMins == null) {
       return (status: AttendanceStatus.present, rejection: null);
     }
 
+    final openMins = startMins - cutoff.presentStartMinsBefore;
     final graceMins = startMins + cutoff.presentGraceMins;
     final lateMins = startMins + cutoff.lateCutoffMins;
 
-    // Connected to schedule auto-mark:
-    // 1. On-time / early arrival / within grace period -> Present
-    // 2. After grace period but before or at late cutoff -> Late
-    // 3. After late cutoff or after class ends -> Absent (tap recorded with timestamp)
+    // Rule 10: Too Early (Before window opens)
+    if (scanMins < openMins) {
+      final openH = (openMins < 0 ? 0 : openMins) ~/ 60;
+      final openM = (openMins < 0 ? 0 : openMins) % 60;
+      final openTimeDisplay = _formatTimeDisplay(
+        '${openH.toString().padLeft(2, '0')}:${openM.toString().padLeft(2, '0')}:00',
+      );
+      return (
+        status: null,
+        rejection: RfidScanOutcome(
+          success: false,
+          code: 'BEFORE_WINDOW_OPENS',
+          studentId: studentId,
+          studentName: studentName,
+          message: 'Attendance window opens at $openTimeDisplay.',
+        ),
+      );
+    }
+
+    // Rule 11: Class Ended (After schedule end_time)
+    if (endMins != null && scanMins > endMins) {
+      return (
+        status: null,
+        rejection: RfidScanOutcome(
+          success: false,
+          code: 'AFTER_CLASS_ENDS',
+          studentId: studentId,
+          studentName: studentName,
+          message: 'Class session ended • Scans are closed.',
+        ),
+      );
+    }
+
+    // Rules 1, 2, 3: On-Time Present, Late Arrival, or Past Cutoff (Marked Absent)
     if (scanMins <= graceMins) {
       return (status: AttendanceStatus.present, rejection: null);
     }

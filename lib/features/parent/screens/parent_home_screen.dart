@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
@@ -30,6 +32,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   List<UserModel> _linkedStudents = [];
   List<AttendanceRecord> _childAttendance = [];
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  RealtimeChannel? _childAttendanceChannel;
+  String? _subscribedChildId;
+  Timer? _attendancePollingTimer;
 
   static const List<String> _tabTitles = [
     'Parent Portal',
@@ -83,10 +88,60 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     _hydrateLinkedStudentsFromCache();
     _loadLinkedStudents();
     InAppNotificationService.subscribeToAnnouncements(role: 'parent');
+    _attendancePollingTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || _linkedStudents.isEmpty) return;
+      final activeStudent =
+          _linkedStudents[_selectedChildIndex % _linkedStudents.length];
+      if (activeStudent.id.isNotEmpty) {
+        _loadChildAttendance(activeStudent.id, silent: true);
+      }
+    });
+  }
+
+  void _unsubscribeChildAttendanceRealtime() {
+    if (_childAttendanceChannel != null) {
+      try {
+        Supabase.instance.client.removeChannel(_childAttendanceChannel!);
+      } catch (_) {}
+      _childAttendanceChannel = null;
+    }
+    _subscribedChildId = null;
+  }
+
+  void _subscribeChildAttendanceRealtime(String studentId) {
+    if (studentId.isEmpty) return;
+    if (_subscribedChildId == studentId && _childAttendanceChannel != null) {
+      return;
+    }
+    _unsubscribeChildAttendanceRealtime();
+    _subscribedChildId = studentId;
+    try {
+      _childAttendanceChannel = Supabase.instance.client
+          .channel('parent_child_attendance_rt_$studentId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'attendance_records',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'student_id',
+              value: studentId,
+            ),
+            callback: (_) {
+              if (!mounted) return;
+              _loadChildAttendance(studentId, silent: true);
+            },
+          )
+          .subscribe();
+    } catch (_) {
+      // Safe fallback in test or offline environment
+    }
   }
 
   @override
   void dispose() {
+    _attendancePollingTimer?.cancel();
+    _unsubscribeChildAttendanceRealtime();
     InAppNotificationService.unsubscribeFromAnnouncements();
     super.dispose();
   }
@@ -203,6 +258,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     bool silent = false,
   }) async {
     if (studentId.isEmpty) return;
+    _subscribeChildAttendanceRealtime(studentId);
     if (!silent) {
       _hydrateAttendanceFromCache(studentId);
     }
