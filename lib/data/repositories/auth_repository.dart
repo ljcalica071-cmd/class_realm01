@@ -43,6 +43,7 @@ class LoginAttemptException implements Exception {
     this.invalidCredentials = false,
     this.providerRateLimited = false,
     this.isMaintenanceBlocked = false,
+    this.isAlreadyLoggedInElsewhere = false,
     this.retryAfterSeconds,
   });
 
@@ -50,6 +51,7 @@ class LoginAttemptException implements Exception {
   final bool invalidCredentials;
   final bool providerRateLimited;
   final bool isMaintenanceBlocked;
+  final bool isAlreadyLoggedInElsewhere;
   final int? retryAfterSeconds;
 
   @override
@@ -404,6 +406,36 @@ class AuthRepository {
           throw const LoginAttemptException(
             'The system is currently under maintenance. Teacher, Student, and Parent accounts cannot log in at this time. Please try again later.',
             isMaintenanceBlocked: true,
+          );
+        }
+
+        // First-In-Wins Single Session Guard:
+        // If this account already has an active session on another device/browser,
+        // block this new login attempt and alert the active device in real time.
+        final activeOtherSession = await _findActiveOtherSession(
+          userId: _currentUser!.id,
+          currentLocalSessionId: LocalStorageService.getActiveSessionId(),
+        );
+        if (activeOtherSession != null) {
+          try {
+            await _supabaseClient
+                .from('user_session_logs')
+                .update({
+                  'blocked_attempt_at': DateTime.now().toUtc().toIso8601String(),
+                })
+                .eq('id', activeOtherSession['id']);
+          } catch (_) {}
+
+          try {
+            await _firebaseAuth.signOut();
+          } catch (_) {}
+          await LocalStorageService.clearAuth();
+          _currentUser = null;
+          throw const LoginAttemptException(
+            'This account is currently signed in on another device or browser.\n\n'
+            'To prevent data conflicts and protect active work, simultaneous logins are not allowed. '
+            'Please log out from your other device first before signing in here.',
+            isAlreadyLoggedInElsewhere: true,
           );
         }
 
@@ -947,6 +979,41 @@ class AuthRepository {
   // =========================================================================
   // Non-Blocking Session Logging for ALL Roles (Admin, Teacher, Student, Parent)
   // =========================================================================
+
+  /// Checks whether [userId] currently has an active, recently heartbeating
+  /// session on another device/browser (last_active_at within 2 minutes).
+  Future<Map<String, dynamic>?> _findActiveOtherSession({
+    required String userId,
+    String? currentLocalSessionId,
+  }) async {
+    try {
+      final rows = await _supabaseClient
+          .from('user_session_logs')
+          .select('id, login_at, last_active_at, is_active')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .order('last_active_at', ascending: false);
+
+      final nowUtc = DateTime.now().toUtc();
+      for (final row in (rows as List)) {
+        final rowMap = Map<String, dynamic>.from(row as Map);
+        final rowId = rowMap['id']?.toString();
+        if (currentLocalSessionId != null && rowId == currentLocalSessionId) {
+          continue;
+        }
+        final lastActiveAt = DateTime.tryParse(
+          rowMap['last_active_at']?.toString() ?? '',
+        )?.toUtc();
+        if (lastActiveAt != null &&
+            nowUtc.difference(lastActiveAt).inSeconds <= 120) {
+          return rowMap;
+        }
+      }
+    } catch (e) {
+      debugPrint('AuthRepository _findActiveOtherSession notice: $e');
+    }
+    return null;
+  }
 
   Future<String?> startSessionLog(
     custom.UserModel user, {

@@ -1392,6 +1392,16 @@ class _TeacherLearningMaterialsTabState
       return 'A document with this file name already exists in this folder. Please rename the file before uploading.';
     }
 
+    // 6. Value too long or check constraint violated
+    if (errStr.contains('value too long') || errStr.contains('22001')) {
+      return 'Input Too Long: One of the file properties or title exceeds the allowable database length. Please try shortening the title or renaming the file.';
+    }
+    if (errStr.contains('check constraint') || errStr.contains('23514')) {
+      return 'File Limit Exceeded: The file does not satisfy allowable system constraints (maximum size 15 MB).';
+    }
+
+    debugPrint('Learning material upload unexpected error: $error');
+
     // Fallback friendly message (NO raw technical stack traces)
     return 'Upload Encountered an Issue: We could not finish uploading your file right now. Your inputs have been kept intact—please try clicking "Retry Upload".';
   }

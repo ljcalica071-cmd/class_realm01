@@ -102,7 +102,7 @@ class MaterialFileValidator {
 
     // 4. Magic-byte verification
     if (ext == 'pdf') {
-      if (!_matchesBytes(fileBytes, magicPdf)) {
+      if (!_matchesPdfHeader(fileBytes)) {
         return 'Corrupted or invalid PDF file. Header verification failed.';
       }
     } else if (ext == 'doc' || ext == 'ppt') {
@@ -178,6 +178,25 @@ class MaterialFileValidator {
         ? originalFileName.substring(dotIdx + 1).toLowerCase()
         : 'bin';
     return 'offerings/shared/${fingerprint}_$ext';
+  }
+
+  static bool _matchesPdfHeader(Uint8List bytes) {
+    if (bytes.length < 5) return false;
+    // Fast path: check if %PDF- is at index 0
+    if (_matchesBytes(bytes, magicPdf)) return true;
+
+    // Per PDF spec (ISO 32000-1 §7.5.2), %PDF- may appear within the first 1024 bytes (e.g. following BOM, whitespace, or comments)
+    final limit = bytes.length < 1024 ? bytes.length - 4 : 1020;
+    for (int i = 0; i < limit; i++) {
+      if (bytes[i] == 0x25 &&
+          bytes[i + 1] == 0x50 &&
+          bytes[i + 2] == 0x44 &&
+          bytes[i + 3] == 0x46 &&
+          bytes[i + 4] == 0x2D) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static bool _matchesBytes(Uint8List bytes, List<int> expected) {

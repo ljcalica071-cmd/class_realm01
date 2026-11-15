@@ -51,9 +51,11 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
   RealtimeChannel? _sessionGuardChannel;
 
   bool _isWarningDialogShowing = false;
+  bool _isSecurityAlertDialogShowing = false;
   bool _isHandlingKickout = false;
   String? _activeSessionLogId;
   DateTime _sessionStart = DateTime.now().toUtc();
+  DateTime? _lastHandledBlockedAttemptAt;
 
   @override
   void initState() {
@@ -256,6 +258,11 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
               final rowId = newRecord['id']?.toString();
               final isActive = newRecord['is_active'] == true;
 
+              // Case 0: Another device attempted to log in while this session is active
+              if (rowId == currentSessionId && isActive) {
+                _maybeShowBlockedAttemptAlert(newRecord['blocked_attempt_at']);
+              }
+
               // Case 1: Our own session row was marked inactive
               if (rowId == currentSessionId && !isActive) {
                 final logoutReason = newRecord['logout_reason']?.toString();
@@ -356,6 +363,104 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
     }
   }
 
+  void _maybeShowBlockedAttemptAlert(dynamic rawBlockedAt) {
+    if (rawBlockedAt == null) return;
+    final blockedAt = DateTime.tryParse(rawBlockedAt.toString())?.toUtc();
+    if (blockedAt == null) return;
+
+    // Ignore stale alerts from before this session started or older than 5 minutes
+    if (blockedAt.isBefore(_sessionStart)) return;
+    if (DateTime.now().toUtc().difference(blockedAt).inMinutes >= 5) return;
+
+    // Deduplicate: do not show again for the same timestamp
+    if (_lastHandledBlockedAttemptAt != null &&
+        !blockedAt.isAfter(_lastHandledBlockedAttemptAt!)) {
+      return;
+    }
+
+    _lastHandledBlockedAttemptAt = blockedAt;
+    _showBlockedLoginAttemptDialog();
+  }
+
+  void _showBlockedLoginAttemptDialog() {
+    if (_isSecurityAlertDialogShowing || !mounted) return;
+    final dialogContext = AppRoutes.navigatorKey.currentContext ?? context;
+    _isSecurityAlertDialogShowing = true;
+
+    showDialog<void>(
+      context: dialogContext,
+      barrierDismissible: true,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.security_rounded,
+                  color: Colors.amber.shade800,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Security Alert: Blocked Login Attempt',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Someone just tried to sign in to your account from another device or browser.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'For your protection, that login attempt was blocked so your current work stays uninterrupted.',
+                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "If this wasn't you, we recommend changing your password immediately. If it was you on another device, please log out here first before signing in there.",
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('I Understand'),
+            ),
+          ],
+        );
+      },
+    ).whenComplete(() {
+      _isSecurityAlertDialogShowing = false;
+    });
+  }
+
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
@@ -384,8 +489,12 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
             })
             .eq('id', sessionId)
             .eq('is_active', true)
-            .select('id, login_at')
+            .select('id, login_at, blocked_attempt_at')
             .maybeSingle();
+
+        if (updated != null) {
+          _maybeShowBlockedAttemptAlert(updated['blocked_attempt_at']);
+        }
 
         if (updated == null) {
           if (AuthRepository.instance.isLoggingOut ||

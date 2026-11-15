@@ -381,6 +381,16 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isLoading = false);
 
       if (e is LoginAttemptException) {
+        if (e.isAlreadyLoggedInElsewhere) {
+          _passwordController.clear();
+          _passwordFocusNode.unfocus();
+          AppModals.showErrorDialog(
+            context: context,
+            title: 'Account Active on Another Device',
+            message: e.message,
+          );
+          return;
+        }
         if (e.isMaintenanceBlocked) {
           _passwordController.clear();
           _passwordFocusNode.unfocus();
