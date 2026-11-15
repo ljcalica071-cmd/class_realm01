@@ -200,13 +200,19 @@ class _ExpandableNotificationCardState
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double textMaxWidth = (constraints.maxWidth - 36).clamp(
+        final double textMaxWidth = (constraints.maxWidth - 48).clamp(
           100.0,
           2000.0,
         );
         const textStyle = TextStyle(fontSize: 13, height: 1.45);
+        final effectiveTextStyle = DefaultTextStyle.of(context).style.merge(
+          textStyle.copyWith(fontWeight: FontWeight.w500),
+        );
 
-        final textSpan = TextSpan(text: formattedMessage, style: textStyle);
+        final textSpan = TextSpan(
+          text: formattedMessage,
+          style: effectiveTextStyle,
+        );
         final textPainter = TextPainter(
           text: textSpan,
           textDirection: Directionality.of(context),
@@ -214,7 +220,10 @@ class _ExpandableNotificationCardState
         )..layout(maxWidth: textMaxWidth);
 
         final bool didExceedMaxLines = textPainter.didExceedMaxLines;
-        final bool canExpand = didExceedMaxLines;
+        final bool canExpand =
+            didExceedMaxLines ||
+            n.message.trim().length > 130 ||
+            n.message.contains('\n');
 
         final currentUserId = AuthRepository.instance.currentUser?.id ?? '';
 

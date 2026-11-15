@@ -10,7 +10,6 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/repositories/supabase_notification_repository.dart';
-import 'package:class_realm/shared/widgets/app_top_toast.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 
@@ -32,10 +31,9 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
   final List<AppNotificationModel> _items = [];
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = true;
-  bool _isLoadingMore = false;
-  bool _hasMore = true;
-  int _offset = 0;
-  static const int _pageSize = 15;
+  int _currentPage = 1;
+  static const int _pageSize = 10;
+  static const int _fetchLimit = 200;
 
   List<UserModel> _linkedChildren = [];
   String? _selectedChildId; // null or child student_id
@@ -52,7 +50,6 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
       _loadNotifications(initial: true);
       _subscribeToRealtime();
     }
-    _scrollController.addListener(_onScroll);
   }
 
   @override
@@ -101,30 +98,14 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
         .subscribe();
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 200 &&
-        !_isLoadingMore &&
-        _hasMore) {
-      _loadNotifications();
-    }
-  }
-
   Future<void> _loadNotifications({
     bool initial = false,
     bool silent = false,
   }) async {
-    final targetOffset = initial ? 0 : _offset;
-    if (initial) {
-      if (!silent) {
-        setState(() {
-          _isLoading = true;
-          _offset = 0;
-          _hasMore = true;
-        });
-      }
-    } else {
-      setState(() => _isLoadingMore = true);
+    if (initial && !silent && _items.isEmpty) {
+      setState(() {
+        _isLoading = true;
+      });
     }
 
     try {
@@ -141,7 +122,7 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
           .eq('is_archived', false)
           .inFilter('target_audience', ['all', 'parents', 'students_parents'])
           .order('created_at', ascending: false)
-          .range(targetOffset, targetOffset + _pageSize - 1);
+          .limit(_fetchLimit);
 
       final fetched = (res as List)
           .map((r) => AppNotificationModel.fromJson(r as Map<String, dynamic>))
@@ -149,18 +130,10 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
 
       if (mounted) {
         setState(() {
-          if (initial) {
-            _items
-              ..clear()
-              ..addAll(fetched);
-            _offset = fetched.length;
-          } else {
-            _items.addAll(fetched);
-            _offset += fetched.length;
-          }
-          _hasMore = fetched.length == _pageSize;
+          _items
+            ..clear()
+            ..addAll(fetched);
           _isLoading = false;
-          _isLoadingMore = false;
         });
 
         if (user != null) {
@@ -172,7 +145,6 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _isLoadingMore = false;
         });
       }
     }
@@ -300,6 +272,7 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                         onChanged: (val) {
                           setState(() {
                             _selectedChildId = val;
+                            _currentPage = 1;
                           });
                         },
                       ),
@@ -434,36 +407,160 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                           ),
                         ),
                       )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        itemCount: displayedItems.length + (_hasMore ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == displayedItems.length) {
-                            return Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Center(
-                                child: LoadingAnimationWidget.staggeredDotsWave(
-                                  color: theme.colorScheme.primary,
-                                  size: 26,
+                    : Builder(
+                        builder: (context) {
+                          final totalPages =
+                              (displayedItems.length / _pageSize).ceil();
+                          final safePage = _currentPage.clamp(
+                            1,
+                            totalPages > 0 ? totalPages : 1,
+                          );
+                          final startIndex = (safePage - 1) * _pageSize;
+                          final endIndex =
+                              (startIndex + _pageSize > displayedItems.length)
+                              ? displayedItems.length
+                              : startIndex + _pageSize;
+                          final pagedItems = displayedItems.sublist(
+                            startIndex,
+                            endIndex,
+                          );
+
+                          return ListView(
+                            controller: _scrollController,
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            children: [
+                              ...pagedItems.map(
+                                (notification) => ExpandableNotificationCard(
+                                  notification: notification,
+                                  maxCollapsedLines: 2,
                                 ),
                               ),
-                            );
-                          }
-                          final notification = displayedItems[index];
-                          return ExpandableNotificationCard(
-                            notification: notification,
-                            maxCollapsedLines: 2,
+                              const SizedBox(height: 12),
+                              _buildPaginationBar(
+                                theme: theme,
+                                isDark: isDark,
+                                totalCount: displayedItems.length,
+                                startIndex: startIndex,
+                                endIndex: endIndex,
+                                safePage: safePage,
+                                totalPages: totalPages,
+                              ),
+                            ],
                           );
                         },
                       ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar({
+    required ThemeData theme,
+    required bool isDark,
+    required int totalCount,
+    required int startIndex,
+    required int endIndex,
+    required int safePage,
+    required int totalPages,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          Text(
+            'Showing ${totalCount == 0 ? 0 : startIndex + 1} to $endIndex of $totalCount entries',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            ),
+          ),
+          if (totalPages > 1)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildPageButton(
+                  'First',
+                  () => setState(() => _currentPage = 1),
+                  safePage > 1,
+                ),
+                _buildPageButton(
+                  '<',
+                  () => setState(() => _currentPage = safePage - 1),
+                  safePage > 1,
+                ),
+                for (int p = 1; p <= totalPages; p++)
+                  if (p >= safePage - 2 && p <= safePage + 2)
+                    _buildPageButton(
+                      p.toString(),
+                      () => setState(() => _currentPage = p),
+                      true,
+                      isActive: p == safePage,
+                    ),
+                _buildPageButton(
+                  '>',
+                  () => setState(() => _currentPage = safePage + 1),
+                  safePage < totalPages,
+                ),
+                _buildPageButton(
+                  'Last',
+                  () => setState(() => _currentPage = totalPages),
+                  safePage < totalPages,
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageButton(
+    String label,
+    VoidCallback onTap,
+    bool enabled, {
+    bool isActive = false,
+  }) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: enabled && !isActive ? onTap : null,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: isActive ? theme.colorScheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+            color: isActive
+                ? theme.colorScheme.onPrimary
+                : enabled
+                    ? theme.colorScheme.onSurface
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+          ),
         ),
       ),
     );

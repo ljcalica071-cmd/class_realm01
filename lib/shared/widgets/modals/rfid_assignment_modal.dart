@@ -123,6 +123,7 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
     );
 
     // Also subscribe to ESP32 hardware pending scans while modal is open
+    _setRfidLinkingMode(isActive: true);
     _subscribeToHardwarePendingScans();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -134,6 +135,23 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
         );
       }
     });
+  }
+
+  Future<void> _setRfidLinkingMode({required bool isActive}) async {
+    try {
+      await Supabase.instance.client.from('rfid_linking_mode').upsert({
+        'id': 'GLOBAL',
+        'is_active': isActive,
+        'target_student_id': isActive ? widget.studentId : null,
+        'expires_at': DateTime.now()
+            .toUtc()
+            .add(const Duration(minutes: 2))
+            .toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    } catch (_) {
+      // Safe fallback when Supabase is not initialized in widget tests
+    }
   }
 
   void _subscribeToHardwarePendingScans() {
@@ -175,6 +193,7 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
 
   @override
   void dispose() {
+    _setRfidLinkingMode(isActive: false);
     if (_pendingScanChannel != null) {
       try {
         Supabase.instance.client.removeChannel(_pendingScanChannel!);
@@ -317,32 +336,23 @@ class _RfidAssignmentModalState extends State<RfidAssignmentModal> {
       );
       if (!mounted) return;
 
-      bool forceReassign = false;
       if (conflict.isTaken) {
         final ownerLabel =
             (conflict.existingStudentName != null &&
                 conflict.existingStudentName!.trim().isNotEmpty)
             ? conflict.existingStudentName!.trim()
             : 'another student';
-        final reassignConfirmed = await AppModals.showConfirmDialog(
-          context: context,
-          title: 'Reassign RFID Card?',
-          message:
-              'RFID card $newUid is currently assigned to $ownerLabel. Reassign it to ${widget.studentName}?',
-          confirmLabel: 'Reassign Card',
-          confirmColor: AppTheme.catOrange,
-        );
-        if (reassignConfirmed != true || !mounted) {
-          setState(() => _isSubmitting = false);
-          return;
-        }
-        forceReassign = true;
+        setState(() {
+          _isSubmitting = false;
+          _uidError =
+              'Wrong card: RFID card $newUid is already owned by $ownerLabel. Please tap an unassigned card.';
+        });
+        return;
       }
 
       await _repository.assignStudentRfid(
         studentId: widget.studentId,
         rfidUid: newUid,
-        forceReassign: forceReassign,
       );
       AppDataCache.instance.invalidatePrefix('teacher_students_');
 

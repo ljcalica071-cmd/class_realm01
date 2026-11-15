@@ -171,6 +171,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   bool _isSilentlySyncing = false;
 
   String? _inlineLinkingStudentId;
+  DateTime? _inlineLinkingStartedAt;
 
   final GlobalKey<AttendanceHistoryAnalyticsViewState> _analyticsViewKey =
       GlobalKey<AttendanceHistoryAnalyticsViewState>();
@@ -237,6 +238,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
   @override
   void dispose() {
+    if (_inlineLinkingStudentId != null) {
+      unawaited(_setRfidLinkingMode(isActive: false));
+    }
     PhoneNfcService.instance.stopNfcCapture();
 
     HardwareKeyboard.instance.removeHandler(_handleGlobalHardwareKey);
@@ -247,6 +251,27 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     _scannerFocusNode.dispose();
 
     super.dispose();
+  }
+
+  Future<void> _setRfidLinkingMode({
+    required bool isActive,
+    String? targetStudentId,
+  }) async {
+    try {
+      await Supabase.instance.client.from('rfid_linking_mode').upsert({
+        'id': 'GLOBAL',
+        'is_active': isActive,
+        'target_student_id': isActive ? targetStudentId : null,
+        'subject_offering_id': _selectedSubjectId,
+        'expires_at': DateTime.now()
+            .toUtc()
+            .add(const Duration(minutes: 2))
+            .toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    } catch (_) {
+      // Safe no-op in offline or widget test environments
+    }
   }
 
   // ===========================================================================
@@ -599,12 +624,15 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     if (scannedUid == null || scannedUid.isEmpty) return;
 
     // If teacher is currently waiting to link a specific student inline
-
     if (_inlineLinkingStudentId != null) {
       final targetId = _inlineLinkingStudentId!;
 
-      setState(() => _inlineLinkingStudentId = null);
+      setState(() {
+        _inlineLinkingStudentId = null;
+        _inlineLinkingStartedAt = null;
+      });
 
+      unawaited(_setRfidLinkingMode(isActive: false));
       unawaited(_assignRfidDirectly(targetId, scannedUid));
     } else {
       setState(() {
@@ -886,36 +914,13 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       final today = DateTime(now.year, now.month, now.day);
       final targetDay = DateTime(date.year, date.month, date.day);
       final isPastDay = targetDay.isBefore(today);
-      final isToday = targetDay.isAtSameMomentAs(today);
-
-      bool isClassEndedToday = false;
-      if (isToday &&
-          scheduleStatus.hasPlottedScheduleAnyDay &&
-          scheduleStatus.isScheduledOnDate &&
-          scheduleStatus.endTime != null) {
-        final currentMins = now.hour * 60 + now.minute;
-        final endMins = SupabaseAttendanceRepository.parseTimeToMinutes(
-          scheduleStatus.endTime,
-        );
-        final startMins = SupabaseAttendanceRepository.parseTimeToMinutes(
-          scheduleStatus.startTime,
-        );
-        final absentCutoffMins = startMins != null
-            ? startMins + scheduleStatus.cutoffConfig.absentCutoffMins
-            : null;
-
-        if (endMins != null && currentMins >= endMins) {
-          isClassEndedToday = true;
-        } else if (absentCutoffMins != null && currentMins >= absentCutoffMins) {
-          isClassEndedToday = true;
-        }
-      }
 
       var effectiveRecords = List<AttendanceWorkspaceRecord>.from(
         rosterResult.records,
       );
 
-      if ((isPastDay || isClassEndedToday) &&
+      // Only auto-finalize past dates; today's unmarked students are handled by the 11:59 PM DB cron job
+      if (isPastDay &&
           !scheduleStatus.isHoliday &&
           scheduleStatus.hasPlottedScheduleAnyDay &&
           (!scheduleStatus.isLockedByDefault || effectiveRecords.isNotEmpty)) {
@@ -1063,26 +1068,48 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     _isSilentlySyncing = true;
     try {
       final queuedBefore = LocalStorageService.getOfflineAttendanceQueue().length;
-      int syncedCount = 0;
       if (queuedBefore > 0) {
-        if (mounted && _isOffline) {
-          setState(() {
-            _inlineNotice = _WorkspaceInlineNotice(
-              tone: _WorkspaceNoticeTone.info,
-              title: '[ SYNCING TO CLOUD ] UPLOADING...',
-              message:
-                  'Syncing $queuedBefore offline attendance scan${queuedBefore == 1 ? '' : 's'} to cloud...',
-              code: 'SYNCING_QUEUE',
-            );
-          });
-        }
-        syncedCount = await _repository
+        await _repository
             .syncOfflineAttendanceQueue()
             .catchError((_) => 0);
       }
 
       final offeringId = _selectedSubjectId!;
       final date = _attendanceSelectedDate;
+
+      // Fallback check for inline RFID linking scans in case WebSocket packet was dropped
+      if (_inlineLinkingStudentId != null) {
+        try {
+          final cutoffTime = (_inlineLinkingStartedAt ??
+                  DateTime.now().subtract(const Duration(seconds: 10)))
+              .toUtc()
+              .toIso8601String();
+          final pendingRows = await Supabase.instance.client
+              .from('rfid_pending_scans')
+              .select('rfid_uid, scanned_at')
+              .gte('scanned_at', cutoffTime)
+              .order('scanned_at', ascending: false)
+              .limit(1);
+          if (pendingRows.isNotEmpty &&
+              mounted &&
+              _inlineLinkingStudentId != null) {
+            final latestUid = pendingRows.first['rfid_uid']
+                ?.toString()
+                .trim()
+                .toUpperCase();
+            if (latestUid != null && latestUid.isNotEmpty) {
+              final targetId = _inlineLinkingStudentId!;
+              setState(() {
+                _inlineLinkingStudentId = null;
+                _inlineLinkingStartedAt = null;
+              });
+              unawaited(_setRfidLinkingMode(isActive: false));
+              unawaited(_assignRfidDirectly(targetId, latestUid));
+            }
+          }
+        } catch (_) {}
+      }
+
       AppDataCache.instance.invalidatePrefix('attendance_workspace_');
       final res = await _repository.getAttendanceRosterAndDateRecords(
         subjectOfferingId: offeringId,
@@ -1096,18 +1123,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         return;
       }
 
-      if (_isOffline || syncedCount > 0) {
+      if (_isOffline) {
         setState(() {
           _isOffline = false;
-          if (syncedCount > 0) {
-            _inlineNotice = _WorkspaceInlineNotice(
-              tone: _WorkspaceNoticeTone.success,
-              title: '[ SYNC COMPLETE ] ALL SYNCED!',
-              message:
-                  'Uploaded $syncedCount offline attendance log${syncedCount == 1 ? '' : 's'} to cloud • Student & Parent Portals Updated.',
-              code: 'SYNC_COMPLETE',
-            );
-          }
         });
       }
 
@@ -1324,8 +1342,12 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
           if (_inlineLinkingStudentId != null) {
             final targetId = _inlineLinkingStudentId!;
 
-            setState(() => _inlineLinkingStudentId = null);
+            setState(() {
+              _inlineLinkingStudentId = null;
+              _inlineLinkingStartedAt = null;
+            });
 
+            unawaited(_setRfidLinkingMode(isActive: false));
             unawaited(_assignRfidDirectly(targetId, rawScanned));
 
             return true;
@@ -1379,6 +1401,17 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
     String deviceId = 'USB_SCANNER',
   }) async {
+    if (_inlineLinkingStudentId != null) {
+      final targetId = _inlineLinkingStudentId!;
+      setState(() {
+        _inlineLinkingStudentId = null;
+        _inlineLinkingStartedAt = null;
+      });
+      unawaited(_setRfidLinkingMode(isActive: false));
+      await _assignRfidDirectly(targetId, scannedUid);
+      return;
+    }
+
     if (_selectedSubjectId == null || _isProcessingScan) return;
 
     if (!_hexUidRegex.hasMatch(scannedUid)) {
@@ -1579,6 +1612,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
               rejectTitle =
                   '[ ENROLLMENT CHECK ] WRONG SECTION — Not in this Class';
               break;
+            case 'CARD_ALREADY_OWNED':
+            case 'ALREADY_REGISTERED':
+              rejectTitle = '[ LINK ERROR ] WRONG CARD — Card Already Assigned';
+              break;
             default:
               rejectTitle = 'RFID Scan Not Recorded';
           }
@@ -1635,8 +1672,12 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         if (_inlineLinkingStudentId != null) {
           final targetId = _inlineLinkingStudentId!;
 
-          setState(() => _inlineLinkingStudentId = null);
+          setState(() {
+            _inlineLinkingStudentId = null;
+            _inlineLinkingStartedAt = null;
+          });
 
+          unawaited(_setRfidLinkingMode(isActive: false));
           unawaited(_assignRfidDirectly(targetId, scannedUid));
         } else if (_selectedAttendanceView == 'Take Attendance' &&
             _selectedSubjectId != null) {
@@ -1663,6 +1704,8 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
   }
 
   Future<void> _assignRfidDirectly(String studentId, String scannedUid) async {
+    unawaited(_setRfidLinkingMode(isActive: false));
+
     final matched = _rosterStudents.cast<AttendanceRosterStudent?>().firstWhere(
       (s) => s?.studentId == studentId,
       orElse: () => null,
@@ -1671,7 +1714,6 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     final studentName = matched?.displayName ?? studentId;
 
     // Check conflict against loaded roster
-
     final alreadyAssignedStudent = _rosterStudents
         .cast<AttendanceRosterStudent?>()
         .firstWhere(
@@ -1685,14 +1727,16 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
     if (alreadyAssignedStudent != null) {
       if (!mounted) return;
-
+      _triggerScanHaptic(pattern: 'error');
+      final ownerName = alreadyAssignedStudent.displayName;
       setState(() {
         _inlineNotice = _WorkspaceInlineNotice(
-          tone: _WorkspaceNoticeTone.warning,
+          tone: _WorkspaceNoticeTone.error,
 
-          title: 'Card Already Assigned',
+          title: '[ LINK ERROR ] WRONG CARD — Card Already Assigned',
 
-          message: 'Card already assigned.',
+          message:
+              'RFID card $scannedUid is already owned by $ownerName. Please tap an unassigned card for $studentName.',
 
           code: 'ALREADY_REGISTERED',
         );
@@ -1702,7 +1746,6 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     }
 
     // Check conflict across the entire school
-
     try {
       final conflict = await _repository.checkRfidUidConflict(
         rfidUid: scannedUid,
@@ -1712,14 +1755,20 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
       if (conflict.isTaken) {
         if (!mounted) return;
-
+        _triggerScanHaptic(pattern: 'error');
+        final ownerName =
+            (conflict.existingStudentName != null &&
+                conflict.existingStudentName!.trim().isNotEmpty)
+            ? conflict.existingStudentName!.trim()
+            : 'another student';
         setState(() {
           _inlineNotice = _WorkspaceInlineNotice(
-            tone: _WorkspaceNoticeTone.warning,
+            tone: _WorkspaceNoticeTone.error,
 
-            title: 'Card Already Assigned',
+            title: '[ WRONG CARD ] CARD ALREADY ASSIGNED',
 
-            message: 'Card already assigned.',
+            message:
+                'RFID card $scannedUid is already owned by $ownerName. Please tap an unassigned card for $studentName.',
 
             code: 'ALREADY_REGISTERED',
           );
@@ -1737,6 +1786,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       );
 
       if (!mounted) return;
+      _triggerScanHaptic(pattern: 'present');
 
       setState(() {
         _rosterStudents = _rosterStudents
@@ -1750,13 +1800,14 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         _inlineNotice = _WorkspaceInlineNotice(
           tone: _WorkspaceNoticeTone.success,
 
-          title: 'RFID Card Linked',
+          title: '[ CARD LINKED ] LINKED OK! ($scannedUid)',
 
-          message: 'Linked to $studentName.',
+          message: 'Successfully linked RFID card $scannedUid to $studentName.',
         );
       });
     } catch (e) {
       if (!mounted) return;
+      _triggerScanHaptic(pattern: 'error');
 
       setState(() {
         _inlineNotice = _WorkspaceInlineNotice(
@@ -1904,9 +1955,136 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         title: 'Cutoff Rules Saved',
 
         message:
-            'Present grace: +${updated.presentGraceMins}m • Late cutoff: +${updated.lateCutoffMins}m • Auto-Absent: +${updated.absentCutoffMins}m.',
+            'Scan opens: -${updated.presentStartMinsBefore}m • Present grace: +${updated.presentGraceMins}m • Late cutoff: +${updated.lateCutoffMins}m.',
       );
     });
+  }
+
+  Future<void> _openSuspendClassDialog() async {
+    if (_selectedSubjectId == null) return;
+
+    final readableDate = _formatReadableDate(_attendanceSelectedDate);
+    final dateStr = _formatDate(_attendanceSelectedDate);
+
+    final reason = await _SuspendClassDialog.show(
+      context,
+      readableDate: readableDate,
+      subjectLabel: _selectedSubjectLabel,
+    );
+
+    if (reason == null || reason.trim().isEmpty || !mounted) return;
+    final cleanReason = reason.trim();
+
+    try {
+      final client = Supabase.instance.client;
+
+      // 1. Upsert into school_holidays so RFID & EOD Auto-Absent are strictly blocked for this date
+      await client.from('school_holidays').upsert(
+        {
+          'holiday_date': dateStr,
+          'holiday_name': cleanReason,
+          'is_active': true,
+        },
+        onConflict: 'holiday_date',
+      );
+
+      // 2. Clear any attendance records already saved for this date
+      await _repository.clearAttendanceForDate(
+        subjectOfferingId: _selectedSubjectId!,
+        date: _attendanceSelectedDate,
+      );
+
+      // 3. Ensure notification to Students & Parents exists (if not already inserted by DB trigger)
+      final recentCheck = await client
+          .from('notifications')
+          .select('id')
+          .ilike('title', '%$cleanReason%')
+          .gte(
+            'created_at',
+            DateTime.now()
+                .toUtc()
+                .subtract(const Duration(minutes: 2))
+                .toIso8601String(),
+          )
+          .limit(1);
+
+      if ((recentCheck as List).isEmpty) {
+        await client.from('notifications').insert({
+          'title': 'No Classes / Class Suspension: $cleanReason',
+          'message':
+              'Classes and RFID attendance are suspended on $readableDate ($cleanReason). All students are excused and no auto-absent will be recorded for this date.',
+          'notification_type': 'announcement',
+          'target_audience': 'students_parents',
+          'is_archived': false,
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+        });
+      }
+
+      if (!mounted) return;
+
+      await _loadRosterAndRecords(_selectedSubjectId!, _attendanceSelectedDate);
+      if (!mounted) return;
+
+      setState(() {
+        _inlineNotice = _WorkspaceInlineNotice(
+          tone: _WorkspaceNoticeTone.info,
+          title: 'Class Suspended ($cleanReason)',
+          message:
+              'Auto-absent is disabled for $readableDate and Students & Parents have been notified.',
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      await AppModals.showErrorDialog(
+        context: context,
+        title: 'Failed to Suspend Class',
+        message: e.toString(),
+      );
+    }
+  }
+
+  Future<void> _handleLiftSuspension() async {
+    if (_selectedSubjectId == null) return;
+
+    final readableDate = _formatReadableDate(_attendanceSelectedDate);
+    final dateStr = _formatDate(_attendanceSelectedDate);
+
+    final confirmed = await AppModals.showConfirmDialog(
+      context: context,
+      title: 'Resume Class on $readableDate?',
+      message:
+          'This will lift the class suspension/holiday lock for $readableDate ($dateStr) and re-enable attendance recording and RFID scanning.',
+      confirmLabel: 'Resume Class',
+      confirmColor: AppTheme.catTeal,
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await Supabase.instance.client
+          .from('school_holidays')
+          .update({'is_active': false})
+          .eq('holiday_date', dateStr);
+
+      if (!mounted) return;
+      await _loadRosterAndRecords(_selectedSubjectId!, _attendanceSelectedDate);
+      if (!mounted) return;
+
+      setState(() {
+        _inlineNotice = _WorkspaceInlineNotice(
+          tone: _WorkspaceNoticeTone.success,
+          title: 'Class Suspension Lifted',
+          message: 'Attendance recording is now active for $readableDate.',
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      await AppModals.showErrorDialog(
+        context: context,
+        title: 'Failed to Resume Class',
+        message: e.toString(),
+      );
+    }
   }
 
   Future<void> _confirmMakeupOverride() async {
@@ -2624,12 +2802,36 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
                   linkingStudentId: _inlineLinkingStudentId,
 
-                  onStartLinkingRfid: (student) => setState(
-                    () => _inlineLinkingStudentId = student.studentId,
-                  ),
+                  onStartLinkingRfid: (student) {
+                    setState(() {
+                      _inlineLinkingStudentId = student.studentId;
+                      _inlineLinkingStartedAt = DateTime.now();
+                      _inlineNotice = _WorkspaceInlineNotice(
+                        tone: _WorkspaceNoticeTone.info,
+                        title: 'RFID Linking Mode Active — ${student.displayName}',
+                        message:
+                            'Tap an unassigned RFID card on the scanner to link to ${student.displayName}. Attendance recording is paused while linking.',
+                        code: 'LINKING_MODE',
+                      );
+                    });
+                    unawaited(
+                      _setRfidLinkingMode(
+                        isActive: true,
+                        targetStudentId: student.studentId,
+                      ),
+                    );
+                  },
 
-                  onCancelLinkingRfid: () =>
-                      setState(() => _inlineLinkingStudentId = null),
+                  onCancelLinkingRfid: () {
+                    setState(() {
+                      _inlineLinkingStudentId = null;
+                      _inlineLinkingStartedAt = null;
+                      if (_inlineNotice?.code == 'LINKING_MODE') {
+                        _inlineNotice = null;
+                      }
+                    });
+                    unawaited(_setRfidLinkingMode(isActive: false));
+                  },
 
                   onSaveAttendance: _isEffectivelyLocked ? null : _saveBatch,
 
@@ -2869,7 +3071,21 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             crossAxisAlignment: WrapCrossAlignment.center,
 
             children: [
-              if (_selectedSubjectId != null)
+              if (_selectedSubjectId != null) ...[
+                if (_scheduleStatus?.isHoliday == true)
+                  AppSecondaryButton(
+                    label: 'Resume Class',
+                    icon: LucideIcons.calendarCheck,
+                    height: 38,
+                    onPressed: _handleLiftSuspension,
+                  )
+                else
+                  AppSecondaryButton(
+                    label: 'Suspend Class',
+                    icon: LucideIcons.calendarOff,
+                    height: 38,
+                    onPressed: _openSuspendClassDialog,
+                  ),
                 AppSecondaryButton(
                   label: 'Cutoff Rules',
 
@@ -2879,6 +3095,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
                   onPressed: _openCutoffRulesDialog,
                 ),
+              ],
 
               // Mode Toggle
               Container(
@@ -4614,6 +4831,283 @@ class _SelectStudentForRfidDialogState
 
                   onPressed: () => Navigator.of(context).pop(null),
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SuspendClassDialog extends StatefulWidget {
+  final String readableDate;
+  final String subjectLabel;
+
+  const _SuspendClassDialog({
+    required this.readableDate,
+    required this.subjectLabel,
+  });
+
+  static Future<String?> show(
+    BuildContext context, {
+    required String readableDate,
+    required String subjectLabel,
+  }) {
+    final theme = Theme.of(context);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => Theme(
+        data: theme,
+        child: _SuspendClassDialog(
+          readableDate: readableDate,
+          subjectLabel: subjectLabel,
+        ),
+      ),
+    );
+  }
+
+  @override
+  State<_SuspendClassDialog> createState() => _SuspendClassDialogState();
+}
+
+class _SuspendClassDialogState extends State<_SuspendClassDialog> {
+  final TextEditingController _reasonCtrl = TextEditingController(
+    text: 'Class Suspension (Typhoon / Heavy Rain)',
+  );
+  String? _inlineError;
+
+  static const List<String> _presets = [
+    'Class Suspension (Typhoon / Heavy Rain)',
+    'Sudden Class Suspension',
+    'School Holiday / No Classes',
+  ];
+
+  @override
+  void dispose() {
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final text = _reasonCtrl.text.trim();
+    if (text.isEmpty) {
+      setState(() => _inlineError = 'Please enter a reason for the suspension.');
+      return;
+    }
+    Navigator.of(context).pop(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      backgroundColor: theme.colorScheme.surface,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.catOrange.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      LucideIcons.calendarOff,
+                      color: AppTheme.catOrange,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Suspend Class (${widget.readableDate})',
+                          style: TextStyle(
+                            fontSize: 16.5,
+                            fontWeight: FontWeight.w800,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.subjectLabel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.65,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'This will mark ${widget.readableDate} as a suspended/holiday session, prevent auto-absent from marking students absent, and automatically send an alert to Students & Parents.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.45,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Quick Reason Presets',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _presets.map((preset) {
+                  final selected = _reasonCtrl.text.trim() == preset;
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      setState(() {
+                        _reasonCtrl.text = preset;
+                        _inlineError = null;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                            : (isDark
+                                  ? Colors.white.withValues(alpha: 0.05)
+                                  : const Color(0xFFF1F5F9)),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: selected
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.12,
+                                ),
+                        ),
+                      ),
+                      child: Text(
+                        preset,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: selected
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Reason / Announcement Title',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _reasonCtrl,
+                onChanged: (_) {
+                  if (_inlineError != null) {
+                    setState(() => _inlineError = null);
+                  } else {
+                    setState(() {});
+                  }
+                },
+                style: TextStyle(
+                  fontSize: 13,
+                  color: theme.colorScheme.onSurface,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'e.g. Class Suspension (Typhoon Signal #2)',
+                  isDense: true,
+                  filled: true,
+                  fillColor: isDark
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : const Color(0xFFF8FAFC),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 11,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(9),
+                    borderSide: BorderSide(
+                      color: _inlineError != null
+                          ? AppTheme.catRed
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.16),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(9),
+                    borderSide: BorderSide(
+                      color: _inlineError != null
+                          ? AppTheme.catRed
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.16),
+                    ),
+                  ),
+                ),
+              ),
+              if (_inlineError != null) ...[
+                const SizedBox(height: 5),
+                Text(
+                  _inlineError!,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: AppTheme.catRed,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppSecondaryButton(
+                      label: 'Cancel',
+                      height: 40,
+                      onPressed: () => Navigator.of(context).pop(null),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: AppPrimaryButton(
+                      label: 'Suspend & Notify',
+                      icon: LucideIcons.bellRing,
+                      height: 40,
+                      onPressed: _submit,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

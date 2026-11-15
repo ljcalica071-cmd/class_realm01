@@ -55,12 +55,10 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
   late final TextEditingController _openBeforeCtrl;
   late final TextEditingController _presentGraceCtrl;
   late final TextEditingController _lateCutoffCtrl;
-  late final TextEditingController _absentCutoffCtrl;
 
   String? _openBeforeError;
   String? _presentGraceError;
   String? _lateCutoffError;
-  String? _absentCutoffError;
 
   bool _isSaving = false;
 
@@ -76,9 +74,6 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
     _lateCutoffCtrl = TextEditingController(
       text: widget.initialConfig.lateCutoffMins.toString(),
     );
-    _absentCutoffCtrl = TextEditingController(
-      text: widget.initialConfig.absentCutoffMins.toString(),
-    );
   }
 
   @override
@@ -86,7 +81,6 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
     _openBeforeCtrl.dispose();
     _presentGraceCtrl.dispose();
     _lateCutoffCtrl.dispose();
-    _absentCutoffCtrl.dispose();
     super.dispose();
   }
 
@@ -95,11 +89,9 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
       _openBeforeCtrl.text = '15';
       _presentGraceCtrl.text = '15';
       _lateCutoffCtrl.text = '45';
-      _absentCutoffCtrl.text = '60';
       _openBeforeError = null;
       _presentGraceError = null;
       _lateCutoffError = null;
-      _absentCutoffError = null;
     });
   }
 
@@ -107,12 +99,10 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
     String? openErr;
     String? graceErr;
     String? lateErr;
-    String? absentErr;
 
     final openVal = int.tryParse(_openBeforeCtrl.text.trim());
     final graceVal = int.tryParse(_presentGraceCtrl.text.trim());
     final lateVal = int.tryParse(_lateCutoffCtrl.text.trim());
-    final absentVal = int.tryParse(_absentCutoffCtrl.text.trim());
 
     if (openVal == null || openVal < 0 || openVal > 60) {
       openErr = 'Enter a whole number between 0 and 60 minutes.';
@@ -122,9 +112,6 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
     }
     if (lateVal == null || lateVal < 1 || lateVal > 180) {
       lateErr = 'Enter a whole number between 1 and 180 minutes.';
-    }
-    if (absentVal == null || absentVal < 1 || absentVal > 240) {
-      absentErr = 'Enter a whole number between 1 and 240 minutes.';
     }
 
     // Relational checks once individual numbers are within valid range
@@ -138,39 +125,26 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
       }
     }
 
-    if (lateErr == null &&
-        absentErr == null &&
-        lateVal != null &&
-        absentVal != null) {
-      if (lateVal > absentVal) {
-        absentErr =
-            'Auto-Absent cutoff must be greater than or equal to Late cutoff ($lateVal mins).';
-      }
-    }
-
     setState(() {
       _openBeforeError = openErr;
       _presentGraceError = graceErr;
       _lateCutoffError = lateErr;
-      _absentCutoffError = absentErr;
     });
 
-    return openErr == null &&
-        graceErr == null &&
-        lateErr == null &&
-        absentErr == null;
+    return openErr == null && graceErr == null && lateErr == null;
   }
 
   Future<void> _handleSave() async {
     if (_isSaving) return;
     if (!_validateFields()) return;
 
+    final lateMins = int.parse(_lateCutoffCtrl.text.trim());
     final updated = AttendanceCutoffConfig(
       subjectOfferingId: widget.initialConfig.subjectOfferingId,
       presentStartMinsBefore: int.parse(_openBeforeCtrl.text.trim()),
       presentGraceMins: int.parse(_presentGraceCtrl.text.trim()),
-      lateCutoffMins: int.parse(_lateCutoffCtrl.text.trim()),
-      absentCutoffMins: int.parse(_absentCutoffCtrl.text.trim()),
+      lateCutoffMins: lateMins,
+      absentCutoffMins: lateMins,
     );
 
     if (widget.repository == null) {
@@ -202,7 +176,6 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
     final openPreview = int.tryParse(_openBeforeCtrl.text.trim()) ?? 15;
     final gracePreview = int.tryParse(_presentGraceCtrl.text.trim()) ?? 15;
     final latePreview = int.tryParse(_lateCutoffCtrl.text.trim()) ?? 45;
-    final absentPreview = int.tryParse(_absentCutoffCtrl.text.trim()) ?? 60;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -346,16 +319,6 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
                       color: AppTheme.catOrange,
                       isDark: isDark,
                     ),
-                    Icon(
-                      LucideIcons.arrowRight,
-                      size: 12,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                    ),
-                    _buildWindowPill(
-                      label: '+${absentPreview}m Auto-Absent',
-                      color: AppTheme.catRed,
-                      isDark: isDark,
-                    ),
                   ],
                 ),
               ),
@@ -406,7 +369,8 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
                 theme: theme,
                 isDark: isDark,
                 label: 'Late Cutoff After Start (mins)',
-                helper: 'Allowed range: 1–180 mins; must be greater than Present grace period',
+                helper:
+                    'Allowed range: 1–180 mins; must be greater than Present grace period',
                 controller: _lateCutoffCtrl,
                 errorText: _lateCutoffError,
                 accentColor: AppTheme.catOrange,
@@ -414,28 +378,7 @@ class _AttendanceCutoffDialogState extends State<AttendanceCutoffDialog> {
                 onChanged: (_) {
                   setState(() {
                     _lateCutoffError = null;
-                    if (_absentCutoffError != null &&
-                        _absentCutoffError!.contains('Late cutoff')) {
-                      _absentCutoffError = null;
-                    }
                   });
-                },
-              ),
-              const SizedBox(height: 14),
-
-              // 4. Auto-Absent Cutoff After Start
-              _buildMinutesField(
-                theme: theme,
-                isDark: isDark,
-                label: 'Auto-Absent Cutoff After Start (mins)',
-                helper:
-                    'Allowed range: 1–240 mins; must be at least Late cutoff',
-                controller: _absentCutoffCtrl,
-                errorText: _absentCutoffError,
-                accentColor: AppTheme.catRed,
-                icon: LucideIcons.userX,
-                onChanged: (_) {
-                  setState(() => _absentCutoffError = null);
                 },
               ),
 

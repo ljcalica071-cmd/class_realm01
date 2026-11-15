@@ -50,6 +50,28 @@ ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 ALTER TABLE public.rfid_pending_scans
 ADD COLUMN IF NOT EXISTS subject_offering_id uuid;
 
+CREATE TABLE IF NOT EXISTS public.rfid_linking_mode (
+    id varchar(32) PRIMARY KEY DEFAULT 'GLOBAL',
+    is_active boolean NOT NULL DEFAULT false,
+    target_student_id varchar(64),
+    subject_offering_id uuid,
+    expires_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.rfid_linking_mode ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "rfid_linking_mode_all_access" ON public.rfid_linking_mode;
+
+CREATE POLICY "rfid_linking_mode_all_access"
+ON public.rfid_linking_mode
+FOR ALL
+TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+GRANT ALL ON TABLE public.rfid_linking_mode TO anon, authenticated, service_role;
+
 -- ============================================================================
 -- PART 2: Fix UNRESTRICTED on public.school_holidays
 -- ============================================================================
@@ -363,10 +385,9 @@ DECLARE
     v_holiday_name varchar(120);
     v_student_id varchar(30);
     v_student_name text;
-    v_student_full_name text;
-    v_subject_name text;
-    v_section_name text;
-    v_subject_label text;
+    v_is_linking_mode boolean := false;
+    v_linking_target_id varchar(64);
+    v_linking_target_name text;
     v_has_any_schedule boolean := false;
     v_schedule record;
     v_cutoffs record;
@@ -404,9 +425,8 @@ BEGIN
     -- 2. STUDENT LOOKUP BY RFID UID (Single RFID Card across all subjects)
     SELECT
         sp.student_id,
-        TRIM(sp.last_name || ', ' || sp.first_name),
-        TRIM(sp.first_name || ' ' || sp.last_name)
-    INTO v_student_id, v_student_name, v_student_full_name
+        TRIM(sp.last_name || ', ' || sp.first_name)
+    INTO v_student_id, v_student_name
     FROM public.student_profiles sp
     WHERE sp.rfid_uid IS NOT NULL
       AND (
@@ -417,6 +437,65 @@ BEGIN
           )
       )
     LIMIT 1;
+
+    -- 2B. TEACHER RFID LINKING MODE GUARD (Strictly Link-Only: NEVER mark Present/Late/Absent while linking!)
+    SELECT is_active, target_student_id
+    INTO v_is_linking_mode, v_linking_target_id
+    FROM public.rfid_linking_mode
+    WHERE id = 'GLOBAL'
+      AND is_active = true
+      AND expires_at > now()
+    LIMIT 1;
+
+    IF COALESCE(v_is_linking_mode, false) = true THEN
+        -- Always broadcast the tapped card to rfid_pending_scans so the Teacher Portal receives it immediately
+        INSERT INTO public.rfid_pending_scans (rfid_uid, device_id, subject_offering_id, scanned_at, is_claimed)
+        VALUES (v_normalized_uid, v_effective_device, p_subject_offering_id, now(), false);
+
+        -- Row 15: Card is already owned by another student (or the same student)
+        IF v_student_id IS NOT NULL THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'code', 'CARD_ALREADY_OWNED',
+                'rfid_uid', v_normalized_uid,
+                'student_id', v_student_id,
+                'student_name', v_student_name,
+                'message', 'Wrong Card • Owned by ' || v_student_name
+            );
+        END IF;
+
+        -- Row 16: Card is unassigned! If a target_student_id is set, link it directly in DB and close linking mode
+        IF v_linking_target_id IS NOT NULL AND TRIM(v_linking_target_id) <> '' THEN
+            UPDATE public.student_profiles
+            SET rfid_uid = v_normalized_uid
+            WHERE student_id = v_linking_target_id
+            RETURNING TRIM(last_name || ', ' || first_name)
+            INTO v_linking_target_name;
+
+            UPDATE public.rfid_linking_mode
+            SET is_active = false,
+                updated_at = now()
+            WHERE id = 'GLOBAL';
+
+            IF v_linking_target_name IS NOT NULL THEN
+                RETURN jsonb_build_object(
+                    'success', true,
+                    'code', 'CARD_LINKED_SUCCESS',
+                    'rfid_uid', v_normalized_uid,
+                    'student_id', v_linking_target_id,
+                    'student_name', v_linking_target_name,
+                    'message', 'Linked RFID card ' || v_normalized_uid || ' to ' || v_linking_target_name || '.'
+                );
+            END IF;
+        END IF;
+
+        RETURN jsonb_build_object(
+            'success', false,
+            'code', 'UNREGISTERED_CARD',
+            'rfid_uid', v_normalized_uid,
+            'message', 'UID: ' || v_normalized_uid || ' • Linked in Teacher App.'
+        );
+    END IF;
 
     IF v_student_id IS NULL THEN
         -- Record into rfid_pending_scans so the teacher's UI can link the tapped card immediately
@@ -677,41 +756,6 @@ BEGIN
     )
     ON CONFLICT (student_id, subject_offering_id, attendance_date) DO NOTHING;
 
-    -- 8. INSERT SCOPED NOTIFICATION FOR STUDENT & LINKED PARENT
-    BEGIN
-        SELECT s.subject_name, sec.section_name
-        INTO v_subject_name, v_section_name
-        FROM public.subject_offerings so
-        LEFT JOIN public.subjects s ON s.id = so.subject_id
-        LEFT JOIN public.sections sec ON sec.id = so.section_id
-        WHERE so.id = v_effective_offering_id
-        LIMIT 1;
-
-        v_subject_label := COALESCE(NULLIF(TRIM(v_subject_name), ''), 'Class Session')
-            || ' (' || COALESCE(NULLIF(TRIM(v_section_name), ''), 'General') || ')';
-
-        INSERT INTO public.notifications (
-            title,
-            message,
-            notification_type,
-            target_audience,
-            is_archived,
-            created_at
-        ) VALUES (
-            'RFID Attendance: ' || UPPER(v_calculated_status) || ' — ' || COALESCE(NULLIF(TRIM(v_subject_name), ''), 'Class Session'),
-            'Attendance check-in for ' || COALESCE(v_student_full_name, v_student_name) || ' in ' || v_subject_label || ': Marked '
-                || UPPER(v_calculated_status) || ' at ' || to_char(v_scan_time, 'HH12:MI AM')
-                || ' (' || to_char(v_attendance_date, 'Mon DD, YYYY') || ').',
-            'attendance',
-            'students_parents',
-            false,
-            now()
-        );
-    EXCEPTION WHEN OTHERS THEN
-        -- Never block attendance recording if notification insert encounters any issue
-        NULL;
-    END;
-
     RETURN jsonb_build_object(
         'success', true,
         'code', 'RECORDED_SUCCESS',
@@ -730,8 +774,12 @@ $$;
 GRANT EXECUTE ON FUNCTION public.record_rfid_attendance(varchar, uuid, timestamptz, varchar) TO anon, authenticated, service_role;
 
 -- ============================================================================
--- PART 8: Automatic Broadcast Notification on School Holiday / Class Suspension
+-- PART 8: Automatic Notification to Students & Parents on Class Suspension / Holiday
+-- Triggered when Teacher clicks "Suspend Class" in Attendance Workspace (or Admin adds a holiday)
 -- ============================================================================
+DROP TRIGGER IF EXISTS trg_sync_holiday_from_suspension_broadcast ON public.notifications;
+DROP FUNCTION IF EXISTS public.fn_sync_holiday_from_suspension_broadcast();
+
 CREATE OR REPLACE FUNCTION public.fn_notify_school_holiday()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -739,6 +787,10 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+    IF pg_trigger_depth() > 1 THEN
+        RETURN NEW;
+    END IF;
+
     IF (TG_OP = 'INSERT' AND NEW.is_active = true)
        OR (TG_OP = 'UPDATE' AND NEW.is_active = true AND COALESCE(OLD.is_active, false) = false) THEN
         INSERT INTO public.notifications (
@@ -749,12 +801,12 @@ BEGIN
             is_archived,
             created_at
         ) VALUES (
-            'No Classes / School Suspension: ' || COALESCE(NEW.holiday_name, 'School Holiday'),
+            'No Classes / Class Suspension: ' || COALESCE(NEW.holiday_name, 'School Holiday'),
             'Classes and RFID attendance are suspended on ' || to_char(NEW.holiday_date, 'FMMonth DD, YYYY')
-                || ' due to ' || COALESCE(NEW.holiday_name, 'a recognized school holiday')
-                || '. All students are excused and no absences will be recorded for this date.',
+                || ' (' || COALESCE(NEW.holiday_name, 'Class Suspension')
+                || '). All students are excused and no auto-absent will be recorded for this date.',
             'announcement',
-            'all',
+            'students_parents',
             false,
             now()
         );
@@ -768,5 +820,17 @@ CREATE TRIGGER trg_notify_school_holiday
 AFTER INSERT OR UPDATE ON public.school_holidays
 FOR EACH ROW
 EXECUTE FUNCTION public.fn_notify_school_holiday();
+
+-- Clean up any test RFID attendance tap notifications
+DELETE FROM public.notifications WHERE title LIKE 'RFID Attendance:%';
+
+-- Clean up accidental attendance rows created when testing linking an already-owned card or old future test data
+DELETE FROM public.attendance_records
+WHERE id IN (
+    '15da8dd4-6c15-48e8-8eb5-408a0666ba84',
+    '45338558-1d21-45e1-8401-547f3e94bb77',
+    '5e9cc7d1-8140-4e34-a6e9-cc1805719fb5',
+    'fe0c2c87-a232-425c-be49-77f233c4fa38'
+) OR attendance_date > (now() AT TIME ZONE 'Asia/Manila')::date;
 
 COMMIT;

@@ -1011,12 +1011,14 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         final secMap = offeringRes['sections'];
         if (secMap is Map && secMap['section_name'] != null) {
           section = secMap['section_name'].toString().trim();
-        } else if (offeringRes['section'] != null) {
-          section = offeringRes['section'].toString().trim();
+        } else if (offeringRes['section_name'] != null) {
+          section = offeringRes['section_name'].toString().trim();
         }
         final subMap = offeringRes['subjects'];
-        if (subMap is Map) {
-          subjectName = (subMap['subject_name'] ?? subMap['name'] ?? subjectName).toString().trim();
+        if (subMap is Map && subMap['subject_name'] != null) {
+          subjectName = subMap['subject_name'].toString().trim();
+        } else if (offeringRes['subject_name'] != null) {
+          subjectName = offeringRes['subject_name'].toString().trim();
         }
       }
     } catch (_) {}
@@ -1033,28 +1035,15 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
 
         // Strict 3, 6, 10 Absences thresholds per term
         int? threshold;
-        if (totalAbsences == 3) {
-          threshold = 3;
-        } else if (totalAbsences == 6) {
-          threshold = 6;
-        } else if (totalAbsences == 10 || totalAbsences > 10) {
+        if (totalAbsences >= 10) {
           threshold = 10;
+        } else if (totalAbsences >= 6) {
+          threshold = 6;
+        } else if (totalAbsences >= 3) {
+          threshold = 3;
         }
 
         if (threshold == null) continue;
-
-        // Anti-Duplicate Check: Prevent sending multiple alerts for the same threshold
-        final existingCheck = await _client
-            .from('notifications')
-            .select('id')
-            .eq('notification_type', 'attendance')
-            .ilike('title', '%($threshold Absences)%')
-            .ilike('message', '%$subjectName%')
-            .limit(1);
-        if ((existingCheck as List).isNotEmpty) {
-          // Already notified for this threshold
-          continue;
-        }
 
         final profileRes = await _client
             .from('student_profiles')
@@ -1064,6 +1053,19 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         final sName = profileRes != null
             ? '${profileRes['last_name']}, ${profileRes['first_name']}'
             : 'Student';
+
+        // Anti-Duplicate Check per Student + Subject + Threshold
+        final existingCheck = await _client
+            .from('notifications')
+            .select('id')
+            .eq('notification_type', 'attendance')
+            .ilike('title', '$sName ($threshold Absences)%')
+            .ilike('message', '%$subjectName%')
+            .limit(1);
+        if ((existingCheck as List).isNotEmpty) {
+          // Already notified this specific student for this threshold
+          continue;
+        }
 
         final nowIso = DateTime.now().toUtc().toIso8601String();
 

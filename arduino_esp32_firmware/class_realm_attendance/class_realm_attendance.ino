@@ -43,7 +43,7 @@ const char* DEFAULT_PASS = "lmao0000";
 
 // Secure Setup AP Credentials
 const char* PORTAL_AP_NAME = "ClassRealm-Setup";
-const char* PORTAL_AP_PASS = "classrealm_071";
+const char* PORTAL_AP_PASS = "classrealm123";
 
 // =========================================================================
 // INSTANCES & MEMORY STORAGE
@@ -583,13 +583,10 @@ void handleOfflineValidatedScan(String uid) {
 }
 
 // =========================================================================
-// AUTOMATIC OFFLINE QUEUE DRAIN (Master Chart Rows 6 & 7)
+// SILENT BACKGROUND OFFLINE QUEUE DRAIN (No OLED interruption or freeze)
 // =========================================================================
 void syncOfflineQueue() {
   if (WiFi.status() != WL_CONNECTED || offlineQueueCount == 0) return;
-
-  // Row 6: Pagbalik ng WiFi (Habang Nag-sy-sync)
-  showFeedbackScreen("[ SYNCING ]", "UPLOADING...", "Queue: " + String(offlineQueueCount) + " Scans");
 
   prefs.begin("offline_queue", false);
   int successCount = 0;
@@ -611,14 +608,17 @@ void syncOfflineQueue() {
     http.addHeader("apikey", SUPABASE_ANON_KEY);
     http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
     http.addHeader("Content-Type", "application/json");
-    http.setTimeout(3500);
+    http.setTimeout(3000);
 
     String body = "{\"p_rfid_uid\":\"" + uid + "\",\"p_subject_offering_id\":\"" + activeSubjectOfferingId + "\",\"p_scan_timestamp\":\"" + timestamp + "\",\"p_device_id\":\"HARDWARE_ESP32\"}";
     int code = http.POST(body);
     if (code == 200) {
       successCount++;
+    } else if (code >= 400 && code < 500) {
+      // Drop malformed/unrecoverable client errors so queue never gets stuck in an infinite loop
+      Serial.println("[SYNC DROP] Unrecoverable item dropped (HTTP " + String(code) + "): " + record);
     } else {
-      // Keep failed item for next retry
+      // Network/timeout error: keep for next background retry
       String keepKey = "q_" + String(remainingCount);
       if (keepKey != key) {
         prefs.putString(keepKey.c_str(), record);
@@ -626,7 +626,7 @@ void syncOfflineQueue() {
       remainingCount++;
     }
     http.end();
-    delay(40);
+    delay(20);
   }
 
   if (remainingCount == 0) {
@@ -640,10 +640,7 @@ void syncOfflineQueue() {
   prefs.end();
 
   if (successCount > 0) {
-    // Row 7: Tapos na ang Sync
-    buzzOnce();
-    showFeedbackScreen("[ SYNC COMPLETE ]", "ALL SYNCED!", "Uploaded: " + String(successCount) + " Logs");
-    delay(1800);
+    Serial.println("[OFFLINE SYNC] Silently uploaded " + String(successCount) + " queued scan(s).");
   }
   showIdleScreen();
 }
@@ -785,10 +782,20 @@ void processRfidScan(String uid) {
       buzzDenied();
       showFeedbackScreen("[ ENROLLMENT ]", "WRONG SECTION", "Not in this Class");
     }
-    // Generic Fallback
-    else {
+    // Row 15: Card Already Owned by Another Student (Habang Nagli-Link RFID si Teacher)
+    else if (code == "CARD_ALREADY_OWNED" || code == "ALREADY_REGISTERED") {
+      buzzDenied();
+      showFeedbackScreen("[ LINK ERROR ]", "WRONG CARD", "Owned: " + displayName);
+    }
+    // Row 16: Successful Card Linking (Habang Nagli-Link RFID si Teacher)
+    else if (code == "CARD_LINKED_SUCCESS") {
       buzzOnce();
-      showFeedbackScreen("[ VERIFIED ]", "PRESENT", displayName);
+      showFeedbackScreen("[ CARD LINKED ]", "LINKED OK!", displayName);
+    }
+    // Safe Fallback for any unknown error or rejection code
+    else {
+      buzzDenied();
+      showFeedbackScreen("[ SCAN NOTICE ]", "CHECK APP", code.length() > 0 ? code : "Rejected");
     }
   } else {
     Serial.println("[RPC ERROR] HTTP Code: " + String(httpCode));

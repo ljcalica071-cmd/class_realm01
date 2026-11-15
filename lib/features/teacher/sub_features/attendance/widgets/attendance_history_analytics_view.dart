@@ -93,6 +93,7 @@ class AttendanceHistoryAnalyticsViewState
   bool _isLoadingAnalytics = true;
   AttendanceAnalyticsSummary? _analyticsSummary;
   int? _hoveredBreakdownIndex;
+  int? _hoveredTrendIndex;
 
   bool _isLoadingHistory = true;
   List<AttendanceWorkspaceRecord> _historyRows = [];
@@ -1095,20 +1096,59 @@ class AttendanceHistoryAnalyticsViewState
             AnimatedBuilder(
               animation: _chartAnim,
               builder: (context, _) {
-                return SizedBox(
-                  height: 190,
-                  width: double.infinity,
-                  child: CustomPaint(
-                    size: const Size(double.infinity, 190),
-                    painter: TrendChartPainter(
-                      points: points,
-                      presentColor: cPresent,
-                      absentColor: cAbsent,
-                      textColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                      progress: _chartAnim.value,
-                      isDark: isDark,
-                    ),
-                  ),
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+                    final n = points.length;
+
+                    void updateHoverFromDx(double dx) {
+                      if (n == 0 || width <= 0) return;
+                      final int idx;
+                      if (n == 1) {
+                        idx = 0;
+                      } else {
+                        final stepX = width / (n - 1);
+                        idx = (dx / stepX).round().clamp(0, n - 1);
+                      }
+                      if (_hoveredTrendIndex != idx) {
+                        setState(() => _hoveredTrendIndex = idx);
+                      }
+                    }
+
+                    return MouseRegion(
+                      cursor: SystemMouseCursors.precise,
+                      onHover: (e) => updateHoverFromDx(e.localPosition.dx),
+                      onExit: (_) {
+                        if (_hoveredTrendIndex != null) {
+                          setState(() => _hoveredTrendIndex = null);
+                        }
+                      },
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapDown: (d) => updateHoverFromDx(d.localPosition.dx),
+                        onHorizontalDragUpdate: (d) =>
+                            updateHoverFromDx(d.localPosition.dx),
+                        child: SizedBox(
+                          height: 190,
+                          width: double.infinity,
+                          child: CustomPaint(
+                            size: const Size(double.infinity, 190),
+                            painter: TrendChartPainter(
+                              points: points,
+                              presentColor: cPresent,
+                              absentColor: cAbsent,
+                              textColor: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.7,
+                              ),
+                              progress: _chartAnim.value,
+                              isDark: isDark,
+                              hoveredIndex: _hoveredTrendIndex,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -1848,7 +1888,7 @@ class AttendanceHistoryAnalyticsViewState
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        'Section: ${student.section} • ID: ${student.studentId}',
+                                        'Section: ${student.section}',
                                         style: TextStyle(
                                           fontSize: 11.5,
                                           color: theme.colorScheme.onSurface.withValues(
@@ -2870,6 +2910,7 @@ class TrendChartPainter extends CustomPainter {
   final Color textColor;
   final double progress;
   final bool isDark;
+  final int? hoveredIndex;
 
   TrendChartPainter({
     required this.points,
@@ -2878,7 +2919,37 @@ class TrendChartPainter extends CustomPainter {
     required this.textColor,
     this.progress = 1.0,
     this.isDark = false,
+    this.hoveredIndex,
   });
+
+  static Path _buildSmoothLinePath(List<Offset> offsets) {
+    final path = Path();
+    if (offsets.isEmpty) return path;
+    path.moveTo(offsets.first.dx, offsets.first.dy);
+    for (int i = 0; i < offsets.length - 1; i++) {
+      final p0 = offsets[i];
+      final p1 = offsets[i + 1];
+      final midX = (p0.dx + p1.dx) / 2;
+      path.cubicTo(midX, p0.dy, midX, p1.dy, p1.dx, p1.dy);
+    }
+    return path;
+  }
+
+  static Path _buildSmoothAreaPath(List<Offset> offsets, double baseline) {
+    final path = Path();
+    if (offsets.isEmpty) return path;
+    path.moveTo(offsets.first.dx, baseline);
+    path.lineTo(offsets.first.dx, offsets.first.dy);
+    for (int i = 0; i < offsets.length - 1; i++) {
+      final p0 = offsets[i];
+      final p1 = offsets[i + 1];
+      final midX = (p0.dx + p1.dx) / 2;
+      path.cubicTo(midX, p0.dy, midX, p1.dy, p1.dx, p1.dy);
+    }
+    path.lineTo(offsets.last.dx, baseline);
+    path.close();
+    return path;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2925,14 +2996,9 @@ class TrendChartPainter extends CustomPainter {
       absentOffsets.add(Offset(x, yAbs));
     }
 
-    // 1. Draw glowing gradient areas under lines (Glassmorphism fill)
+    // 1. Draw glowing gradient areas under smooth curves (Glassmorphism fill)
     if (presentOffsets.length > 1) {
-      final presentAreaPath = Path()..moveTo(presentOffsets.first.dx, baseline);
-      for (final pt in presentOffsets) {
-        presentAreaPath.lineTo(pt.dx, pt.dy);
-      }
-      presentAreaPath.lineTo(presentOffsets.last.dx, baseline);
-      presentAreaPath.close();
+      final presentAreaPath = _buildSmoothAreaPath(presentOffsets, baseline);
 
       final presentAreaPaint = Paint()
         ..shader = LinearGradient(
@@ -2947,12 +3013,7 @@ class TrendChartPainter extends CustomPainter {
 
       canvas.drawPath(presentAreaPath, presentAreaPaint);
 
-      final absentAreaPath = Path()..moveTo(absentOffsets.first.dx, baseline);
-      for (final pt in absentOffsets) {
-        absentAreaPath.lineTo(pt.dx, pt.dy);
-      }
-      absentAreaPath.lineTo(absentOffsets.last.dx, baseline);
-      absentAreaPath.close();
+      final absentAreaPath = _buildSmoothAreaPath(absentOffsets, baseline);
 
       final absentAreaPaint = Paint()
         ..shader = LinearGradient(
@@ -2968,73 +3029,77 @@ class TrendChartPainter extends CustomPainter {
       canvas.drawPath(absentAreaPath, absentAreaPaint);
     }
 
-    // 2. Stroke lines
+    // 2. Smooth curved stroke lines
     final presentLinePaint = Paint()
       ..color = presentColor
-      ..strokeWidth = 2.5
+      ..strokeWidth = 2.6
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
 
     final absentLinePaint = Paint()
       ..color = absentColor
-      ..strokeWidth = 2.5
+      ..strokeWidth = 2.6
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
 
-    final presentPath = Path();
-    final absentPath = Path();
-
-    for (int i = 0; i < n; i++) {
-      if (i == 0) {
-        presentPath.moveTo(presentOffsets[i].dx, presentOffsets[i].dy);
-        absentPath.moveTo(absentOffsets[i].dx, absentOffsets[i].dy);
-      } else {
-        presentPath.lineTo(presentOffsets[i].dx, presentOffsets[i].dy);
-        absentPath.lineTo(absentOffsets[i].dx, absentOffsets[i].dy);
-      }
-    }
+    final presentPath = _buildSmoothLinePath(presentOffsets);
+    final absentPath = _buildSmoothLinePath(absentOffsets);
 
     canvas.drawPath(presentPath, presentLinePaint);
     canvas.drawPath(absentPath, absentLinePaint);
+
+    // Hover vertical guide line
+    if (hoveredIndex != null && hoveredIndex! >= 0 && hoveredIndex! < n) {
+      final hx = presentOffsets[hoveredIndex!].dx;
+      canvas.drawLine(
+        Offset(hx, topPadding),
+        Offset(hx, baseline),
+        Paint()
+          ..color = textColor.withValues(alpha: isDark ? 0.35 : 0.22)
+          ..strokeWidth = 1.2,
+      );
+    }
 
     // 3. Glowing halo dots & X-axis date labels
     for (int i = 0; i < n; i++) {
       final ptPres = presentOffsets[i];
       final ptAbs = absentOffsets[i];
+      final isHovered = hoveredIndex == i;
 
       // Present Point
       canvas.drawCircle(
         ptPres,
-        5.5,
-        Paint()..color = presentColor.withValues(alpha: 0.25),
+        isHovered ? 8.5 : 5.5,
+        Paint()
+          ..color = presentColor.withValues(alpha: isHovered ? 0.38 : 0.25),
       );
       canvas.drawCircle(
         ptPres,
-        3.5,
+        isHovered ? 5.0 : 3.5,
         Paint()..color = presentColor,
       );
       canvas.drawCircle(
         ptPres,
-        1.5,
+        isHovered ? 2.2 : 1.5,
         Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
       );
 
       // Absent Point
       canvas.drawCircle(
         ptAbs,
-        5.5,
-        Paint()..color = absentColor.withValues(alpha: 0.25),
+        isHovered ? 8.5 : 5.5,
+        Paint()..color = absentColor.withValues(alpha: isHovered ? 0.38 : 0.25),
       );
       canvas.drawCircle(
         ptAbs,
-        3.5,
+        isHovered ? 5.0 : 3.5,
         Paint()..color = absentColor,
       );
       canvas.drawCircle(
         ptAbs,
-        1.5,
+        isHovered ? 2.2 : 1.5,
         Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
       );
 
@@ -3049,9 +3114,11 @@ class TrendChartPainter extends CustomPainter {
       final textSpan = TextSpan(
         text: label,
         style: TextStyle(
-          color: textColor.withValues(alpha: 0.70),
+          color: isHovered
+              ? (isDark ? Colors.white : const Color(0xFF0F172A))
+              : textColor.withValues(alpha: 0.70),
           fontSize: 9.5,
-          fontWeight: FontWeight.w600,
+          fontWeight: isHovered ? FontWeight.w800 : FontWeight.w600,
         ),
       );
       final tp = TextPainter(
@@ -3063,6 +3130,123 @@ class TrendChartPainter extends CustomPainter {
           (ptPres.dx - tp.width / 2).clamp(0.0, size.width - tp.width);
       tp.paint(canvas, Offset(labelX, baseline + 5));
     }
+
+    // 4. Floating Hover Tooltip Label
+    if (hoveredIndex != null && hoveredIndex! >= 0 && hoveredIndex! < n) {
+      final idx = hoveredIndex!;
+      final pt = points[idx];
+      final hx = presentOffsets[idx].dx;
+      final hy = min(presentOffsets[idx].dy, absentOffsets[idx].dy);
+
+      final dateTitle = pt.periodLabel ??
+          (pt.bucketStart != null
+              ? '${pt.bucketStart!.month}/${pt.bucketStart!.day}/${pt.bucketStart!.year}'
+              : 'Period ${idx + 1}');
+
+      final tooltipSpan = TextSpan(
+        children: [
+          TextSpan(
+            text: 'Date: $dateTitle\n',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+              height: 1.35,
+            ),
+          ),
+          TextSpan(
+            text: '● ',
+            style: TextStyle(
+              fontSize: 10,
+              color: presentColor,
+              fontWeight: FontWeight.w800,
+              height: 1.4,
+            ),
+          ),
+          TextSpan(
+            text: 'Present (On-Time): ${pt.presentCount}\n',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : const Color(0xFF334155),
+              height: 1.4,
+            ),
+          ),
+          TextSpan(
+            text: '● ',
+            style: TextStyle(
+              fontSize: 10,
+              color: absentColor,
+              fontWeight: FontWeight.w800,
+              height: 1.4,
+            ),
+          ),
+          TextSpan(
+            text: 'Absent / Excused: ${pt.absentOrExcusedCount}',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : const Color(0xFF334155),
+              height: 1.4,
+            ),
+          ),
+        ],
+      );
+
+      final tooltipPainter = TextPainter(
+        text: tooltipSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      const padH = 10.0;
+      const padV = 7.0;
+      final boxW = tooltipPainter.width + padH * 2;
+      final boxH = tooltipPainter.height + padV * 2;
+
+      double boxX = hx - boxW / 2;
+      if (boxX < 4) boxX = 4;
+      if (boxX + boxW > size.width - 4) boxX = size.width - boxW - 4;
+
+      double boxY = hy - boxH - 12;
+      if (boxY < 2) {
+        boxY = (hy + 14).clamp(2.0, baseline - boxH - 2);
+      }
+
+      final rrect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(boxX, boxY, boxW, boxH),
+        const Radius.circular(8),
+      );
+
+      canvas.drawRRect(
+        rrect.shift(const Offset(0, 2)),
+        Paint()
+          ..color = Colors.black.withValues(alpha: isDark ? 0.35 : 0.10)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+      );
+
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = isDark ? const Color(0xFF1E293B) : Colors.white
+          ..style = PaintingStyle.fill,
+      );
+
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = isDark
+              ? Colors.white.withValues(alpha: 0.16)
+              : const Color(0xFFCBD5E1)
+          ..strokeWidth = 1
+          ..style = PaintingStyle.stroke,
+      );
+
+      tooltipPainter.paint(canvas, Offset(boxX + padH, boxY + padV));
+    }
   }
 
   @override
@@ -3070,6 +3254,7 @@ class TrendChartPainter extends CustomPainter {
     return oldDelegate.points != points ||
         oldDelegate.textColor != textColor ||
         oldDelegate.progress != progress ||
-        oldDelegate.isDark != isDark;
+        oldDelegate.isDark != isDark ||
+        oldDelegate.hoveredIndex != hoveredIndex;
   }
 }

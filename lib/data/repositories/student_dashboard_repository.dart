@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
@@ -24,28 +25,52 @@ class StudentDashboardRepository {
     _cachedDashboard = null;
   }
 
+  String? _resolveStudentUid() {
+    final repoUser = AuthRepository.instance.currentUser;
+    if (repoUser != null &&
+        repoUser.role == UserRole.student &&
+        repoUser.id.trim().isNotEmpty) {
+      return repoUser.id.trim();
+    }
+    final cachedUser = LocalStorageService.getCachedUser();
+    if (cachedUser != null &&
+        cachedUser.role == UserRole.student &&
+        cachedUser.id.trim().isNotEmpty) {
+      return cachedUser.id.trim();
+    }
+    final fbUid = firebase_auth.FirebaseAuth.instance.currentUser?.uid.trim();
+    if (fbUid != null && fbUid.isNotEmpty) {
+      return fbUid;
+    }
+    final cachedDashId = _cachedDashboard?.student.id.trim();
+    if (cachedDashId != null && cachedDashId.isNotEmpty) {
+      return cachedDashId;
+    }
+    return null;
+  }
+
   Future<StudentDashboardData> loadDashboard({
     bool forceRefresh = false,
   }) async {
-    final authUser = firebase_auth.FirebaseAuth.instance.currentUser;
+    final uid = _resolveStudentUid();
     if (forceRefresh) {
       _cachedDashboard = null;
-      if (authUser != null) {
-        AppDataCache.instance.invalidate('student_dashboard_${authUser.uid}');
+      if (uid != null) {
+        AppDataCache.instance.invalidate('student_dashboard_$uid');
       }
     }
 
     if (!forceRefresh && _cachedDashboard != null) {
-      if (authUser != null && _cachedDashboard!.student.id == authUser.uid) {
+      if (uid != null && _cachedDashboard!.student.id == uid) {
         return _cachedDashboard!;
       }
       _cachedDashboard = null;
     }
 
     // 1. FAST LOCAL READ (0 milliseconds load, Web + Native parity)
-    if (!forceRefresh && authUser != null) {
+    if (!forceRefresh && uid != null) {
       final cachedWeb = AppDataCache.instance.getCached<StudentDashboardData>(
-        'student_dashboard_${authUser.uid}',
+        'student_dashboard_$uid',
         (json) => StudentDashboardData.fromJson(
           Map<String, dynamic>.from(json as Map),
         ),
@@ -53,7 +78,7 @@ class StudentDashboardRepository {
       if (cachedWeb != null) {
         _cachedDashboard = cachedWeb;
         if (!AppDataCache.instance.isFresh(
-          'student_dashboard_${authUser.uid}',
+          'student_dashboard_$uid',
         )) {
           unawaited(_fetchFromCloud());
         }
@@ -63,12 +88,12 @@ class StudentDashboardRepository {
       // SQLite Native Fallback (Scoped strictly to the authenticated student UID)
       try {
         final cachedJsonStr = await AppDatabase.instance.getSetting(
-          'cached_student_dashboard_${authUser.uid}',
+          'cached_student_dashboard_$uid',
         );
         if (cachedJsonStr != null && cachedJsonStr.isNotEmpty) {
           final data = jsonDecode(cachedJsonStr) as Map<String, dynamic>;
           final studentData = data['student'] as Map<String, dynamic>?;
-          if (studentData != null && studentData['id'] == authUser.uid) {
+          if (studentData != null && studentData['id'] == uid) {
             _cachedDashboard = StudentDashboardData.fromJson(data);
 
             // Trigger background cloud refresh silently
@@ -83,15 +108,15 @@ class StudentDashboardRepository {
   }
 
   Future<StudentDashboardData> _fetchFromCloud() async {
-    final authUser = firebase_auth.FirebaseAuth.instance.currentUser;
-    if (authUser == null) {
+    final uid = _resolveStudentUid();
+    if (uid == null || uid.isEmpty) {
       if (_cachedDashboard != null) return _cachedDashboard!;
       throw StateError(
         'A signed-in student session is required to load the dashboard.',
       );
     }
 
-    final uid = authUser.uid;
+    final authUser = firebase_auth.FirebaseAuth.instance.currentUser;
     final client = SupabaseService().client;
 
     try {
@@ -639,12 +664,14 @@ class StudentDashboardRepository {
         }
       }
 
-      final currentUser = AuthRepository.instance.currentUser;
+      final currentUser =
+          AuthRepository.instance.currentUser ??
+          LocalStorageService.getCachedUser();
       final p = profileRes ?? <String, dynamic>{};
       final data = <String, dynamic>{
         'student': {
           'id': uid,
-          'email': authUser.email ?? currentUser?.email ?? '',
+          'email': authUser?.email ?? currentUser?.email ?? '',
           'lrn': p['lrn']?.toString() ?? currentUser?.lrn ?? '',
           'first_name':
               p['first_name']?.toString() ?? currentUser?.firstName ?? '',
@@ -671,7 +698,7 @@ class StudentDashboardRepository {
 
       try {
         await AppDatabase.instance.setSetting(
-          'cached_student_dashboard_${authUser.uid}',
+          'cached_student_dashboard_$uid',
           jsonEncode(data),
         );
       } catch (_) {}
@@ -679,37 +706,39 @@ class StudentDashboardRepository {
       _cachedDashboard = StudentDashboardData.fromJson(data);
       unawaited(
         AppDataCache.instance.setCache(
-          'student_dashboard_${authUser.uid}',
+          'student_dashboard_$uid',
           data,
         ),
       );
       return _cachedDashboard!;
     } catch (e) {
       debugPrint('Pure Dart student dashboard notice: $e');
-      if (_cachedDashboard != null &&
-          _cachedDashboard!.student.id == authUser.uid) {
+      if (_cachedDashboard != null && _cachedDashboard!.student.id == uid) {
         return _cachedDashboard!;
       }
-      return _fallbackForAuthenticatedUser(authUser);
+      return _fallbackForAuthenticatedUser(uid, authUser);
     }
   }
 
   StudentDashboardData _fallbackForAuthenticatedUser(
-    firebase_auth.User authUser,
+    String uid,
+    firebase_auth.User? authUser,
   ) {
-    final currentUser = AuthRepository.instance.currentUser;
+    final currentUser =
+        AuthRepository.instance.currentUser ??
+        LocalStorageService.getCachedUser();
     final student =
         currentUser != null &&
-            currentUser.id == authUser.uid &&
+            currentUser.id == uid &&
             currentUser.role == UserRole.student
         ? currentUser
         : UserModel(
-            id: authUser.uid,
-            username: authUser.email ?? '',
-            fullName: authUser.displayName ?? '',
-            email: authUser.email ?? '',
+            id: uid,
+            username: authUser?.email ?? currentUser?.email ?? '',
+            fullName: authUser?.displayName ?? currentUser?.fullName ?? '',
+            email: authUser?.email ?? currentUser?.email ?? '',
             role: UserRole.student,
-            studentId: authUser.uid,
+            studentId: uid,
           );
     final dashboard = StudentDashboardData(
       student: student,

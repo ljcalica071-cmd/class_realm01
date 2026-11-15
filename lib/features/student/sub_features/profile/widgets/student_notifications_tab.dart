@@ -28,10 +28,9 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
   final List<AppNotificationModel> _notifications = [];
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = true;
-  bool _isLoadingMore = false;
-  bool _hasMore = true;
-  int _offset = 0;
-  static const int _pageSize = 15;
+  int _currentPage = 1;
+  static const int _pageSize = 10;
+  static const int _fetchLimit = 200;
 
   Set<String> _enrolledSubjectNames = {};
   RealtimeChannel? _channel;
@@ -51,7 +50,6 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
     super.initState();
     _loadEnrolledSubjects();
     _loadNotifications(initial: true);
-    _scrollController.addListener(_onScroll);
     _subscribeToRealtime();
     _subscribeToEnrollmentChanges();
   }
@@ -103,9 +101,11 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
 
       final res = await Supabase.instance.client
           .from('student_enrollments')
-          .select('subject_offerings (subject_name, section_name)')
+          .select(
+            'subject_offerings (subjects (subject_name), sections (section_name))',
+          )
           .eq('student_id', studentId)
-          .eq('status', 'enrolled');
+          .ilike('status', 'enrolled');
 
       final subjects = <String>[];
       for (final row in (res as List)) {
@@ -115,7 +115,13 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
             : (rawOffering is List && rawOffering.isNotEmpty
                   ? rawOffering.first as Map?
                   : null);
-        final sName = offering?['subject_name'];
+        final rawSub = offering?['subjects'];
+        final Map? subMap = rawSub is Map
+            ? rawSub
+            : (rawSub is List && rawSub.isNotEmpty
+                  ? rawSub.first as Map?
+                  : null);
+        final sName = subMap?['subject_name'] ?? offering?['subject_name'];
         if (sName != null && '$sName'.trim().isNotEmpty) {
           subjects.add('$sName'.trim());
         }
@@ -174,30 +180,14 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
     }
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 200 &&
-        !_isLoadingMore &&
-        _hasMore) {
-      _loadNotifications();
-    }
-  }
-
   Future<void> _loadNotifications({
     bool initial = false,
     bool silent = false,
   }) async {
-    final targetOffset = initial ? 0 : _offset;
-    if (initial) {
-      if (!silent) {
-        setState(() {
-          _isLoading = true;
-          _offset = 0;
-          _hasMore = true;
-        });
-      }
-    } else {
-      setState(() => _isLoadingMore = true);
+    if (initial && !silent && _notifications.isEmpty) {
+      setState(() {
+        _isLoading = true;
+      });
     }
 
     try {
@@ -214,7 +204,7 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
           .eq('is_archived', false)
           .inFilter('target_audience', ['all', 'students', 'students_parents'])
           .order('created_at', ascending: !_newestFirst)
-          .range(targetOffset, targetOffset + _pageSize - 1);
+          .limit(_fetchLimit);
 
       final items = (res as List)
           .map((r) => AppNotificationModel.fromJson(r as Map<String, dynamic>))
@@ -222,18 +212,10 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
 
       if (mounted) {
         setState(() {
-          if (initial) {
-            _notifications
-              ..clear()
-              ..addAll(items);
-            _offset = items.length;
-          } else {
-            _notifications.addAll(items);
-            _offset += items.length;
-          }
-          _hasMore = items.length == _pageSize;
+          _notifications
+            ..clear()
+            ..addAll(items);
           _isLoading = false;
-          _isLoadingMore = false;
         });
 
         if (user != null) {
@@ -245,7 +227,6 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _isLoadingMore = false;
         });
       }
     }
@@ -276,7 +257,10 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
   }
 
   void _toggleSort() {
-    setState(() => _newestFirst = !_newestFirst);
+    setState(() {
+      _newestFirst = !_newestFirst;
+      _currentPage = 1;
+    });
     _loadNotifications(initial: true);
   }
 
@@ -375,7 +359,10 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
                       ),
                     ),
                   ],
-                  onChanged: (val) => setState(() => _selectedSubject = val),
+                  onChanged: (val) => setState(() {
+                    _selectedSubject = val;
+                    _currentPage = 1;
+                  }),
                 ),
               ),
             ),
@@ -529,37 +516,162 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
                           ),
                         ),
                       )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        itemCount:
-                            displayedNotifications.length + (_hasMore ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == displayedNotifications.length) {
-                            return Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Center(
-                                child: LoadingAnimationWidget.staggeredDotsWave(
-                                  color: theme.colorScheme.primary,
-                                  size: 26,
+                    : Builder(
+                        builder: (context) {
+                          final totalPages =
+                              (displayedNotifications.length / _pageSize)
+                                  .ceil();
+                          final safePage = _currentPage.clamp(
+                            1,
+                            totalPages > 0 ? totalPages : 1,
+                          );
+                          final startIndex = (safePage - 1) * _pageSize;
+                          final endIndex =
+                              (startIndex + _pageSize >
+                                  displayedNotifications.length)
+                              ? displayedNotifications.length
+                              : startIndex + _pageSize;
+                          final pagedItems = displayedNotifications.sublist(
+                            startIndex,
+                            endIndex,
+                          );
+
+                          return ListView(
+                            controller: _scrollController,
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            children: [
+                              ...pagedItems.map(
+                                (notification) => ExpandableNotificationCard(
+                                  notification: notification,
+                                  maxCollapsedLines: 2,
                                 ),
                               ),
-                            );
-                          }
-                          final notification = displayedNotifications[index];
-                          return ExpandableNotificationCard(
-                            notification: notification,
-                            maxCollapsedLines: 2,
+                              const SizedBox(height: 12),
+                              _buildPaginationBar(
+                                theme: theme,
+                                isDark: isDark,
+                                totalCount: displayedNotifications.length,
+                                startIndex: startIndex,
+                                endIndex: endIndex,
+                                safePage: safePage,
+                                totalPages: totalPages,
+                              ),
+                            ],
                           );
                         },
                       ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar({
+    required ThemeData theme,
+    required bool isDark,
+    required int totalCount,
+    required int startIndex,
+    required int endIndex,
+    required int safePage,
+    required int totalPages,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          Text(
+            'Showing ${totalCount == 0 ? 0 : startIndex + 1} to $endIndex of $totalCount entries',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            ),
+          ),
+          if (totalPages > 1)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildPageButton(
+                  'First',
+                  () => setState(() => _currentPage = 1),
+                  safePage > 1,
+                ),
+                _buildPageButton(
+                  '<',
+                  () => setState(() => _currentPage = safePage - 1),
+                  safePage > 1,
+                ),
+                for (int p = 1; p <= totalPages; p++)
+                  if (p >= safePage - 2 && p <= safePage + 2)
+                    _buildPageButton(
+                      p.toString(),
+                      () => setState(() => _currentPage = p),
+                      true,
+                      isActive: p == safePage,
+                    ),
+                _buildPageButton(
+                  '>',
+                  () => setState(() => _currentPage = safePage + 1),
+                  safePage < totalPages,
+                ),
+                _buildPageButton(
+                  'Last',
+                  () => setState(() => _currentPage = totalPages),
+                  safePage < totalPages,
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageButton(
+    String label,
+    VoidCallback onTap,
+    bool enabled, {
+    bool isActive = false,
+  }) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: enabled && !isActive ? onTap : null,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: isActive ? theme.colorScheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+            color: isActive
+                ? theme.colorScheme.onPrimary
+                : enabled
+                    ? theme.colorScheme.onSurface
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+          ),
         ),
       ),
     );

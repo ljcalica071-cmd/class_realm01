@@ -31,10 +31,9 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
   final TextEditingController _searchCtrl = TextEditingController();
 
   bool _isLoading = true;
-  bool _isLoadingMore = false;
-  bool _hasMore = true;
-  int _offset = 0;
-  static const int _pageSize = 20;
+  int _currentPage = 1;
+  static const int _pageSize = 10;
+  static const int _fetchLimit = 200;
 
   // Handled subjects for teacher
   List<Map<String, dynamic>> _teacherSubjects = [];
@@ -48,7 +47,6 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
     super.initState();
     _loadTeacherSubjects();
     _loadNotifications(initial: true);
-    _scrollController.addListener(_onScroll);
     _subscribeToRealtime();
   }
 
@@ -107,24 +105,11 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
         .subscribe();
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 200 &&
-        !_isLoadingMore &&
-        _hasMore) {
-      _loadNotifications();
-    }
-  }
-
   Future<void> _loadNotifications({bool initial = false}) async {
-    if (initial) {
+    if (initial && _notifications.isEmpty) {
       setState(() {
         _isLoading = true;
-        _offset = 0;
-        _hasMore = true;
       });
-    } else {
-      setState(() => _isLoadingMore = true);
     }
 
     try {
@@ -139,7 +124,7 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
           .eq('is_archived', false)
           .inFilter('target_audience', ['all', 'teachers'])
           .order('created_at', ascending: false)
-          .range(_offset, _offset + _pageSize - 1);
+          .limit(_fetchLimit);
 
       final items = (res as List)
           .map((r) => AppNotificationModel.fromJson(r as Map<String, dynamic>))
@@ -147,14 +132,10 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
 
       if (mounted) {
         setState(() {
-          if (initial) {
-            _notifications.clear();
-          }
-          _notifications.addAll(items);
-          _offset += items.length;
-          _hasMore = items.length == _pageSize;
+          _notifications
+            ..clear()
+            ..addAll(items);
           _isLoading = false;
-          _isLoadingMore = false;
         });
 
         if (user != null) {
@@ -166,7 +147,6 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _isLoadingMore = false;
         });
       }
     }
@@ -249,7 +229,10 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
                   height: 40,
                   child: TextField(
                     controller: _searchCtrl,
-                    onChanged: (val) => setState(() => _searchQuery = val),
+                    onChanged: (val) => setState(() {
+                      _searchQuery = val;
+                      _currentPage = 1;
+                    }),
                     style: TextStyle(
                       fontSize: 13,
                       color: theme.colorScheme.onSurface,
@@ -270,7 +253,10 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
                               icon: const Icon(LucideIcons.x, size: 14),
                               onPressed: () {
                                 _searchCtrl.clear();
-                                setState(() => _searchQuery = '');
+                                setState(() {
+                                  _searchQuery = '';
+                                  _currentPage = 1;
+                                });
                               },
                             )
                           : null,
@@ -373,6 +359,7 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
                     onChanged: (val) {
                       setState(() {
                         _selectedSubjectFilter = val;
+                        _currentPage = 1;
                       });
                     },
                   ),
@@ -487,29 +474,162 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
                         ),
                       ),
                     )
-                  : RefreshIndicator(
-                      onRefresh: () => _loadNotifications(initial: true),
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        itemCount: displayedNotifications.length + (_hasMore ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == displayedNotifications.length) {
-                            return const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8),
-                              child: ShimmerBroadcastItem(),
-                            );
-                          }
-                          final notification = displayedNotifications[index];
-                          return ExpandableNotificationCard(
-                            notification: notification,
-                            maxCollapsedLines: 2,
-                          );
-                        },
-                      ),
+                  : Builder(
+                      builder: (context) {
+                        final totalPages =
+                            (displayedNotifications.length / _pageSize).ceil();
+                        final safePage = _currentPage.clamp(
+                          1,
+                          totalPages > 0 ? totalPages : 1,
+                        );
+                        final startIndex = (safePage - 1) * _pageSize;
+                        final endIndex =
+                            (startIndex + _pageSize >
+                                displayedNotifications.length)
+                            ? displayedNotifications.length
+                            : startIndex + _pageSize;
+                        final pagedItems = displayedNotifications.sublist(
+                          startIndex,
+                          endIndex,
+                        );
+
+                        return RefreshIndicator(
+                          onRefresh: () => _loadNotifications(initial: true),
+                          child: ListView(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            children: [
+                              ...pagedItems.map(
+                                (notification) => ExpandableNotificationCard(
+                                  notification: notification,
+                                  maxCollapsedLines: 2,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              _buildPaginationBar(
+                                theme: theme,
+                                isDark: isDark,
+                                totalCount: displayedNotifications.length,
+                                startIndex: startIndex,
+                                endIndex: endIndex,
+                                safePage: safePage,
+                                totalPages: totalPages,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
         ),
       ],
+    );
+  }
+
+  Widget _buildPaginationBar({
+    required ThemeData theme,
+    required bool isDark,
+    required int totalCount,
+    required int startIndex,
+    required int endIndex,
+    required int safePage,
+    required int totalPages,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          Text(
+            'Showing ${totalCount == 0 ? 0 : startIndex + 1} to $endIndex of $totalCount entries',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            ),
+          ),
+          if (totalPages > 1)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildPageButton(
+                  'First',
+                  () => setState(() => _currentPage = 1),
+                  safePage > 1,
+                ),
+                _buildPageButton(
+                  '<',
+                  () => setState(() => _currentPage = safePage - 1),
+                  safePage > 1,
+                ),
+                for (int p = 1; p <= totalPages; p++)
+                  if (p >= safePage - 2 && p <= safePage + 2)
+                    _buildPageButton(
+                      p.toString(),
+                      () => setState(() => _currentPage = p),
+                      true,
+                      isActive: p == safePage,
+                    ),
+                _buildPageButton(
+                  '>',
+                  () => setState(() => _currentPage = safePage + 1),
+                  safePage < totalPages,
+                ),
+                _buildPageButton(
+                  'Last',
+                  () => setState(() => _currentPage = totalPages),
+                  safePage < totalPages,
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageButton(
+    String label,
+    VoidCallback onTap,
+    bool enabled, {
+    bool isActive = false,
+  }) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: enabled && !isActive ? onTap : null,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: isActive ? theme.colorScheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+            color: isActive
+                ? theme.colorScheme.onPrimary
+                : enabled
+                    ? theme.colorScheme.onSurface
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
     );
   }
 }
