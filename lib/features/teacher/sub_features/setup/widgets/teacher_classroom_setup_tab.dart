@@ -10,6 +10,7 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/unified_enroll_student_dialog.dart';
+import 'package:class_realm/shared/widgets/app_top_toast.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/setup/widgets/teacher_classroom_setup_templates.dart';
 import 'package:class_realm/core/theme/subject_palette.dart';
@@ -748,24 +749,13 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
                     )
                   : const Color(0xFFF8F9FA))
             : (isDark ? theme.colorScheme.surface : Colors.white),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isArchived
-              ? theme.colorScheme.outline.withValues(alpha: 0.2)
-              : cardAccentColor.withValues(alpha: isDark ? 0.35 : 0.22),
-          width: 1.2,
+          color: theme.colorScheme.outline.withValues(
+            alpha: isDark ? 0.2 : 0.4,
+          ),
+          width: 1.0,
         ),
-        boxShadow: isArchived
-            ? []
-            : [
-                BoxShadow(
-                  color: cardAccentColor.withValues(
-                    alpha: isDark ? 0.12 : 0.05,
-                  ),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
       ),
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -2063,15 +2053,17 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       try {
         await SubjectRepository.instance.archiveSingleOffering(row.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Section "${row.nameCtrl.text}" archived.')),
+          AppTopToast.warning(
+            context,
+            message: 'Section "${row.nameCtrl.text}" archived.',
           );
         }
         await _loadSubjects();
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to archive section: $e')),
+          AppTopToast.error(
+            context,
+            message: 'Failed to archive section: $e',
           );
         }
         return;
@@ -2247,12 +2239,24 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       final archivedGrouped = _parseGrouped(archivedRows);
       final archivedSectionsGrouped = _parseGrouped(archivedSectionRows);
 
+      // A subject is only truly an "Archived Subject" if ALL of its offerings/sections are archived
+      // (i.e. it has NO active offerings in activeGrouped).
+      // If a subject still has active sections in activeGrouped, any archived sections under it
+      // belong strictly under "Archived Sections", NOT under "Archived Subjects".
+      final activeSubjectKeys = activeGrouped.keys.toSet();
+      final filteredArchivedSubjects = archivedGrouped.values
+          .where((archSub) {
+            final key = '${archSub.name}_${archSub.gradeLevel}';
+            return !activeSubjectKeys.contains(key);
+          })
+          .toList();
+
       if (mounted) {
         setState(() {
           _subjects.clear();
           _subjects.addAll(activeGrouped.values);
           _archivedSubjects.clear();
-          _archivedSubjects.addAll(archivedGrouped.values);
+          _archivedSubjects.addAll(filteredArchivedSubjects);
           _archivedSectionsSubjects.clear();
           _archivedSectionsSubjects.addAll(archivedSectionsGrouped.values);
           _archivedSectionsCount = archivedSectionRows.length;
@@ -2283,8 +2287,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error: No active user session.')),
+      AppTopToast.error(
+        context,
+        message: 'Error: No active user session.',
       );
       return;
     }
@@ -2344,15 +2349,11 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
       if (mounted) {
         _resetForm(close: true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isEdit
-                  ? 'Subject and sections updated successfully!'
-                  : 'Subject and sections saved successfully!',
-            ),
-            backgroundColor: AppTheme.catGreen,
-          ),
+        AppTopToast.success(
+          context,
+          message: isEdit
+              ? 'Subject and sections updated successfully!'
+              : 'Subject and sections saved successfully!',
         );
       }
     } catch (e) {
@@ -2361,11 +2362,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         final friendlyMsg = e is PostgrestException
             ? 'Unable to save subject changes: ${e.message}'
             : 'Failed to save subject: ${e.toString()}';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyMsg),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
+        AppTopToast.error(
+          context,
+          message: friendlyMsg,
         );
       }
     } finally {
@@ -2517,8 +2516,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     await _loadSubjects();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${subject.name} moved to archived subjects.')),
+      AppTopToast.warning(
+        context,
+        message: '${subject.name} moved to archived subjects.',
       );
     }
   }
@@ -2557,10 +2557,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     await _loadSubjects();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${subject.name} restored to active classroom.'),
-        ),
+      AppTopToast.success(
+        context,
+        message: '${subject.name} restored to active classroom.',
       );
     }
   }
@@ -2630,8 +2629,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     await _loadSubjects();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${subject.name} permanently deleted.')),
+      AppTopToast.warning(
+        context,
+        message: '${subject.name} permanently deleted.',
       );
     }
   }
@@ -2653,10 +2653,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     await _loadSubjects();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Section "${sec.name}" restored to active classroom.'),
-        ),
+      AppTopToast.success(
+        context,
+        message: 'Section "${sec.name}" restored to active classroom.',
       );
     }
   }
@@ -2718,8 +2717,9 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     await _loadSubjects();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Section "${sec.name}" permanently deleted.')),
+      AppTopToast.warning(
+        context,
+        message: 'Section "${sec.name}" permanently deleted.',
       );
     }
   }
@@ -2843,10 +2843,12 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         color: isDark
             ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2)
             : const Color(0xFFF8F9FA),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.2),
-          width: 1.2,
+          color: theme.colorScheme.outline.withValues(
+            alpha: isDark ? 0.2 : 0.4,
+          ),
+          width: 1.0,
         ),
       ),
       padding: const EdgeInsets.all(18),
