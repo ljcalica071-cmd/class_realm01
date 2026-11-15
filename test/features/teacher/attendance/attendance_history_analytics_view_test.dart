@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';

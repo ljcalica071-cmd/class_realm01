@@ -438,12 +438,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     final emailToUse = _emailCtrl.text.trim().toLowerCase();
 
     try {
+      final properFirst = AppValidators.toProperCase(_firstNameCtrl.text);
+      final properLast = AppValidators.toProperCase(_lastNameCtrl.text);
+      final properMiddle =
+          AppValidators.normalizeMiddleInitial(_middleNameCtrl.text) ?? '';
+
       final repo = SupabaseStudentRepository();
       final result = await repo.enrollStudent(
         lrn: _studentIdCtrl.text.trim(),
-        firstName: _firstNameCtrl.text.trim(),
-        middleName: _middleNameCtrl.text.trim(),
-        lastName: _lastNameCtrl.text.trim(),
+        firstName: properFirst,
+        middleName: properMiddle,
+        lastName: properLast,
         birthday: _birthday!,
         email: emailToUse,
         gender: _gender!,
@@ -451,9 +456,9 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       );
 
       final fullName = [
-        _firstNameCtrl.text.trim(),
-        if (_middleNameCtrl.text.trim().isNotEmpty) _middleNameCtrl.text.trim(),
-        _lastNameCtrl.text.trim(),
+        properFirst,
+        if (properMiddle.isNotEmpty) properMiddle,
+        properLast,
       ].join(' ');
 
       if (mounted) {
@@ -547,18 +552,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     return null;
   }
 
-  String _toTitleCase(String text) {
-    final clean = text.trim();
-    if (clean.isEmpty) return '';
-    return clean
-        .split(RegExp(r'\s+'))
-        .map((word) {
-          if (word.isEmpty) return '';
-          if (word.length == 1) return word.toUpperCase();
-          return word[0].toUpperCase() + word.substring(1).toLowerCase();
-        })
-        .join(' ');
-  }
+  String _toTitleCase(String text) => AppValidators.toProperCase(text);
 
   Future<void> _downloadOfficialTemplate() async {
     try {
@@ -1577,21 +1571,34 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
             final dbFirst = (existingProfile['first_name'] ?? '')
                 .toString()
                 .trim()
+                .replaceAll(RegExp(r'\s+'), ' ')
                 .toLowerCase();
             final dbLast = (existingProfile['last_name'] ?? '')
                 .toString()
                 .trim()
+                .replaceAll(RegExp(r'\s+'), ' ')
                 .toLowerCase();
-            final uploadFirst = s.firstName.trim().toLowerCase();
-            final uploadLast = s.lastName.trim().toLowerCase();
+            final uploadFirst = s.firstName
+                .trim()
+                .replaceAll(RegExp(r'\s+'), ' ')
+                .toLowerCase();
+            final uploadLast = s.lastName
+                .trim()
+                .replaceAll(RegExp(r'\s+'), ' ')
+                .toLowerCase();
 
             if (dbFirst != uploadFirst || dbLast != uploadLast) {
+              final dbFullName =
+                  '${existingProfile['first_name'] ?? ''} ${existingProfile['last_name'] ?? ''}'
+                      .trim();
               invalidRows.add(
                 _InvalidStudentRow(
                   rowNumber: s.rowNumber,
                   fieldTag: 'LRN',
                   identifier: s.lrn,
-                  reason: 'LRN already registered.',
+                  reason: dbFullName.isNotEmpty
+                      ? 'Registered to "$dbFullName" (name mismatch: "${s.firstName} ${s.lastName}").'
+                      : 'LRN already registered with a different name.',
                 ),
               );
               continue;

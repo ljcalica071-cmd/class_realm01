@@ -329,16 +329,11 @@ class _TeacherParentManagementTabState
           final studentSubject =
               linkedStudent?.enrolledSubjectName ?? p.enrolledSubjectName ?? '';
 
-          final matchesSearch =
-              p.fullName.toLowerCase().contains(
-                _parentSearchQuery.toLowerCase(),
-              ) ||
-              p.username.toLowerCase().contains(
-                _parentSearchQuery.toLowerCase(),
-              ) ||
-              studentName.toLowerCase().contains(
-                _parentSearchQuery.toLowerCase(),
-              );
+          final matchesSearch = SearchUtils.matches(
+            _parentSearchQuery,
+            names: [p.fullName, studentName],
+            loose: [p.username],
+          );
 
           final effectiveSubject =
               _teacherSubjects.contains(_selectedSubjectFilter)
@@ -2374,11 +2369,12 @@ class _EditParentAccountDialogState extends State<_EditParentAccountDialog> {
     final unlinkedStudents = widget.enrolledStudents
         .where((s) => !linkedIds.contains(s.id))
         .where((s) {
-          if (_studentSearchQuery.trim().isEmpty) return true;
-          final q = _studentSearchQuery.toLowerCase().trim();
-          return s.fullName.toLowerCase().contains(q) ||
-              (s.lrn ?? '').toLowerCase().contains(q) ||
-              (s.departmentOrSection ?? '').toLowerCase().contains(q);
+          return SearchUtils.matches(
+            _studentSearchQuery,
+            names: [s.fullName],
+            ids: [s.lrn],
+            loose: [s.departmentOrSection],
+          );
         })
         .toList();
 

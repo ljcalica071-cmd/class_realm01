@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -7,7 +8,6 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_notification_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
-import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/shared/widgets/app_top_toast.dart';
@@ -209,15 +209,17 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
       }
 
       // Search Query
-      if (_searchQuery.trim().isNotEmpty) {
-        final q = _searchQuery.trim().toLowerCase();
-        final matchesQuery = n.title.toLowerCase().contains(q) || n.message.toLowerCase().contains(q);
+      if (!SearchUtils.isEmpty(_searchQuery)) {
+        final matchesQuery = SearchUtils.matches(
+          _searchQuery,
+          names: [n.title],
+          loose: [n.message],
+        );
         if (!matchesQuery) return false;
       }
 
       return true;
     }).toList();
-  }
   }
 
   @override

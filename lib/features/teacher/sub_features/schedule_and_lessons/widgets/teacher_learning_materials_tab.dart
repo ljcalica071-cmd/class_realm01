@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -356,16 +357,17 @@ class _TeacherLearningMaterialsTabState
   }
 
   // --- Material & Folder Filtering ---
+  bool _matchesMaterialSearch(ClassRealmMaterial m) {
+    return SearchUtils.matches(
+      _searchQuery,
+      names: [m.title, m.fileName],
+    );
+  }
+
   List<ClassRealmMaterial> get _filteredMaterials {
     if (_materials.isEmpty) return [];
     return _materials.where((m) {
-      final matchesSearch =
-          _searchQuery.isEmpty ||
-          m.fileName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (m.title?.toLowerCase().contains(_searchQuery.toLowerCase()) ??
-              false);
-
-      if (!matchesSearch) return false;
+      if (!_matchesMaterialSearch(m)) return false;
 
       if (_selectedTypeFilter == 'PDF') return m.isPdf;
       if (_selectedTypeFilter == 'WORD') return m.isWord;
@@ -380,30 +382,25 @@ class _TeacherLearningMaterialsTabState
         ? _folders
         : (_offerings.isEmpty ? _defaultPlaceholderFolders : <ClassRealmFolder>[]);
     if (list.isEmpty) return [];
-    if (_searchQuery.isEmpty) return list;
+    if (SearchUtils.isEmpty(_searchQuery)) return list;
     return list
         .where(
-          (f) =>
-              f.folderName.toLowerCase().contains(_searchQuery.toLowerCase()),
+          (f) => SearchUtils.matches(_searchQuery, names: [f.folderName]),
         )
         .toList();
   }
 
   List<ClassRealmMaterial> get _filteredArchivedMaterials {
     if (_archivedMaterials.isEmpty) return [];
-    if (_searchQuery.isEmpty) return _archivedMaterials;
-    return _archivedMaterials.where((m) {
-      return m.fileName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (m.title?.toLowerCase().contains(_searchQuery.toLowerCase()) ??
-              false);
-    }).toList();
+    if (SearchUtils.isEmpty(_searchQuery)) return _archivedMaterials;
+    return _archivedMaterials.where(_matchesMaterialSearch).toList();
   }
 
   List<ClassRealmFolder> get _filteredArchivedFolders {
     if (_archivedFolders.isEmpty) return [];
-    if (_searchQuery.isEmpty) return _archivedFolders;
+    if (SearchUtils.isEmpty(_searchQuery)) return _archivedFolders;
     return _archivedFolders.where((f) {
-      return f.folderName.toLowerCase().contains(_searchQuery.toLowerCase());
+      return SearchUtils.matches(_searchQuery, names: [f.folderName]);
     }).toList();
   }
 

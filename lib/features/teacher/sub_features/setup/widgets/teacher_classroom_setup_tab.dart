@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -3107,23 +3108,17 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           final theme = Theme.of(dialogCtx);
           final isDark = theme.brightness == Brightness.dark;
 
-          // Filter templates
-          final filtered = allTemplates.where((t) {
-            if (selectedCategory != 'ALL CATEGORIES' &&
-                t.category != selectedCategory) {
-              return false;
-            }
-            if (searchQuery.isNotEmpty) {
-              final q = searchQuery.toLowerCase().trim();
-              final matchesName = t.name.toLowerCase().contains(q);
-              final matchesCluster = t.cluster.toLowerCase().contains(q);
-              final matchesCategory = t.category.toLowerCase().contains(q);
-              if (!matchesName && !matchesCluster && !matchesCategory) {
-                return false;
-              }
-            }
-            return true;
-          }).toList();
+          // Filter templates (word-prefix search, best match first)
+          final filtered = SearchUtils.filter<SubjectTemplate>(
+            searchQuery,
+            allTemplates.where(
+              (t) =>
+                  selectedCategory == 'ALL CATEGORIES' ||
+                  t.category == selectedCategory,
+            ),
+            names: (t) => [t.name],
+            loose: (t) => [t.cluster, t.category],
+          );
 
           // Group by Cluster
           final Map<String, List<SubjectTemplate>> groupedByCluster = {};

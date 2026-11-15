@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -3035,10 +3036,11 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
 
     // Filter by search query
     var list = summary.studentRows.where((r) {
-      if (_searchQuery.isEmpty) return true;
-      final q = _searchQuery.toLowerCase();
-      return r.displayName.toLowerCase().contains(q) ||
-          r.lrn.toLowerCase().contains(q);
+      return SearchUtils.matches(
+        _searchQuery,
+        names: [r.displayName],
+        ids: [r.lrn],
+      );
     }).toList();
 
     // Sort order

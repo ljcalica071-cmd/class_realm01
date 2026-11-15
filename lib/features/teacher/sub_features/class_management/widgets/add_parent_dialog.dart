@@ -1360,10 +1360,13 @@ class _AddParentDialogState extends State<AddParentDialog> {
     List<UserModel> matchingStudents = [];
     if (query.isNotEmpty) {
       matchingStudents = candidateStudents.where((u) {
-        final nameMatch = u.fullName.toLowerCase().contains(query);
-        final lrnMatch = (u.lrn ?? '').toLowerCase().contains(query);
+        final matches = SearchUtils.matches(
+          query,
+          names: [u.fullName],
+          ids: [u.lrn],
+        );
         final isAlreadySelected = _selectedStudents.any((s) => s.id == u.id);
-        return !isAlreadySelected && (nameMatch || lrnMatch);
+        return !isAlreadySelected && matches;
       }).toList();
 
       SearchUtils.sortByRelevance<UserModel>(

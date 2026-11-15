@@ -215,6 +215,47 @@ class AppValidators {
     return null;
   }
 
+  /// Formats any name into clean Title/Proper Case.
+  /// Handles all-caps, mixed-caps, hyphens (e.g. Mary-Ann), apostrophes (e.g. D'Angelo), and compound names.
+  /// Examples:
+  /// - "CALica" -> "Calica"
+  /// - "ljAY" -> "Ljay"
+  /// - "JUAN CARLOS" -> "Juan Carlos"
+  static String toProperCase(String text) {
+    final clean = text.trim();
+    if (clean.isEmpty) return '';
+    return clean
+        .split(RegExp(r'\s+'))
+        .map((word) {
+          if (word.isEmpty) return '';
+          // Preserve hyphenated names (e.g. Mary-Ann)
+          if (word.contains('-')) {
+            return word
+                .split('-')
+                .map((sub) {
+                  if (sub.isEmpty) return '';
+                  if (sub.length == 1) return sub.toUpperCase();
+                  return sub[0].toUpperCase() + sub.substring(1).toLowerCase();
+                })
+                .join('-');
+          }
+          // Preserve apostrophes (e.g. D'Angelo, O'Connor)
+          if (word.contains("'")) {
+            return word
+                .split("'")
+                .map((sub) {
+                  if (sub.isEmpty) return '';
+                  if (sub.length == 1) return sub.toUpperCase();
+                  return sub[0].toUpperCase() + sub.substring(1).toLowerCase();
+                })
+                .join("'");
+          }
+          if (word.length == 1) return word.toUpperCase();
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
+  }
+
   /// Name validator
   static String? validateName(String? value, String fieldName) {
     if (value == null || value.trim().isEmpty) {
@@ -230,7 +271,16 @@ class AppValidators {
     if (value == null || value.isEmpty) return null;
     final trimmed = value.trim();
     if (trimmed.isEmpty) return null;
-    if (!RegExp(r'^[a-zA-ZñÑ]\.?$').hasMatch(trimmed)) {
+    final lower = trimmed.toLowerCase();
+    if (lower == 'n/a' ||
+        lower == 'na' ||
+        lower == 'none' ||
+        lower == '-' ||
+        lower == 'null') {
+      return null;
+    }
+    // Accept 1 letter with/without dot, OR full middle name (letters, hyphens, spaces, periods)
+    if (!RegExp(r"^[a-zA-ZñÑ\s\-\.]+$").hasMatch(trimmed)) {
       return invalidMiddleInitialMessage;
     }
     return null;
@@ -238,7 +288,16 @@ class AppValidators {
 
   static String? normalizeMiddleInitial(String? value) {
     if (value == null || value.trim().isEmpty) return null;
-    final formatted = formatMiddleInitial(value);
+    final trimmed = value.trim();
+    final lower = trimmed.toLowerCase();
+    if (lower == 'n/a' ||
+        lower == 'na' ||
+        lower == 'none' ||
+        lower == '-' ||
+        lower == 'null') {
+      return null;
+    }
+    final formatted = formatMiddleInitial(trimmed);
     if (!_middleInitialPattern.hasMatch(formatted)) {
       throw FormatException(invalidMiddleInitialMessage);
     }

@@ -7,10 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
-import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/repositories/supabase_notification_repository.dart';
-import 'package:class_realm/shared/widgets/app_top_toast.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 
@@ -282,7 +280,11 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
     _loadNotifications(initial: true);
   }
 
-  Widget _buildFilterBar(ThemeData theme, bool isDark) {
+  Widget _buildFilterBar(
+    ThemeData theme,
+    bool isDark,
+    List<AppNotificationModel> displayedNotifications,
+  ) {
     final borderColor = theme.colorScheme.onSurface.withValues(
       alpha: isDark ? 0.14 : 0.09,
     );
@@ -395,41 +397,43 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
 
               return Padding(
                 padding: const EdgeInsets.only(left: 8),
-                child: OutlinedButton.icon(
-                  icon: const Icon(LucideIcons.checkCheck, size: 14),
-                  label: Text(
-                    '${unreadInList.length}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                child: Tooltip(
+                  message: 'Mark all as read',
+                  child: OutlinedButton.icon(
+                    icon: const Icon(LucideIcons.checkCheck, size: 14),
+                    label: Text(
+                      '${unreadInList.length}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 0,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 0,
+                      ),
+                      minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    minimumSize: const Size(0, 42),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  tooltip: 'Mark all as read',
-                  onPressed: () async {
-                    final user = AuthRepository.instance.currentUser;
-                    if (user != null) {
-                      await SupabaseNotificationRepository.instance
-                          .markAllAsRead(user.id, unreadInList);
-                      await SupabaseNotificationRepository.instance
-                          .calculateUnreadCount(user);
-                      if (btnCtx.mounted) {
-                        AppTopToast.success(
-                          btnCtx,
-                          'All notifications marked as read.',
-                        );
+                    onPressed: () async {
+                      final user = AuthRepository.instance.currentUser;
+                      if (user != null) {
+                        await SupabaseNotificationRepository.instance
+                            .markAllAsRead(user.id, unreadInList);
+                        await SupabaseNotificationRepository.instance
+                            .calculateUnreadCount(user);
+                        if (btnCtx.mounted) {
+                          AppTopToast.success(
+                            btnCtx,
+                            'All notifications marked as read.',
+                          );
+                        }
                       }
-                    }
-                  },
+                    },
+                  ),
                 ),
               );
             },

@@ -270,105 +270,110 @@ class SupabaseStudentRepository implements StudentRepository {
 
       final enrollmentCompanions = <LocalEnrollmentsCompanion>[];
 
-      final mapped = response.map<UserModel?>((row) {
-        final profile = row['student_profiles'] as Map<String, dynamic>? ?? {};
-        final offering =
-            row['subject_offerings'] as Map<String, dynamic>? ?? {};
-        final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
-        final sec = offering['sections'] as Map<String, dynamic>? ?? {};
+      final mapped = response
+          .map<UserModel?>((row) {
+            final profile =
+                row['student_profiles'] as Map<String, dynamic>? ?? {};
+            final offering =
+                row['subject_offerings'] as Map<String, dynamic>? ?? {};
+            final sub = offering['subjects'] as Map<String, dynamic>? ?? {};
+            final sec = offering['sections'] as Map<String, dynamic>? ?? {};
 
-        final fullName =
-            [
-                  profile['first_name'],
-                  profile['middle_name'],
-                  profile['last_name'],
-                ]
-                .where(
-                  (name) => name != null && name.toString().trim().isNotEmpty,
-                )
-                .join(' ');
+            final fullName =
+                [
+                      profile['first_name'],
+                      profile['middle_name'],
+                      profile['last_name'],
+                    ]
+                    .where(
+                      (name) =>
+                          name != null && name.toString().trim().isNotEmpty,
+                    )
+                    .join(' ');
 
-        final usersData = profile['users'] as Map<String, dynamic>? ?? {};
-        final studentId = profile['student_id']?.toString() ?? '';
-        final realEmail = usersData['email']?.toString() ?? '';
+            final usersData = profile['users'] as Map<String, dynamic>? ?? {};
+            final studentId = profile['student_id']?.toString() ?? '';
+            final realEmail = usersData['email']?.toString() ?? '';
 
-        final rawRfid = profile['rfid_uid']?.toString().trim();
-        final resolvedRfidUid = (rawRfid != null && rawRfid.isNotEmpty)
-            ? rawRfid.toUpperCase()
-            : localRfidFallback[studentId];
+            final rawRfid = profile['rfid_uid']?.toString().trim();
+            final resolvedRfidUid = (rawRfid != null && rawRfid.isNotEmpty)
+                ? rawRfid.toUpperCase()
+                : localRfidFallback[studentId];
 
-        final enrollmentId = row['id']?.toString() ?? '';
-        final offeringId = offering['id']?.toString() ?? '';
-        if (enrollmentId.isNotEmpty &&
-            studentId.isNotEmpty &&
-            offeringId.isNotEmpty) {
-          enrollmentCompanions.add(
-            LocalEnrollmentsCompanion.insert(
-              id: enrollmentId,
+            final enrollmentId = row['id']?.toString() ?? '';
+            final offeringId = offering['id']?.toString() ?? '';
+            if (enrollmentId.isNotEmpty &&
+                studentId.isNotEmpty &&
+                offeringId.isNotEmpty) {
+              enrollmentCompanions.add(
+                LocalEnrollmentsCompanion.insert(
+                  id: enrollmentId,
+                  studentId: studentId,
+                  subjectOfferingId: offeringId,
+                  status: Value(row['status']?.toString() ?? 'enrolled'),
+                ),
+              );
+            }
+
+            final enrollmentStatus = row['status']?.toString().toLowerCase();
+            final isEnrollmentArchived = enrollmentStatus == 'archived';
+            final isUserArchived = usersData['is_archived'] == true;
+            final isSettingsArchived =
+                studentSettingsStatus[studentId]?.toLowerCase() == 'archived';
+            final isArchived =
+                isEnrollmentArchived || isUserArchived || isSettingsArchived;
+
+            if (!includeArchived && isArchived) return null;
+            if (includeArchived && !isArchived) return null;
+
+            AccountStatus accountStatus;
+            if (isArchived) {
+              accountStatus = AccountStatus.archived;
+            } else {
+              final rawStatus =
+                  (studentSettingsStatus[studentId] ??
+                          usersData['status']?.toString() ??
+                          'pending_first_login')
+                      .toLowerCase()
+                      .replaceAll(RegExp(r'[\s_-]'), '');
+              if (rawStatus == 'active') {
+                accountStatus = AccountStatus.active;
+              } else if (rawStatus == 'pending' ||
+                  rawStatus == 'pendingfirstlogin') {
+                accountStatus = AccountStatus.pendingFirstLogin;
+              } else if (rawStatus == 'deactivated') {
+                accountStatus = AccountStatus.deactivated;
+              } else {
+                accountStatus = AccountStatus.pendingFirstLogin;
+              }
+            }
+
+            return UserModel(
+              id: studentId,
               studentId: studentId,
-              subjectOfferingId: offeringId,
-              status: Value(row['status']?.toString() ?? 'enrolled'),
-            ),
-          );
-        }
-
-        final enrollmentStatus = row['status']?.toString().toLowerCase();
-        final isEnrollmentArchived = enrollmentStatus == 'archived';
-        final isUserArchived = usersData['is_archived'] == true;
-        final isSettingsArchived =
-            studentSettingsStatus[studentId]?.toLowerCase() == 'archived';
-        final isArchived =
-            isEnrollmentArchived || isUserArchived || isSettingsArchived;
-
-        if (!includeArchived && isArchived) return null;
-        if (includeArchived && !isArchived) return null;
-
-        AccountStatus accountStatus;
-        if (isArchived) {
-          accountStatus = AccountStatus.archived;
-        } else {
-          final rawStatus =
-              (studentSettingsStatus[studentId] ??
-                      usersData['status']?.toString() ??
-                      'pending_first_login')
-                  .toLowerCase()
-                  .replaceAll(RegExp(r'[\s_-]'), '');
-          if (rawStatus == 'active') {
-            accountStatus = AccountStatus.active;
-          } else if (rawStatus == 'pending' ||
-              rawStatus == 'pendingfirstlogin') {
-            accountStatus = AccountStatus.pendingFirstLogin;
-          } else if (rawStatus == 'deactivated') {
-            accountStatus = AccountStatus.deactivated;
-          } else {
-            accountStatus = AccountStatus.pendingFirstLogin;
-          }
-        }
-
-        return UserModel(
-          id: studentId,
-          studentId: studentId,
-          username: profile['lrn']?.toString() ?? realEmail,
-          fullName: fullName.isEmpty ? 'Student' : fullName,
-          role: UserRole.student,
-          email: realEmail,
-          firstName: profile['first_name']?.toString() ?? 'Unknown',
-          middleName: profile['middle_name']?.toString(),
-          lastName: profile['last_name']?.toString() ?? 'Unknown',
-          gender: profile['gender']?.toString(),
-          birthday: profile['birthday'] != null
-              ? DateTime.tryParse(profile['birthday'].toString())
-              : null,
-          lrn: profile['lrn']?.toString(),
-          rfidUid: resolvedRfidUid,
-          departmentOrSection: sec['section_name']?.toString(),
-          enrolledSubjectId:
-              offering['id']?.toString() ?? sub['id']?.toString(),
-          enrolledSubjectName: sub['subject_name']?.toString(),
-          status: accountStatus,
-          isArchived: isArchived,
-        );
-      }).whereType<UserModel>().toList();
+              username: profile['lrn']?.toString() ?? realEmail,
+              fullName: fullName.isEmpty ? 'Student' : fullName,
+              role: UserRole.student,
+              email: realEmail,
+              firstName: profile['first_name']?.toString() ?? 'Unknown',
+              middleName: profile['middle_name']?.toString(),
+              lastName: profile['last_name']?.toString() ?? 'Unknown',
+              gender: profile['gender']?.toString(),
+              birthday: profile['birthday'] != null
+                  ? DateTime.tryParse(profile['birthday'].toString())
+                  : null,
+              lrn: profile['lrn']?.toString(),
+              rfidUid: resolvedRfidUid,
+              departmentOrSection: sec['section_name']?.toString(),
+              enrolledSubjectId:
+                  offering['id']?.toString() ?? sub['id']?.toString(),
+              enrolledSubjectName: sub['subject_name']?.toString(),
+              status: accountStatus,
+              isArchived: isArchived,
+            );
+          })
+          .whereType<UserModel>()
+          .toList();
 
       // Batch persist to Drift SQLite safely on native platforms
       if (!kIsWeb) {
@@ -520,22 +525,24 @@ class SupabaseStudentRepository implements StudentRepository {
     bool skipEmail = false,
     String? preResolvedExistingStudentId,
   }) async {
+    final properFirst = AppValidators.toProperCase(firstName);
+    final properLast = AppValidators.toProperCase(lastName);
     final cleanMiddleName =
         AppValidators.normalizeMiddleInitial(middleName) ?? '';
     final cleanEmail = email.trim().toLowerCase();
     final bdayStr =
         '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
-    final cleanLastName = lastName.toLowerCase().replaceAll(
+    final cleanLastName = properLast.toLowerCase().replaceAll(
       RegExp(r'[^a-z0-9]'),
       '',
     );
     final tempPassword =
         '$cleanLastName${birthday.year}${birthday.month.toString().padLeft(2, '0')}${birthday.day.toString().padLeft(2, '0')}';
     final studentFullName = [
-      firstName,
-      cleanMiddleName,
-      lastName,
-    ].where((s) => s.isNotEmpty).join(' ');
+      properFirst,
+      if (cleanMiddleName.isNotEmpty) cleanMiddleName,
+      properLast,
+    ].join(' ');
 
     // 0. Check if student already exists globally by LRN (ClassRealm Cross-Teacher Reuse)
     String? existingStudentId =
@@ -569,13 +576,21 @@ class SupabaseStudentRepository implements StudentRepository {
           final existingFirst = (existingProfile['first_name'] ?? '')
               .toString()
               .trim()
+              .replaceAll(RegExp(r'\s+'), ' ')
               .toLowerCase();
           final existingLast = (existingProfile['last_name'] ?? '')
               .toString()
               .trim()
+              .replaceAll(RegExp(r'\s+'), ' ')
               .toLowerCase();
-          final inputFirst = firstName.trim().toLowerCase();
-          final inputLast = lastName.trim().toLowerCase();
+          final inputFirst = firstName
+              .trim()
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .toLowerCase();
+          final inputLast = lastName
+              .trim()
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .toLowerCase();
 
           // Security / Data Integrity: If LRN exists but name does not match, reject as conflict
           if (existingFirst != inputFirst || existingLast != inputLast) {
@@ -604,14 +619,11 @@ class SupabaseStudentRepository implements StudentRepository {
     if (existingStudentId != null && existingStudentId.isNotEmpty) {
       // Re-use global identity without touching credentials or recreating auth
       try {
-        await _client.from('student_enrollments').upsert(
-          {
-            'student_id': existingStudentId,
-            'subject_offering_id': subjectId,
-            'status': 'enrolled',
-          },
-          onConflict: 'student_id,subject_offering_id',
-        );
+        await _client.from('student_enrollments').upsert({
+          'student_id': existingStudentId,
+          'subject_offering_id': subjectId,
+          'status': 'enrolled',
+        }, onConflict: 'student_id,subject_offering_id');
       } catch (e) {
         debugPrint('Cross-teacher enrollment error: $e');
         rethrow;
@@ -627,9 +639,9 @@ class SupabaseStudentRepository implements StudentRepository {
               rfidUid: existingRfidUid != null
                   ? Value(existingRfidUid)
                   : const Value.absent(),
-              firstName: firstName,
-              middleName: Value(middleName),
-              lastName: lastName,
+              firstName: properFirst,
+              middleName: Value(cleanMiddleName),
+              lastName: properLast,
               gender: Value(gender),
             ),
           ]);
@@ -671,9 +683,9 @@ class SupabaseStudentRepository implements StudentRepository {
       await _client.from('student_profiles').upsert({
         'student_id': studentId,
         'lrn': lrn,
-        'first_name': firstName,
+        'first_name': properFirst,
         'middle_name': cleanMiddleName.isEmpty ? null : cleanMiddleName,
-        'last_name': lastName,
+        'last_name': properLast,
         'gender': gender,
         'birthday': bdayStr,
       });
@@ -683,14 +695,11 @@ class SupabaseStudentRepository implements StudentRepository {
           'student_id': studentId,
           'status': 'pending_first_login',
         }),
-        _client.from('student_enrollments').upsert(
-          {
-            'student_id': studentId,
-            'subject_offering_id': subjectId,
-            'status': 'enrolled',
-          },
-          onConflict: 'student_id,subject_offering_id',
-        ),
+        _client.from('student_enrollments').upsert({
+          'student_id': studentId,
+          'subject_offering_id': subjectId,
+          'status': 'enrolled',
+        }, onConflict: 'student_id,subject_offering_id'),
       ]);
     } catch (e) {
       debugPrint('Pure Dart enroll notice: $e');
@@ -702,14 +711,11 @@ class SupabaseStudentRepository implements StudentRepository {
             .maybeSingle();
         if (doubleCheck != null && doubleCheck['student_id'] != null) {
           final winnerId = doubleCheck['student_id'].toString();
-          await _client.from('student_enrollments').upsert(
-            {
-              'student_id': winnerId,
-              'subject_offering_id': subjectId,
-              'status': 'enrolled',
-            },
-            onConflict: 'student_id,subject_offering_id',
-          );
+          await _client.from('student_enrollments').upsert({
+            'student_id': winnerId,
+            'subject_offering_id': subjectId,
+            'status': 'enrolled',
+          }, onConflict: 'student_id,subject_offering_id');
           AppDataCache.instance.invalidatePrefix('teacher_students_');
           AppDataCache.instance.invalidatePrefix('attendance_');
           return StudentEnrollmentResult(
@@ -731,9 +737,9 @@ class SupabaseStudentRepository implements StudentRepository {
           LocalStudentsCompanion.insert(
             studentId: studentId,
             lrn: Value(lrn),
-            firstName: firstName,
+            firstName: properFirst,
             middleName: Value(cleanMiddleName),
-            lastName: lastName,
+            lastName: properLast,
             gender: Value(gender),
           ),
         ]);
@@ -785,6 +791,8 @@ class SupabaseStudentRepository implements StudentRepository {
     required DateTime birthday,
     required String subjectId,
   }) async {
+    final properFirst = AppValidators.toProperCase(firstName);
+    final properLast = AppValidators.toProperCase(lastName);
     final cleanMiddleName =
         AppValidators.normalizeMiddleInitial(middleName) ?? '';
     final bdayStr =
@@ -794,9 +802,9 @@ class SupabaseStudentRepository implements StudentRepository {
           .from('student_profiles')
           .update({
             'lrn': studentId,
-            'first_name': firstName,
+            'first_name': properFirst,
             'middle_name': cleanMiddleName.isEmpty ? null : cleanMiddleName,
-            'last_name': lastName,
+            'last_name': properLast,
             'gender': gender,
             'birthday': bdayStr,
           })
@@ -814,9 +822,9 @@ class SupabaseStudentRepository implements StudentRepository {
         )..where((t) => t.studentId.equals(id))).write(
           LocalStudentsCompanion(
             lrn: Value(studentId),
-            firstName: Value(firstName),
+            firstName: Value(properFirst),
             middleName: Value(cleanMiddleName.isEmpty ? null : cleanMiddleName),
-            lastName: Value(lastName),
+            lastName: Value(properLast),
             gender: Value(gender),
           ),
         );
@@ -907,10 +915,7 @@ class SupabaseStudentRepository implements StudentRepository {
 
     // 4. Disable Firebase Auth
     try {
-      await FirebaseAuthAdminService.setUserDisabled(
-        uid: id,
-        disabled: true,
-      );
+      await FirebaseAuthAdminService.setUserDisabled(uid: id, disabled: true);
     } catch (_) {}
 
     AppDataCache.instance.invalidatePrefix('teacher_students_');
@@ -990,10 +995,7 @@ class SupabaseStudentRepository implements StudentRepository {
 
     // 4. Re-enable Firebase Auth
     try {
-      await FirebaseAuthAdminService.setUserDisabled(
-        uid: id,
-        disabled: false,
-      );
+      await FirebaseAuthAdminService.setUserDisabled(uid: id, disabled: false);
     } catch (_) {}
 
     AppDataCache.instance.invalidatePrefix('teacher_students_');
@@ -1051,15 +1053,16 @@ class SupabaseStudentRepository implements StudentRepository {
             canDelete: false,
             isClassRemovalOnly: false,
             hasClassRecords: true,
-            blockReason:
-                'This student cannot be deleted from this class because they have recorded attendance data in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+            blockReason: 'This student cannot be deleted from this class because they have recorded attendance data in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
           );
         }
 
         // Grades check - only block if student has actual recorded grade data
         final gr = await _client
             .from('term_grades')
-            .select('id, initial_grade, transmuted_grade, is_finalized, remarks')
+            .select(
+              'id, initial_grade, transmuted_grade, is_finalized, remarks',
+            )
             .eq('student_id', id)
             .eq('subject_offering_id', resolvedOfferingId);
         final hasRealGrade = (gr as List).any((row) {
@@ -1078,8 +1081,7 @@ class SupabaseStudentRepository implements StudentRepository {
             canDelete: false,
             isClassRemovalOnly: false,
             hasClassRecords: true,
-            blockReason:
-                'This student cannot be deleted from this class because they have recorded term grades in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+            blockReason: 'This student cannot be deleted from this class because they have recorded term grades in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
           );
         }
 
@@ -1104,8 +1106,7 @@ class SupabaseStudentRepository implements StudentRepository {
               canDelete: false,
               isClassRemovalOnly: false,
               hasClassRecords: true,
-              blockReason:
-                  'This student cannot be deleted from this class because they have submitted classwork activities in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+              blockReason: 'This student cannot be deleted from this class because they have submitted classwork activities in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
             );
           }
         }
@@ -1131,8 +1132,7 @@ class SupabaseStudentRepository implements StudentRepository {
               canDelete: false,
               isClassRemovalOnly: false,
               hasClassRecords: true,
-              blockReason:
-                  'This student cannot be deleted from this class because they have taken assessment quizzes or exams in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+              blockReason: 'This student cannot be deleted from this class because they have taken assessment quizzes or exams in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
             );
           }
         }
@@ -1179,8 +1179,7 @@ class SupabaseStudentRepository implements StudentRepository {
       final hasGlobalRealGrade = (globalGr as List).any((row) {
         final isFinalized = row['is_finalized'] == true;
         final initGrade = (row['initial_grade'] as num?)?.toDouble() ?? 0.0;
-        final transGrade =
-            (row['transmuted_grade'] as num?)?.toDouble() ?? 0.0;
+        final transGrade = (row['transmuted_grade'] as num?)?.toDouble() ?? 0.0;
         final remarks = row['remarks']?.toString();
         return isFinalized ||
             initGrade > 0 ||
@@ -1220,8 +1219,7 @@ class SupabaseStudentRepository implements StudentRepository {
             isClassRemovalOnly: false,
             hasOtherEnrollments: hasOtherEnrollments,
             hasGlobalRecords: hasGlobalRecords,
-            blockReason:
-                'Cannot delete student because no specific class was identified and the student has existing enrollments or academic records.',
+            blockReason: 'Cannot delete student because no specific class was identified and the student has existing enrollments or academic records.',
           );
         }
       }
@@ -1238,8 +1236,7 @@ class SupabaseStudentRepository implements StudentRepository {
       return const StudentDeletionEligibility(
         canDelete: false,
         isClassRemovalOnly: false,
-        blockReason:
-            'Unable to verify student academic records at this time. Please try again.',
+        blockReason: 'Unable to verify student academic records at this time. Please try again.',
       );
     }
   }
@@ -1305,8 +1302,7 @@ class SupabaseStudentRepository implements StudentRepository {
       final hasRealRemainingGr = (anyGr as List).any((row) {
         final isFinalized = row['is_finalized'] == true;
         final initGrade = (row['initial_grade'] as num?)?.toDouble() ?? 0.0;
-        final transGrade =
-            (row['transmuted_grade'] as num?)?.toDouble() ?? 0.0;
+        final transGrade = (row['transmuted_grade'] as num?)?.toDouble() ?? 0.0;
         final remarks = row['remarks']?.toString();
         return isFinalized ||
             initGrade > 0 ||

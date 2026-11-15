@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
@@ -226,24 +227,15 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
       }
 
       if (q.isNotEmpty) {
-        final full = '${s.lastName} ${s.firstName} ${s.middleName ?? ''}'
-            .toLowerCase();
-
-        final display = s.displayName.toLowerCase();
-
-        final lrn = (s.lrn ?? '').toLowerCase();
-
-        final id = s.studentId.toLowerCase();
-
-        final rfid = (s.rfidUid ?? '').toLowerCase();
-
-        if (!full.contains(q) &&
-            !display.contains(q) &&
-            !lrn.contains(q) &&
-            !id.contains(q) &&
-            !rfid.contains(q)) {
-          return false;
-        }
+        final matches = SearchUtils.matches(
+          q,
+          names: [
+            '${s.lastName} ${s.firstName} ${s.middleName ?? ''}',
+            s.displayName,
+          ],
+          ids: [s.lrn, s.studentId, s.rfidUid],
+        );
+        if (!matches) return false;
       }
 
       return true;

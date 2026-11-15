@@ -6,6 +6,7 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/core/utils/validators.dart';
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/firebase_auth_admin_service.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
@@ -515,7 +516,11 @@ class SupabaseParentRepository {
     if (cleanQuery.isEmpty) return [];
 
     try {
-      // 1. Search parent_profiles by first_name or last_name
+      // 1. Search parent_profiles: each query word must START a first/last name
+      final safeTokens = SearchUtils.tokenize(cleanQuery);
+      final nameFilter = safeTokens
+          .map((t) => 'first_name.ilike.$t%,last_name.ilike.$t%')
+          .join(',');
       final parentResp = await _client
           .from('parent_profiles')
           .select('''
@@ -527,8 +532,8 @@ class SupabaseParentRepository {
             status,
             users!inner ( email, is_archived )
           ''')
-          .or('first_name.ilike.%$cleanQuery%,last_name.ilike.%$cleanQuery%')
-          .limit(15);
+          .or(nameFilter.isEmpty ? 'first_name.ilike.$cleanQuery%' : nameFilter)
+          .limit(30);
 
       final parentMap = <String, Map<String, dynamic>>{};
       for (final p in (parentResp as List)) {
@@ -542,6 +547,9 @@ class SupabaseParentRepository {
           p['middle_name'],
           p['last_name'],
         ].where((n) => n != null && n.toString().trim().isNotEmpty).join(' ');
+
+        // Every typed word must match the start of a name word (AND logic)
+        if (!SearchUtils.matches(cleanQuery, names: [fullName])) continue;
 
         parentMap[pid] = {
           'parentId': pid,

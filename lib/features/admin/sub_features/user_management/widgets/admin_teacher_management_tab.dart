@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -408,13 +409,11 @@ class _AdminTeacherManagementTabState extends State<AdminTeacherManagementTab> {
 
     // Filter by search
     final filtered = sourceList.where((t) {
-      final q = _searchQuery.trim().toLowerCase();
-      final matchesSearch =
-          q.isEmpty ||
-          t.fullName.toLowerCase().contains(q) ||
-          t.email.toLowerCase().contains(q);
-
-      return matchesSearch;
+      return SearchUtils.matches(
+        _searchQuery,
+        names: [t.fullName],
+        loose: [t.email],
+      );
     }).toList();
 
     // Sort list

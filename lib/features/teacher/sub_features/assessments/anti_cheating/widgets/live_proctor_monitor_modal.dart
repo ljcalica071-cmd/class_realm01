@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
@@ -372,9 +373,11 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
         if (_genderFilter == 'female' && g != 'female') return false;
       }
       if (_searchQuery.isNotEmpty) {
-        final q = _searchQuery.toLowerCase();
-        return s.studentName.toLowerCase().contains(q) ||
-            s.lrn.toLowerCase().contains(q);
+        return SearchUtils.matches(
+          _searchQuery,
+          names: [s.studentName],
+          ids: [s.lrn],
+        );
       }
       return true;
     }).toList();

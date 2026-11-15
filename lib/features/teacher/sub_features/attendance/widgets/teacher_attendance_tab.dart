@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -4254,13 +4255,12 @@ class _SelectStudentForRfidDialogState
 
     final isDark = theme.brightness == Brightness.dark;
 
-    final q = _query.trim().toLowerCase();
-
     final filtered = widget.students.where((s) {
-      if (q.isEmpty) return true;
-
-      return s.displayName.toLowerCase().contains(q) ||
-          (s.lrn ?? '').toLowerCase().contains(q);
+      return SearchUtils.matches(
+        _query,
+        names: [s.displayName],
+        ids: [s.lrn],
+      );
     }).toList();
 
     return Dialog(

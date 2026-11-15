@@ -451,18 +451,11 @@ class _TeacherStudentManagementTabState
         (_showArchivedStudents ? _archivedStudents : _activeStudents).where((
           s,
         ) {
-          final matchesSearch =
-              s.fullName.toLowerCase().contains(
-                _studentSearchQuery.toLowerCase(),
-              ) ||
-              (s.lrn?.toLowerCase().contains(
-                    _studentSearchQuery.toLowerCase(),
-                  ) ??
-                  false) ||
-              (s.rfidUid?.toLowerCase().contains(
-                    _studentSearchQuery.toLowerCase(),
-                  ) ??
-                  false);
+          final matchesSearch = SearchUtils.matches(
+            _studentSearchQuery,
+            names: [s.fullName, '${s.firstName ?? ''} ${s.lastName ?? ''}'],
+            ids: [s.lrn, s.rfidUid],
+          );
           final effectiveSubject =
               _teacherSubjects.contains(_selectedSubjectFilter)
               ? _selectedSubjectFilter

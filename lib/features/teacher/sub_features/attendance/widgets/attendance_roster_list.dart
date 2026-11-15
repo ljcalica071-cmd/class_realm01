@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -243,8 +244,11 @@ class _AttendanceRosterListState extends State<AttendanceRosterList> {
     final filtered = query.isEmpty
         ? combined
         : combined.where((s) {
-            return s.displayName.toLowerCase().contains(query) ||
-                s.studentId.toLowerCase().contains(query);
+            return SearchUtils.matches(
+              query,
+              names: [s.displayName],
+              ids: [s.studentId, s.lrn],
+            );
           }).toList();
 
     if (filtered.isEmpty) {

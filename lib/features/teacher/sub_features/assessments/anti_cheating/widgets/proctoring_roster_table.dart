@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -139,14 +140,15 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable>
         return false;
       }
       if (q.isNotEmpty) {
-        final full =
-            '${s.lastName ?? ''} ${s.firstName ?? ''} ${s.middleName ?? ''} ${s.studentName}'
-                .toLowerCase();
-        final lrn = s.lrn.toLowerCase();
-        final id = s.studentId.toLowerCase();
-        if (!full.contains(q) && !lrn.contains(q) && !id.contains(q)) {
-          return false;
-        }
+        final matches = SearchUtils.matches(
+          q,
+          names: [
+            '${s.lastName ?? ''} ${s.firstName ?? ''} ${s.middleName ?? ''}',
+            s.studentName,
+          ],
+          ids: [s.lrn, s.studentId],
+        );
+        if (!matches) return false;
       }
       return true;
     }).toList();

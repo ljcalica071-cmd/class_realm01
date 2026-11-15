@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/services/gemini_service.dart';
@@ -343,11 +344,13 @@ class _TeacherLessonPlanningTabState extends State<TeacherLessonPlanningTab> {
       if (!_matchesDateFilter(plan.updatedAt)) {
         return false;
       }
-      if (query.isNotEmpty) {
-        final haystack =
-            '${plan.topic} ${plan.subject} ${plan.gradeLevel} ${plan.term}'
-                .toLowerCase();
-        if (!haystack.contains(query)) return false;
+      if (!SearchUtils.isEmpty(query)) {
+        final matches = SearchUtils.matches(
+          query,
+          names: [plan.topic, plan.subject],
+          loose: [plan.gradeLevel, plan.term],
+        );
+        if (!matches) return false;
       }
       return true;
     }).toList();

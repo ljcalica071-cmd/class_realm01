@@ -1,3 +1,4 @@
+import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1747,10 +1748,12 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   List<UserModel> get _filteredStudents {
     return _enrolledStudents.where((student) {
       if (_searchQuery.isNotEmpty) {
-        final q = _searchQuery.toLowerCase();
-        final name = _formatStudentName(student).toLowerCase();
-        final rawName = student.fullName.toLowerCase();
-        if (!name.contains(q) && !rawName.contains(q)) return false;
+        final matches = SearchUtils.matches(
+          _searchQuery,
+          names: [_formatStudentName(student), student.fullName],
+          ids: [student.lrn],
+        );
+        if (!matches) return false;
       }
 
       if (_selectedStatus != 'All') {
