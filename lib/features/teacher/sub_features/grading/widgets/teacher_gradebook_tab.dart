@@ -2935,7 +2935,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
-              color: isDark ? const Color(0xFFFFD700) : accent,
+              color: isDark ? const Color(0xFFFFD700) : const Color(0xFFCA8A04),
             ),
           ),
         ],
@@ -4284,7 +4284,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                   )
                 else
                   Icon(
-                    Icons.file_download_outlined,
+                    LucideIcons.fileSpreadsheet,
                     size: 14,
                     color: effectiveFg,
                   ),
