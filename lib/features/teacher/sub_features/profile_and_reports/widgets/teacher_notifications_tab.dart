@@ -450,78 +450,149 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
                 )
               : displayedNotifications.isEmpty
               ? Center(
-                  child: Container(
+                  child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      vertical: 48,
+                      vertical: 64,
                       horizontal: 32,
                     ),
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.08,
-                        ),
-                        width: 1.5,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Glowing dual-circle ambient icon
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: 88,
+                                height: 88,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.06,
+                                  ),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              Container(
+                                width: 68,
+                                height: 68,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  _searchQuery.isNotEmpty ||
+                                          (_selectedSubjectFilter != null &&
+                                              _selectedSubjectFilter != 'ALL')
+                                      ? LucideIcons.searchX
+                                      : LucideIcons.bellRing,
+                                  size: 30,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          // Subtle Status Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF10B981),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'Real-time Sync Active',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF059669),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            _searchQuery.isNotEmpty ||
+                                    (_selectedSubjectFilter != null &&
+                                        _selectedSubjectFilter != 'ALL')
+                                ? 'No matching notifications'
+                                : 'You\'re all caught up!',
+                            style: TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
+                              color: theme.colorScheme.onSurface,
+                              letterSpacing: -0.4,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _searchQuery.isNotEmpty ||
+                                    (_selectedSubjectFilter != null &&
+                                        _selectedSubjectFilter != 'ALL')
+                                ? 'No notifications match your current search or filter criteria. Try adjusting your query or subject filter.'
+                                : 'There are no unread alerts or announcements right now. New activity will appear here in real-time.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              height: 1.5,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
+                          ),
+                          if (_searchQuery.isNotEmpty ||
+                              (_selectedSubjectFilter != null &&
+                                  _selectedSubjectFilter != 'ALL')) ...[
+                            const SizedBox(height: 18),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _searchQuery = '';
+                                  _searchCtrl.clear();
+                                  _selectedSubjectFilter = 'ALL';
+                                  _currentPage = 1;
+                                });
+                              },
+                              icon: const Icon(LucideIcons.rotateCcw, size: 14),
+                              label: const Text(
+                                'Clear Filters',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.02),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.1,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            LucideIcons.bellOff,
-                            size: 30,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          _searchQuery.isNotEmpty ||
-                                  (_selectedSubjectFilter != null &&
-                                      _selectedSubjectFilter != 'ALL')
-                              ? 'No matching notifications'
-                              : 'You\'re all caught up!',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: theme.colorScheme.onSurface,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _searchQuery.isNotEmpty ||
-                                  (_selectedSubjectFilter != null &&
-                                      _selectedSubjectFilter != 'ALL')
-                              ? 'Try adjusting your search terms or subject filter.'
-                              : 'There are no new alerts or announcements at the moment.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            height: 1.5,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 )

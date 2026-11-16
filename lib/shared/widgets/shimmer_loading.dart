@@ -1421,3 +1421,739 @@ class ShimmerAttendanceHistorySkeleton extends StatelessWidget {
     );
   }
 }
+
+/// Preset: Student Home Screen Skeleton (Aligned with current Hero + Quick Actions + To-do layout)
+class ShimmerStudentHomeSkeleton extends StatelessWidget {
+  const ShimmerStudentHomeSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return ShimmerLoading(
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Top Student Hero Card ──
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: isDark ? 0.14 : 0.08,
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            ShimmerBox(width: 110, height: 20, borderRadius: 10),
+                            SizedBox(height: 12),
+                            ShimmerBox(width: 90, height: 13, borderRadius: 4),
+                            SizedBox(height: 6),
+                            ShimmerBox(width: 170, height: 20, borderRadius: 4),
+                            SizedBox(height: 8),
+                            ShimmerBox(width: 130, height: 14, borderRadius: 4),
+                          ],
+                        ),
+                      ),
+                      const ShimmerBox(width: 58, height: 58, borderRadius: 29),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  // Bottom mini stat cards row (Enrolled, To-Do)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: isDark ? 0.06 : 0.04,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Container(
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: isDark ? 0.06 : 0.04,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Quick Access Row (Attendance & Schedule) ──
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 64,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.12 : 0.07,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        ShimmerBox(width: 28, height: 28, borderRadius: 8),
+                        SizedBox(width: 10),
+                        ShimmerBox(width: 72, height: 14, borderRadius: 4),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    height: 64,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.12 : 0.07,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        ShimmerBox(width: 28, height: 28, borderRadius: 8),
+                        SizedBox(width: 10),
+                        ShimmerBox(width: 68, height: 14, borderRadius: 4),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+
+            // ── To-Do List Section Header ──
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: const [
+                ShimmerBox(width: 90, height: 18, borderRadius: 4),
+                ShimmerBox(width: 70, height: 20, borderRadius: 10),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const ShimmerBox(width: 240, height: 12, borderRadius: 4),
+            const SizedBox(height: 16),
+
+            // ── To-Do Empty/List Card Skeleton ──
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: isDark ? 0.12 : 0.07,
+                  ),
+                ),
+              ),
+              child: Column(
+                children: const [
+                  ShimmerBox(width: 56, height: 56, borderRadius: 28),
+                  SizedBox(height: 16),
+                  ShimmerBox(width: 160, height: 16, borderRadius: 4),
+                  SizedBox(height: 8),
+                  ShimmerBox(width: 220, height: 12, borderRadius: 4),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Preset: Student Classwork Skeleton (Subject selector + WW/PT/EX tabs + cards)
+class ShimmerClassworkSkeleton extends StatelessWidget {
+  const ShimmerClassworkSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return ShimmerLoading(
+      child: Column(
+        children: [
+          // Enrolled subject dropdown bar
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              border: Border(
+                bottom: BorderSide(
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: isDark ? 0.12 : 0.08,
+                  ),
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                ShimmerBox(width: 110, height: 12, borderRadius: 4),
+                SizedBox(height: 8),
+                ShimmerBox(height: 44, borderRadius: 12),
+              ],
+            ),
+          ),
+
+          // Tab Bar (Written WW, Tasks PT, Exams EX)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: const [
+                Expanded(child: ShimmerBox(height: 36, borderRadius: 10)),
+                SizedBox(width: 8),
+                Expanded(child: ShimmerBox(height: 36, borderRadius: 10)),
+                SizedBox(width: 8),
+                Expanded(child: ShimmerBox(height: 36, borderRadius: 10)),
+              ],
+            ),
+          ),
+
+          // Cards list
+          Expanded(
+            child: ListView.separated(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+              itemCount: 4,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (_, _) => Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: isDark ? 0.12 : 0.07,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const ShimmerBox(width: 42, height: 42, borderRadius: 12),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          ShimmerBox(width: 160, height: 15, borderRadius: 4),
+                          SizedBox(height: 8),
+                          ShimmerBox(width: 100, height: 12, borderRadius: 4),
+                          SizedBox(height: 8),
+                          ShimmerBox(width: 140, height: 12, borderRadius: 4),
+                        ],
+                      ),
+                    ),
+                    const ShimmerBox(width: 60, height: 24, borderRadius: 12),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Preset: Student Notifications / Alerts Skeleton
+class ShimmerStudentNotificationsSkeleton extends StatelessWidget {
+  const ShimmerStudentNotificationsSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return ShimmerLoading(
+      child: Column(
+        children: [
+          // Filter Bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: const [
+                ShimmerBox(width: 90, height: 38, borderRadius: 12),
+                SizedBox(width: 10),
+                Expanded(child: ShimmerBox(height: 38, borderRadius: 12)),
+              ],
+            ),
+          ),
+
+          // Notification Cards
+          Expanded(
+            child: ListView.separated(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              itemCount: 5,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (_, _) => Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: isDark ? 0.12 : 0.07,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const ShimmerBox(width: 40, height: 40, borderRadius: 20),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          ShimmerBox(width: 140, height: 14, borderRadius: 4),
+                          SizedBox(height: 6),
+                          ShimmerBox(width: double.infinity, height: 12, borderRadius: 4),
+                          SizedBox(height: 4),
+                          ShimmerBox(width: 180, height: 12, borderRadius: 4),
+                          SizedBox(height: 8),
+                          ShimmerBox(width: 80, height: 10, borderRadius: 4),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Preset: Student Attendance Skeleton (4 KPI cards + dropdown + pills + table)
+class ShimmerStudentAttendanceSkeleton extends StatelessWidget {
+  const ShimmerStudentAttendanceSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return ShimmerLoading(
+      child: Column(
+        children: [
+          // 4 Stats Cards Row
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Row(
+              children: [
+                Expanded(child: Container(height: 68, decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(14)))),
+                const SizedBox(width: 8),
+                Expanded(child: Container(height: 68, decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(14)))),
+                const SizedBox(width: 8),
+                Expanded(child: Container(height: 68, decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(14)))),
+                const SizedBox(width: 8),
+                Expanded(child: Container(height: 68, decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(14)))),
+              ],
+            ),
+          ),
+
+          // Subject dropdown & pills row
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                const ShimmerBox(height: 38, borderRadius: 10),
+                const SizedBox(height: 10),
+                Row(
+                  children: const [
+                    Expanded(child: ShimmerBox(height: 32, borderRadius: 8)),
+                    SizedBox(width: 8),
+                    Expanded(child: ShimmerBox(height: 32, borderRadius: 8)),
+                    SizedBox(width: 8),
+                    Expanded(child: ShimmerBox(height: 32, borderRadius: 8)),
+                    SizedBox(width: 8),
+                    Expanded(child: ShimmerBox(height: 32, borderRadius: 8)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+
+          // Attendance Log Table Rows
+          Expanded(
+            child: ListView.separated(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              itemCount: 6,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (_, _) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: isDark ? 0.12 : 0.07,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: const [
+                    ShimmerBox(width: 36, height: 36, borderRadius: 18),
+                    SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ShimmerBox(width: 120, height: 14, borderRadius: 4),
+                          SizedBox(height: 6),
+                          ShimmerBox(width: 90, height: 11, borderRadius: 4),
+                        ],
+                      ),
+                    ),
+                    ShimmerBox(width: 65, height: 24, borderRadius: 12),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Preset: Student Schedule Skeleton (Supports List view and Timetable grid view)
+class ShimmerStudentScheduleSkeleton extends StatelessWidget {
+  final bool isTimetable;
+  const ShimmerStudentScheduleSkeleton({super.key, this.isTimetable = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return ShimmerLoading(
+      child: Column(
+        children: [
+          // Header title & view toggle
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: const [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ShimmerBox(width: 100, height: 16, borderRadius: 4),
+                    SizedBox(height: 4),
+                    ShimmerBox(width: 80, height: 12, borderRadius: 4),
+                  ],
+                ),
+                ShimmerBox(width: 180, height: 38, borderRadius: 20),
+              ],
+            ),
+          ),
+
+          Expanded(
+            child: isTimetable
+                ? _buildTimetableSkeleton(theme, isDark)
+                : _buildListSkeleton(theme, isDark),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListSkeleton(ThemeData theme, bool isDark) {
+    return ListView.separated(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      itemCount: 4,
+      separatorBuilder: (_, _) => const SizedBox(height: 14),
+      itemBuilder: (_, _) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: theme.colorScheme.onSurface.withValues(
+              alpha: isDark ? 0.12 : 0.07,
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: const [
+                ShimmerBox(width: 140, height: 16, borderRadius: 4),
+                ShimmerBox(width: 70, height: 22, borderRadius: 10),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: const [
+                ShimmerBox(width: 18, height: 18, borderRadius: 4),
+                SizedBox(width: 8),
+                ShimmerBox(width: 120, height: 12, borderRadius: 4),
+                Spacer(),
+                ShimmerBox(width: 80, height: 12, borderRadius: 4),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimetableSkeleton(ThemeData theme, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: List.generate(
+              5,
+              (i) => const Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 3),
+                  child: ShimmerBox(height: 32, borderRadius: 8),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: GridView.builder(
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 5,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 6,
+                childAspectRatio: 0.85,
+              ),
+              itemCount: 15,
+              itemBuilder: (_, _) => Container(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: isDark ? 0.10 : 0.06,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Preset: Student Learning Materials Skeleton (Overview or inside folder)
+class ShimmerLearningMaterialsSkeleton extends StatelessWidget {
+  final bool isInsideFolder;
+  const ShimmerLearningMaterialsSkeleton({super.key, this.isInsideFolder = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return ShimmerLoading(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isInsideFolder) ...[
+            // Context Strip
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: theme.colorScheme.surface,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: const [
+                  ShimmerBox(width: 160, height: 14, borderRadius: 4),
+                  ShimmerBox(width: 100, height: 14, borderRadius: 4),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Breadcrumbs Bar
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: ShimmerBox(width: 180, height: 14, borderRadius: 4),
+            ),
+            const SizedBox(height: 10),
+            // Module Folders
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: const ShimmerBox(width: 140, height: 14, borderRadius: 4),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.separated(
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: 4,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (_, _) => Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: isDark ? 0.12 : 0.07,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: const [
+                      ShimmerBox(width: 36, height: 36, borderRadius: 8),
+                      SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ShimmerBox(width: 100, height: 15, borderRadius: 4),
+                            SizedBox(height: 6),
+                            ShimmerBox(width: 130, height: 11, borderRadius: 4),
+                          ],
+                        ),
+                      ),
+                      ShimmerBox(width: 16, height: 16, borderRadius: 4),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ] else ...[
+            // Level 1: Enrolled Subjects View
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: const [
+                    ShimmerBox(width: 44, height: 44, borderRadius: 12),
+                    SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ShimmerBox(width: 130, height: 15, borderRadius: 4),
+                          SizedBox(height: 6),
+                          ShimmerBox(width: 180, height: 11, borderRadius: 4),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: ShimmerBox(width: 130, height: 14, borderRadius: 4),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView.separated(
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: 3,
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                itemBuilder: (_, _) => Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: isDark ? 0.12 : 0.07,
+                      ),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: const [
+                          ShimmerBox(width: 100, height: 22, borderRadius: 6),
+                          ShimmerBox(width: 70, height: 14, borderRadius: 4),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const ShimmerBox(width: 180, height: 16, borderRadius: 4),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: const [
+                          ShimmerBox(width: 90, height: 12, borderRadius: 4),
+                          SizedBox(width: 14),
+                          ShimmerBox(width: 100, height: 12, borderRadius: 4),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+

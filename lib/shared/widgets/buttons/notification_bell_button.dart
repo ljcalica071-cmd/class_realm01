@@ -126,7 +126,8 @@ class _NotificationBellButtonState extends State<NotificationBellButton> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = widget.iconColor ?? theme.colorScheme.onSurface;
+    final iconTheme = IconTheme.of(context);
+    final color = widget.iconColor ?? iconTheme.color ?? theme.colorScheme.onSurface;
 
     return Stack(
       alignment: Alignment.center,
@@ -134,7 +135,9 @@ class _NotificationBellButtonState extends State<NotificationBellButton> {
       children: [
         IconButton(
           tooltip: widget.tooltip,
-          icon: Icon(LucideIcons.bell, color: color, size: 24),
+          color: color,
+          style: IconButton.styleFrom(foregroundColor: color),
+          icon: Icon(LucideIcons.bell, color: color, size: 22),
           onPressed: widget.onTap,
         ),
         if (_unreadCount > 0)

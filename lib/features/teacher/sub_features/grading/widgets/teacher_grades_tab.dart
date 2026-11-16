@@ -600,7 +600,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             // Filter & Overview Row Skeleton
             LayoutBuilder(
               builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 990;
+                final isWide = constraints.maxWidth >= 800;
                 final filterBox = Container(
                   height: 110,
                   padding: const EdgeInsets.all(16),
@@ -738,7 +738,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   ),
                 );
 
-                if (constraints.maxWidth >= 920) {
+                if (constraints.maxWidth >= 900) {
                   return Row(
                     children: [
                       Expanded(child: buildKpiSkeleton()),
@@ -750,7 +750,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       Expanded(child: buildKpiSkeleton()),
                     ],
                   );
-                } else {
+                } else if (constraints.maxWidth >= 520) {
                   return Column(
                     children: [
                       Row(
@@ -768,6 +768,18 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           Expanded(child: buildKpiSkeleton()),
                         ],
                       ),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      buildKpiSkeleton(),
+                      const SizedBox(height: 12),
+                      buildKpiSkeleton(),
+                      const SizedBox(height: 12),
+                      buildKpiSkeleton(),
+                      const SizedBox(height: 12),
+                      buildKpiSkeleton(),
                     ],
                   );
                 }
@@ -1064,7 +1076,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           theme,
         );
 
-        if (constraints.maxWidth > 980) {
+        if (constraints.maxWidth >= 800) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1701,7 +1713,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
           theme: theme,
         );
 
-        if (constraints.maxWidth > 950) {
+        if (constraints.maxWidth >= 900) {
           return Row(
             children: [
               Expanded(child: card1),
@@ -1713,7 +1725,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
               Expanded(child: card4),
             ],
           );
-        } else {
+        } else if (constraints.maxWidth >= 520) {
           return Column(
             children: [
               Row(
@@ -1731,6 +1743,18 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   Expanded(child: card4),
                 ],
               ),
+            ],
+          );
+        } else {
+          return Column(
+            children: [
+              card1,
+              const SizedBox(height: 12),
+              card2,
+              const SizedBox(height: 12),
+              card3,
+              const SizedBox(height: 12),
+              card4,
             ],
           );
         }

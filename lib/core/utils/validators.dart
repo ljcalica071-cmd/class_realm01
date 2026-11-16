@@ -118,7 +118,7 @@ class AppValidators {
     return null;
   }
 
-  /// Validates Classwork / Assessment detailed instructions & rubrics (2 to 1,000 non-space characters)
+  /// Validates Classwork / Assessment detailed instructions & rubrics (2 to 1,000 non-space characters, optional)
   static String? validateClassworkInstructions(String? value) {
     final raw = value ?? '';
     final text = raw.trim();
@@ -126,7 +126,7 @@ class AppValidators {
       return 'Instructions cannot contain only spaces.';
     }
     if (text.isEmpty) {
-      return 'Detailed instructions are required.';
+      return null;
     }
     if (text.length < minClassworkInstructionsLength) {
       return 'Instructions must be at least $minClassworkInstructionsLength characters.';

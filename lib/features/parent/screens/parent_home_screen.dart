@@ -12,7 +12,6 @@ import 'package:class_realm/features/parent/widgets/widgets.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
@@ -632,6 +631,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             ParentAttendanceTab(
               attendance: _childAttendance,
               onRefresh: _refreshParentPortal,
+              linkedStudent: linkedStudent,
             ),
             // 2: Schedule
             ParentScheduleView(
@@ -714,14 +714,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             NotificationBellButton(
               role: 'parent',
               tooltip: 'School Alerts & Notifications',
+              iconColor: Colors.white,
               onTap: () => _selectBottomTab(3),
             ),
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.only(right: 10, left: 4),
-                child: SyncStatusBadge(onAppBar: true),
-              ),
-            ),
+            const SizedBox(width: 8),
           ],
         ),
         drawer: ParentDrawer(

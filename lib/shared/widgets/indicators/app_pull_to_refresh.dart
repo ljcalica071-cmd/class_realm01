@@ -12,6 +12,7 @@ class AppPullToRefresh extends StatefulWidget {
   final Widget child;
   final Future<void> Function()? onRefresh;
   final double triggerDistance;
+  final double restingTop;
   final Color? capsuleColor;
   final Color? indicatorColor;
 
@@ -20,6 +21,7 @@ class AppPullToRefresh extends StatefulWidget {
     required this.child,
     required this.onRefresh,
     this.triggerDistance = 56.0,
+    this.restingTop = 14.0,
     this.capsuleColor,
     this.indicatorColor,
   });
@@ -53,17 +55,36 @@ class AppPullToRefresh extends StatefulWidget {
   State<AppPullToRefresh> createState() => _AppPullToRefreshState();
 }
 
-class _AppPullToRefreshState extends State<AppPullToRefresh> {
+class _AppPullToRefreshState extends State<AppPullToRefresh>
+    with SingleTickerProviderStateMixin {
   static const double _maxPullDistance = 108.0;
   static const double _holdDistance = 52.0;
 
   double _pullDistance = 0.0;
   bool _isDraggingFromTop = false;
   bool _isRefreshing = false;
+  late final AnimationController _exitController;
+
+  @override
+  void initState() {
+    super.initState();
+    _exitController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+  }
+
+  @override
+  void dispose() {
+    _exitController.dispose();
+    super.dispose();
+  }
 
   bool _handleScrollNotification(ScrollNotification notification) {
     if (widget.onRefresh == null) return false;
-    if (notification.depth != 0) return false;
+    // Support direct scrollables (depth 0) and vertical scrollables inside
+    // horizontal tab/page views (depth 1).
+    if (notification.depth > 1) return false;
     if (notification.metrics.axis != Axis.vertical) return false;
     if (_isRefreshing) return false;
 
@@ -135,10 +156,15 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> {
       await widget.onRefresh!();
     } finally {
       if (mounted) {
-        setState(() {
-          _isRefreshing = false;
-          _pullDistance = 0.0;
-        });
+        // Smooth fade-out and slide upward before unmounting
+        await _exitController.forward();
+        if (mounted) {
+          _exitController.reset();
+          setState(() {
+            _isRefreshing = false;
+            _pullDistance = 0.0;
+          });
+        }
       }
     }
   }
@@ -152,11 +178,14 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> {
     final theme = Theme.of(context);
     final bg = widget.capsuleColor ?? theme.colorScheme.primary;
     final fg = widget.indicatorColor ?? Colors.white;
-    final showCapsule = _isRefreshing || _pullDistance > 2.0;
+    final showCapsule =
+        _isRefreshing || _pullDistance > 2.0 || _exitController.isAnimating;
     final progress = (_pullDistance / widget.triggerDistance).clamp(0.0, 1.0);
-    final topOffset = _isRefreshing
-        ? 14.0
-        : (-40.0 + (_pullDistance * 0.95)).clamp(-40.0, 26.0);
+    final enterCurve = Curves.easeOutCubic.transform(progress);
+
+    final restingTop = widget.restingTop;
+    const startTop = -44.0;
+    final pullTop = startTop + (enterCurve * (restingTop - startTop));
 
     return NotificationListener<ScrollNotification>(
       onNotification: _handleScrollNotification,
@@ -165,51 +194,70 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> {
         children: [
           widget.child,
           if (showCapsule)
-            Positioned(
-              top: topOffset,
-              child: IgnorePointer(
-                child: Opacity(
-                  opacity: _isRefreshing
-                      ? 1.0
-                      : (progress * 1.25).clamp(0.15, 1.0),
-                  child: Transform.scale(
-                    scale: _isRefreshing ? 1.0 : (0.82 + (0.18 * progress)),
-                    child: Container(
-                      key: const Key('app_pull_to_refresh_capsule'),
-                      height: 38,
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                      decoration: BoxDecoration(
-                        color: bg,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.24),
-                          width: 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: bg.withValues(alpha: 0.34),
-                            blurRadius: 14,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      alignment: Alignment.center,
-                      child: _isRefreshing
-                          ? SizedBox(
-                              width: 28,
-                              height: 22,
-                              child: Center(
-                                child: LoadingAnimationWidget.staggeredDotsWave(
-                                  color: fg,
-                                  size: 24,
-                                ),
+            AnimatedBuilder(
+              animation: _exitController,
+              builder: (context, _) {
+                final exitProgress =
+                    Curves.easeInOut.transform(_exitController.value);
+                final currentTop = _isRefreshing
+                    ? (restingTop - (exitProgress * 12.0))
+                    : pullTop;
+                final currentOpacity = _isRefreshing
+                    ? (1.0 - exitProgress).clamp(0.0, 1.0)
+                    : enterCurve.clamp(0.0, 1.0);
+                final currentScale = _isRefreshing
+                    ? (1.0 - (exitProgress * 0.06))
+                    : (0.84 + (0.16 * enterCurve));
+
+                return Positioned(
+                  top: currentTop,
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: currentOpacity,
+                      child: Transform.scale(
+                        scale: currentScale,
+                        child: Container(
+                          key: const Key('app_pull_to_refresh_capsule'),
+                          height: 38,
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          decoration: BoxDecoration(
+                            color: bg,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.24),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: bg.withValues(alpha: 0.34),
+                                blurRadius: 14,
+                                offset: const Offset(0, 5),
                               ),
-                            )
-                          : _PullWavePreviewDots(progress: progress, color: fg),
+                            ],
+                          ),
+                          alignment: Alignment.center,
+                          child: _isRefreshing
+                              ? SizedBox(
+                                  width: 28,
+                                  height: 22,
+                                  child: Center(
+                                    child:
+                                        LoadingAnimationWidget.staggeredDotsWave(
+                                      color: fg,
+                                      size: 24,
+                                    ),
+                                  ),
+                                )
+                              : _PullWavePreviewDots(
+                                  progress: progress,
+                                  color: fg,
+                                ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
         ],
       ),

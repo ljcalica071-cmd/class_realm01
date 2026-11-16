@@ -119,225 +119,235 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
             // --- HEADER (Avatar, Name, Edit Button) ---
             Container(
               color: theme.colorScheme.surface,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 24,
-                    ),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final isNarrow = constraints.maxWidth < 650;
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1040),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 24,
+                        ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isNarrow = constraints.maxWidth < 650;
 
-                        final avatarWidget = Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.18,
-                              ),
-                              width: 3,
-                            ),
-                          ),
-                          child: CircleAvatar(
-                            radius: 46,
-                            backgroundColor: theme.colorScheme.primary,
-                            backgroundImage: _teacher.profileImage != null
-                                ? NetworkImage(_teacher.profileImage!)
-                                : null,
-                            child: _teacher.profileImage == null
-                                ? Text(
-                                    _teacher.fullName.isNotEmpty
-                                        ? _teacher.fullName[0].toUpperCase()
-                                        : 'T',
-                                    style: const TextStyle(
-                                      fontSize: 34,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        );
-
-                        final nameAndRoleWidget = Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Wrap(
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              spacing: 10,
-                              runSpacing: 4,
-                              children: [
-                                Text(
-                                  _teacher.fullName,
-                                  style: TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.colorScheme.onSurface,
+                            final avatarWidget = Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.18,
                                   ),
+                                  width: 3,
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.primary.withValues(
-                                      alpha: 0.1,
+                              ),
+                              child: CircleAvatar(
+                                radius: 46,
+                                backgroundColor: theme.colorScheme.primary,
+                                backgroundImage: _teacher.profileImage != null
+                                    ? NetworkImage(_teacher.profileImage!)
+                                    : null,
+                                child: _teacher.profileImage == null
+                                    ? Text(
+                                        _teacher.fullName.isNotEmpty
+                                            ? _teacher.fullName[0].toUpperCase()
+                                            : 'T',
+                                        style: const TextStyle(
+                                          fontSize: 34,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                            );
+
+                            final nameAndRoleWidget = Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 10,
+                                  runSpacing: 4,
+                                  children: [
+                                    Text(
+                                      _teacher.fullName,
+                                      style: TextStyle(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.colorScheme.onSurface,
+                                      ),
                                     ),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    'FACULTY',
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.8,
-                                      color: theme.colorScheme.primary,
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.primary.withValues(
+                                          alpha: 0.1,
+                                        ),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'FACULTY',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.8,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _teacher.subjectSpecialization != null &&
+                                          _teacher.subjectSpecialization!.isNotEmpty
+                                      ? _teacher.subjectSpecialization!
+                                      : 'Educator',
+                                  style: TextStyle(
+                                    fontSize: 14.5,
+                                    color: theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.65,
                                     ),
                                   ),
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _teacher.subjectSpecialization != null &&
-                                      _teacher.subjectSpecialization!.isNotEmpty
-                                  ? _teacher.subjectSpecialization!
-                                  : 'Educator',
-                              style: TextStyle(
-                                fontSize: 14.5,
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.65,
+                            );
+
+                            final editBtn = ElevatedButton.icon(
+                              onPressed: () {
+                                EditTeacherProfileDialog.show(
+                                  context,
+                                  teacher: _teacher,
+                                  onProfileUpdated: (updatedTeacher) {
+                                    if (mounted) {
+                                      setState(() {
+                                        _teacher = updatedTeacher;
+                                        _loadTeacherData();
+                                      });
+                                    }
+                                  },
+                                );
+                              },
+                              icon: const Icon(Icons.edit_outlined, size: 17),
+                              label: const Text('Edit Profile'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: theme.colorScheme.primary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
-                            ),
-                          ],
-                        );
+                            );
 
-                        final editBtn = ElevatedButton.icon(
-                          onPressed: () {
-                            EditTeacherProfileDialog.show(
-                              context,
-                              teacher: _teacher,
-                              onProfileUpdated: (updatedTeacher) {
-                                if (mounted) {
-                                  setState(() {
-                                    _teacher = updatedTeacher;
-                                    _loadTeacherData();
-                                  });
-                                }
-                              },
+                            if (isNarrow) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      avatarWidget,
+                                      const SizedBox(width: 16),
+                                      Expanded(child: nameAndRoleWidget),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  SizedBox(width: double.infinity, child: editBtn),
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      avatarWidget,
+                                      const SizedBox(width: 20),
+                                      Expanded(child: nameAndRoleWidget),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                editBtn,
+                              ],
                             );
                           },
-                          icon: const Icon(Icons.edit_outlined, size: 17),
-                          label: const Text('Edit Profile'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        );
-
-                        if (isNarrow) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  avatarWidget,
-                                  const SizedBox(width: 16),
-                                  Expanded(child: nameAndRoleWidget),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              SizedBox(width: double.infinity, child: editBtn),
-                            ],
-                          );
-                        }
-
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  avatarWidget,
-                                  const SizedBox(width: 20),
-                                  Expanded(child: nameAndRoleWidget),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            editBtn,
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    alignment: Alignment.centerLeft,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _buildProfileTab(
-                            index: 0,
-                            label: 'About',
-                            icon: Icons.person_outline_rounded,
-                            theme: theme,
-                          ),
-                          const SizedBox(width: 8),
-                          _buildProfileTab(
-                            index: 1,
-                            label: 'Settings',
-                            icon: Icons.settings_outlined,
-                            theme: theme,
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      const Divider(height: 1),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        alignment: Alignment.centerLeft,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildProfileTab(
+                                index: 0,
+                                label: 'About',
+                                icon: Icons.person_outline_rounded,
+                                theme: theme,
+                              ),
+                              const SizedBox(width: 8),
+                              _buildProfileTab(
+                                index: 1,
+                                label: 'Settings',
+                                icon: Icons.settings_outlined,
+                                theme: theme,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
 
             // --- TAB CONTENT (ABOUT or SETTINGS) ---
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) {
-                final isSettings = child.key == const ValueKey<int>(1);
-                final offset = Tween<Offset>(
-                  begin: isSettings
-                      ? const Offset(0.04, 0)
-                      : const Offset(-0.04, 0),
-                  end: Offset.zero,
-                ).animate(animation);
-                return FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(position: offset, child: child),
-                );
-              },
-              child: _selectedTab == 0
-                  ? _buildAboutSection(theme)
-                  : _buildSettingsSection(theme),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1040),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    final isSettings = child.key == const ValueKey<int>(1);
+                    final offset = Tween<Offset>(
+                      begin: isSettings
+                          ? const Offset(0.04, 0)
+                          : const Offset(-0.04, 0),
+                      end: Offset.zero,
+                    ).animate(animation);
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(position: offset, child: child),
+                    );
+                  },
+                  child: _selectedTab == 0
+                      ? _buildAboutSection(theme)
+                      : _buildSettingsSection(theme),
+                ),
+              ),
             ),
             const SizedBox(height: 60), // bottom padding
           ],
@@ -663,7 +673,7 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    Icons.settings_suggest_rounded,
+                    Icons.settings_outlined,
                     color: theme.colorScheme.primary,
                     size: 26,
                   ),

@@ -399,9 +399,6 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
     final subjectName = subjectsMap['subject_name']?.toString() ?? 'Subject';
     final subjectCode = subjectsMap['subject_code']?.toString() ?? '';
 
-    final sectionsMap = _asMap(offering['sections']);
-    final sectionName = sectionsMap['section_name']?.toString() ?? '';
-
     final teacherMap = _asMap(offering['teacher_profiles']);
     final firstName = teacherMap['first_name']?.toString().trim() ?? '';
     final middleName = teacherMap['middle_name']?.toString().trim() ?? '';
@@ -436,7 +433,7 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
         : '';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
@@ -457,6 +454,7 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Teacher Profile Header (Teacher Name + Subject Code + Subject Name WITHOUT Section) ──
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -514,11 +512,9 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
                       ],
                     ),
                     const SizedBox(height: 3),
+                    // Subject name ONLY (strictly NO section in the list per user instructions)
                     Text(
-                      [
-                        subjectName,
-                        if (sectionName.isNotEmpty) sectionName,
-                      ].join(' · '),
+                      subjectName,
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
@@ -527,115 +523,166 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
                         ),
                       ),
                     ),
-                    if (specialization.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        'Specialization: $specialization',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           const Divider(height: 1),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
 
-          _buildContactRow(
+          // ── Contact & Professional Info Section (Matching Reference Design) ──
+          Text(
+            'Contact & Professional Info',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 1. Email
+          _buildInfoRow(
             theme: theme,
-            icon: Icons.access_time_rounded,
-            label: 'Consultation Hours',
-            value: consultation.isNotEmpty
-                ? consultation
-                : 'By appointment (coordinate via email)',
+            icon: Icons.email_outlined,
+            label: 'Email',
+            value: email.isNotEmpty ? email : 'Not provided',
+            action: email.isNotEmpty
+                ? TextButton.icon(
+                    onPressed: () async {
+                      final uri = Uri(
+                        scheme: 'mailto',
+                        path: email,
+                        query: 'subject=ClassRealm Parent Inquiry: $subjectName',
+                      );
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri);
+                      } else {
+                        await Clipboard.setData(ClipboardData(text: email));
+                        if (context.mounted) {
+                          AppTopToast.success(
+                            context,
+                            'Teacher email copied to clipboard: $email',
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.send_rounded, size: 13),
+                    label: const Text('Email'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                : null,
           ),
 
-          if (email.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _buildContactRow(
-              theme: theme,
-              icon: Icons.email_outlined,
-              label: 'Email',
-              value: email,
-              actionLabel: 'Email',
-              actionIcon: Icons.send_rounded,
-              onAction: () async {
-                final uri = Uri(
-                  scheme: 'mailto',
-                  path: email,
-                  query: 'subject=ClassRealm Parent Inquiry: $subjectName',
-                );
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri);
-                } else {
-                  await Clipboard.setData(ClipboardData(text: email));
-                  if (context.mounted) {
-                    AppTopToast.success(
-                      context,
-                      'Teacher email copied to clipboard: $email',
-                    );
-                  }
-                }
-              },
-            ),
-          ],
+          // 2. Subject Specialization
+          _buildInfoRow(
+            theme: theme,
+            icon: Icons.science_outlined,
+            label: 'Subject Specialization',
+            value: specialization.isNotEmpty ? specialization : 'Not specified',
+          ),
 
-          if (phone.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _buildContactRow(
-              theme: theme,
-              icon: Icons.phone_outlined,
-              label: 'Public Phone',
-              value: phone,
-              actionLabel: 'Copy',
-              actionIcon: Icons.copy_rounded,
-              onAction: () async {
-                await Clipboard.setData(ClipboardData(text: phone));
-                if (context.mounted) {
-                  AppTopToast.success(
-                    context,
-                    'Contact number copied to clipboard: $phone',
-                  );
-                }
-              },
-            ),
-          ],
+          // 3. Consultation Hours
+          _buildInfoRow(
+            theme: theme,
+            icon: Icons.schedule_rounded,
+            label: 'Consultation Hours',
+            value: consultation.isNotEmpty ? consultation : 'Not specified',
+          ),
 
-          if (facebook.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _buildContactRow(
-              theme: theme,
-              icon: Icons.public_rounded,
-              label: 'Public Facebook',
-              value: facebook,
-              actionLabel: 'Open',
-              actionIcon: Icons.open_in_new_rounded,
-              onAction: () async {
-                final raw = facebook.startsWith('http')
-                    ? facebook
-                    : 'https://$facebook';
-                final uri = Uri.tryParse(raw);
-                if (uri != null && await canLaunchUrl(uri)) {
-                  await launchUrl(uri);
-                } else {
-                  await Clipboard.setData(ClipboardData(text: facebook));
-                  if (context.mounted) {
-                    AppTopToast.success(
-                      context,
-                      'Facebook link copied to clipboard: $facebook',
-                    );
-                  }
-                }
-              },
-            ),
-          ],
+          // 4. Facebook Profile Link
+          _buildInfoRow(
+            theme: theme,
+            icon: Icons.public_rounded,
+            label: 'Facebook',
+            value: (isFacebookPublic && facebook.isNotEmpty)
+                ? facebook
+                : 'Not linked',
+            privacyBadge: _buildPrivacyBadge(theme, isFacebookPublic),
+            action: (isFacebookPublic && facebook.isNotEmpty)
+                ? TextButton.icon(
+                    onPressed: () async {
+                      final raw = facebook.startsWith('http')
+                          ? facebook
+                          : 'https://$facebook';
+                      final uri = Uri.tryParse(raw);
+                      if (uri != null && await canLaunchUrl(uri)) {
+                        await launchUrl(uri);
+                      } else {
+                        await Clipboard.setData(ClipboardData(text: facebook));
+                        if (context.mounted) {
+                          AppTopToast.success(
+                            context,
+                            'Facebook link copied to clipboard: $facebook',
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.open_in_new_rounded, size: 13),
+                    label: const Text('Open'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+
+          // 5. Phone Number
+          _buildInfoRow(
+            theme: theme,
+            icon: Icons.phone_outlined,
+            label: 'Phone',
+            value: (isPhonePublic && phone.isNotEmpty)
+                ? phone
+                : 'Not provided',
+            privacyBadge: _buildPrivacyBadge(theme, isPhonePublic),
+            action: (isPhonePublic && phone.isNotEmpty)
+                ? TextButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: phone));
+                      if (context.mounted) {
+                        AppTopToast.success(
+                          context,
+                          'Contact number copied to clipboard: $phone',
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 13),
+                    label: const Text('Copy'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
         ],
       ),
     );
@@ -665,85 +712,156 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
             t.honorificFullName,
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 8),
-          _buildContactRow(
-            theme: theme,
-            icon: Icons.access_time_rounded,
-            label: 'Consultation Hours',
-            value: t.consultationHours ?? 'By appointment',
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          Text(
+            'Contact & Professional Info',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface,
+            ),
           ),
-          if (t.email.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _buildContactRow(
-              theme: theme,
-              icon: Icons.email_outlined,
-              label: 'Email',
-              value: t.email,
+          const SizedBox(height: 10),
+          _buildInfoRow(
+            theme: theme,
+            icon: Icons.email_outlined,
+            label: 'Email',
+            value: t.email.isNotEmpty ? t.email : 'Not provided',
+          ),
+          _buildInfoRow(
+            theme: theme,
+            icon: Icons.science_outlined,
+            label: 'Subject Specialization',
+            value: t.subjectSpecialization?.isNotEmpty == true
+                ? t.subjectSpecialization!
+                : 'Not specified',
+          ),
+          _buildInfoRow(
+            theme: theme,
+            icon: Icons.schedule_rounded,
+            label: 'Consultation Hours',
+            value: t.consultationHours?.isNotEmpty == true
+                ? t.consultationHours!
+                : 'Not specified',
+          ),
+          _buildInfoRow(
+            theme: theme,
+            icon: Icons.public_rounded,
+            label: 'Facebook',
+            value: (t.isFacebookPublic && fb.isNotEmpty) ? fb : 'Not linked',
+            privacyBadge: _buildPrivacyBadge(theme, t.isFacebookPublic),
+          ),
+          _buildInfoRow(
+            theme: theme,
+            icon: Icons.phone_outlined,
+            label: 'Phone',
+            value: (t.isPhonePublic && phone.isNotEmpty) ? phone : 'Not provided',
+            privacyBadge: _buildPrivacyBadge(theme, t.isPhonePublic),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow({
+    required ThemeData theme,
+    required IconData icon,
+    required String label,
+    required String value,
+    Widget? privacyBadge,
+    Widget? action,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              icon,
+              size: 18,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
             ),
-          ],
-          if (phone.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _buildContactRow(
-              theme: theme,
-              icon: Icons.phone_outlined,
-              label: 'Public Phone',
-              value: phone,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        value,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    if (privacyBadge != null) ...[
+                      const SizedBox(width: 8),
+                      privacyBadge,
+                    ],
+                  ],
+                ),
+              ],
             ),
-          ],
-          if (fb.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _buildContactRow(
-              theme: theme,
-              icon: Icons.public_rounded,
-              label: 'Public Facebook',
-              value: fb,
-            ),
+          ),
+          if (action != null) ...[
+            const SizedBox(width: 8),
+            action,
           ],
         ],
       ),
     );
   }
 
-  Widget _buildContactRow({
-    required ThemeData theme,
-    required IconData icon,
-    required String label,
-    required String value,
-    String? actionLabel,
-    IconData? actionIcon,
-    VoidCallback? onAction,
-  }) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: theme.colorScheme.primary),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            '$label: $value',
+  Widget _buildPrivacyBadge(ThemeData theme, bool isPublic) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: isPublic
+            ? theme.colorScheme.primary.withValues(alpha: 0.1)
+            : theme.colorScheme.onSurface.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isPublic ? Icons.public : Icons.lock,
+            size: 10.5,
+            color: isPublic
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+          const SizedBox(width: 3.5),
+          Text(
+            isPublic ? 'Public' : 'Private',
             style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        if (actionLabel != null && onAction != null)
-          TextButton.icon(
-            onPressed: onAction,
-            icon: Icon(actionIcon ?? Icons.open_in_new_rounded, size: 13),
-            label: Text(actionLabel),
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              textStyle: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.bold,
-              ),
+              fontSize: 9.5,
+              fontWeight: FontWeight.bold,
+              color: isPublic
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -9,7 +9,6 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/features/parent/sub_features/child_details/widgets/parent_subject_details_sheet.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class ParentStudentOverviewTab extends StatefulWidget {
   final UserModel? linkedStudent;
@@ -551,12 +550,21 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
                           ],
                         ],
                       ),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 4),
                       Text(
-                        '$gradeSection · LRN: $lrnDisplay',
+                        'LRN: $lrnDisplay',
                         style: TextStyle(
                           fontSize: 12.5,
-                          color: Colors.white.withValues(alpha: 0.88),
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.92),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        gradeSection,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: Colors.white.withValues(alpha: 0.82),
                         ),
                       ),
                     ],

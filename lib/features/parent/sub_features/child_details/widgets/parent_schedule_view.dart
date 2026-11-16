@@ -1,5 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
@@ -32,7 +33,25 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
   @override
   void initState() {
     super.initState();
-    _loadSchedules();
+    _hydrateCache();
+    _loadSchedules(silent: _schedules.isNotEmpty);
+  }
+
+  void _hydrateCache() {
+    final sId = widget.linkedStudent?.id;
+    if (sId != null && sId.isNotEmpty) {
+      final cached = AppDataCache.instance.getCached<List<dynamic>>(
+        'parent_schedule_$sId',
+        (json) => json as List<dynamic>,
+      );
+      if (cached != null && cached.isNotEmpty) {
+        _schedules = cached
+            .whereType<Map>()
+            .map((m) => ScheduleModel.fromMap(Map<String, dynamic>.from(m)))
+            .toList();
+        _isLoading = false;
+      }
+    }
   }
 
   @override
@@ -41,7 +60,8 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
     if (oldWidget.linkedStudent?.id != widget.linkedStudent?.id ||
         oldWidget.linkedStudent?.departmentOrSection !=
             widget.linkedStudent?.departmentOrSection) {
-      _loadSchedules();
+      _hydrateCache();
+      _loadSchedules(silent: _schedules.isNotEmpty);
     }
   }
 
@@ -60,7 +80,7 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
       return;
     }
 
-    if (!silent) {
+    if (!silent || (_schedules.isEmpty && _isLoading)) {
       setState(() => _isLoading = true);
     }
 
@@ -69,6 +89,14 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
         student.id,
         fallbackSection: student.departmentOrSection,
       );
+      if (student.id.isNotEmpty) {
+        unawaited(
+          AppDataCache.instance.setCache(
+            'parent_schedule_${student.id}',
+            rows.map((s) => s.toMap()).toList(),
+          ),
+        );
+      }
       if (!mounted) return;
       setState(() {
         _schedules = rows;
@@ -112,9 +140,11 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
                 ),
               ),
             )
-          : Column(
-              children: [
-                // Top View Switcher Banner
+          : AppPullToRefresh(
+              onRefresh: () => _loadSchedules(silent: true),
+              child: Column(
+                children: [
+                  // Top View Switcher Banner
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -140,11 +170,10 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Flexible(
                                     child: Text(
-                                      '${student.fullName} • $section',
+                                      student.fullName,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
@@ -165,13 +194,13 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                _viewMode == ParentScheduleViewMode.list
-                                    ? 'Daily Agenda View'
-                                    : 'Weekly Timetable Grid',
+                                '$section • ${_viewMode == ParentScheduleViewMode.list ? "Daily Agenda" : "Timetable"}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.6,
+                                    alpha: 0.65,
                                   ),
                                 ),
                               ),
@@ -240,15 +269,11 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
                 // Content Area with Branded Mobile Swipe-Down Refresh
                 Expanded(
                   child: _isLoading
-                      ? Center(
-                          child: LoadingAnimationWidget.staggeredDotsWave(
-                            color: theme.colorScheme.primary,
-                            size: 40,
-                          ),
+                      ? ShimmerStudentScheduleSkeleton(
+                          isTimetable:
+                              _viewMode == ParentScheduleViewMode.grid,
                         )
-                      : AppPullToRefresh(
-                          onRefresh: () => _loadSchedules(silent: true),
-                          child: _schedules.isEmpty
+                      : _schedules.isEmpty
                               ? AppPullToRefresh.scrollableState(
                                   child: Container(
                                     width: double.infinity,
@@ -313,10 +338,10 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
                                     schedules: _schedules,
                                   ),
                                 ),
-                        ),
                 ),
               ],
             ),
+          ),
     );
 
     if (widget.embedded) {

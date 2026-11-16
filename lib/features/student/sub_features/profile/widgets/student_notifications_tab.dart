@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/student_dashboard_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
@@ -49,7 +49,27 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
   void initState() {
     super.initState();
     _loadEnrolledSubjects();
-    _loadNotifications(initial: true);
+    final studentId = AuthRepository.instance.currentUser?.id;
+    if (studentId != null && studentId.isNotEmpty) {
+      final cached =
+          AppDataCache.instance.getCached<List<AppNotificationModel>>(
+        'student_notifications_$studentId',
+        (jsonList) => (jsonList as List)
+            .map((j) => AppNotificationModel.fromJson(
+                Map<String, dynamic>.from(j as Map)))
+            .toList(),
+      );
+      if (cached != null && cached.isNotEmpty) {
+        _notifications
+          ..clear()
+          ..addAll(cached);
+        _isLoading = false;
+      }
+    }
+    _loadNotifications(
+      initial: _notifications.isEmpty,
+      silent: _notifications.isNotEmpty,
+    );
     _subscribeToRealtime();
     _subscribeToEnrollmentChanges();
   }
@@ -215,6 +235,13 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
             ..addAll(items);
           _isLoading = false;
         });
+
+        if (user.id.isNotEmpty) {
+          AppDataCache.instance.setCache(
+            'student_notifications_${user.id}',
+            items.map((n) => n.toJson()).toList(),
+          );
+        }
 
         SupabaseNotificationRepository.instance.calculateUnreadCount(user);
       }
@@ -434,9 +461,9 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
 
     if (_isLoading && _notifications.isEmpty) {
       return Center(
-        child: LoadingAnimationWidget.staggeredDotsWave(
-          color: theme.colorScheme.primary,
-          size: 40,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: const ShimmerStudentNotificationsSkeleton(),
         ),
       );
     }
@@ -444,13 +471,12 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 540),
-        child: Column(
-          children: [
-            _buildFilterBar(theme, isDark, displayedNotifications),
-            Expanded(
-              child: AppPullToRefresh(
-                onRefresh: () =>
-                    _loadNotifications(initial: true, silent: true),
+        child: AppPullToRefresh(
+          onRefresh: () => _loadNotifications(initial: true, silent: true),
+          child: Column(
+            children: [
+              _buildFilterBar(theme, isDark, displayedNotifications),
+              Expanded(
                 child: displayedNotifications.isEmpty
                     ? AppPullToRefresh.scrollableState(
                         child: Container(
@@ -561,8 +587,8 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
                         },
                       ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

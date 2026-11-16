@@ -530,7 +530,7 @@ class _EditTeacherProfileDialogState extends State<EditTeacherProfileDialog> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      Icons.edit_note_rounded,
+                      Icons.edit_note,
                       color: theme.colorScheme.primary,
                       size: 24,
                     ),
@@ -813,7 +813,7 @@ class _EditTeacherProfileDialogState extends State<EditTeacherProfileDialog> {
                       controller: _phoneCtrl,
                       label: 'Mobile Phone Number',
                       hint: '09XXXXXXXXX (11 digits, Optional)',
-                      icon: Icons.phone_android_rounded,
+                      icon: Icons.phone_outlined,
                       errorText: _phoneError,
                       isPublic: _isPhonePublic,
                       inputFormatters: [
@@ -836,7 +836,7 @@ class _EditTeacherProfileDialogState extends State<EditTeacherProfileDialog> {
                       controller: _facebookCtrl,
                       label: 'Facebook Profile Link',
                       hint: 'https://facebook.com/username (Optional)',
-                      icon: Icons.facebook_rounded,
+                      icon: Icons.facebook,
                       errorText: _facebookError,
                       isPublic: _isFacebookPublic,
                       keyboardType: TextInputType.url,

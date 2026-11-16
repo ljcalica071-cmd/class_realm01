@@ -268,6 +268,20 @@ class ClassRealmFolder {
       fileCount: fileCount ?? this.fileCount,
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'subject_offering_id': subjectOfferingId,
+      'parent_folder_id': parentFolderId,
+      'folder_name': folderName,
+      'is_archived': isArchived,
+      'is_visible_to_students': isVisibleToStudents,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
+      'file_count': fileCount,
+    };
+  }
 }
 
 class ClassRealmMaterial {
@@ -323,6 +337,24 @@ class ClassRealmMaterial {
           ? DateTime.tryParse(map['updated_at'].toString())
           : null,
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'folder_id': folderId,
+      'file_name': fileName,
+      'storage_path_url': storagePathUrl,
+      'mime_type': mimeType,
+      'file_size_bytes': fileSizeBytes,
+      'is_archived': isArchived,
+      'is_visible_to_students': isVisibleToStudents,
+      'title': title,
+      'description': description,
+      'available_from': availableFrom?.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
+    };
   }
 
   String get displayName =>

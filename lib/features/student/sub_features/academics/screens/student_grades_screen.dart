@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/utils/deped_grading_engine.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -7,7 +10,6 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_academic_performance_screen.dart';
 import 'package:class_realm/features/student/sub_features/profile/screens/student_settings_screen.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
 class StudentGradesScreen extends StatefulWidget {
@@ -26,7 +28,41 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
   @override
   void initState() {
     super.initState();
-    _loadGrades();
+    final studentId = AuthRepository.instance.currentUser?.id;
+    if (studentId != null && studentId.isNotEmpty) {
+      final cachedOfferings = AppDataCache.instance.getCached<List<dynamic>>(
+        'student_grades_offerings_$studentId',
+        (json) => json as List<dynamic>,
+      );
+      final cachedTerms = AppDataCache.instance.getCached<Map<String, dynamic>>(
+        'student_grades_terms_$studentId',
+        (json) => Map<String, dynamic>.from(json as Map),
+      );
+      if (cachedOfferings != null && cachedOfferings.isNotEmpty) {
+        _offerings = cachedOfferings
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        if (cachedTerms != null) {
+          final mappedTerms = <String, Map<int, Map<String, dynamic>>>{};
+          cachedTerms.forEach((offId, termMap) {
+            if (termMap is Map) {
+              final innerMap = <int, Map<String, dynamic>>{};
+              termMap.forEach((tNumStr, gradeData) {
+                final tNum = int.tryParse(tNumStr.toString());
+                if (tNum != null && gradeData is Map) {
+                  innerMap[tNum] = Map<String, dynamic>.from(gradeData);
+                }
+              });
+              mappedTerms[offId] = innerMap;
+            }
+          });
+          _termGrades = mappedTerms;
+        }
+        _isLoading = false;
+      }
+    }
+    _loadGrades(silent: _offerings.isNotEmpty);
   }
 
   Future<void> _loadGrades({bool silent = false}) async {
@@ -105,6 +141,29 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
           offeringId,
           () => <int, Map<String, dynamic>>{},
         )[termNumber] = grade;
+      }
+
+      if (student.id.isNotEmpty) {
+        unawaited(
+          AppDataCache.instance.setCache(
+            'student_grades_offerings_${student.id}',
+            offeringRows,
+          ),
+        );
+        final termsToCache = <String, Map<String, dynamic>>{};
+        gradesByOffering.forEach((offId, termMap) {
+          final inner = <String, dynamic>{};
+          termMap.forEach((tNum, gradeData) {
+            inner[tNum.toString()] = gradeData;
+          });
+          termsToCache[offId] = inner;
+        });
+        unawaited(
+          AppDataCache.instance.setCache(
+            'student_grades_terms_${student.id}',
+            termsToCache,
+          ),
+        );
       }
 
       if (mounted) {

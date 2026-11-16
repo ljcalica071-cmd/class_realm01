@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -265,11 +266,15 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    final screenHeight = MediaQuery.sizeOf(context).height;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 540, maxHeight: 680),
+        constraints: BoxConstraints(
+          maxWidth: 540,
+          maxHeight: math.min(720.0, screenHeight * 0.90),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -375,7 +380,8 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
               child: TabBar(
                 controller: _tabController,
                 isScrollable: true,
-                tabAlignment: TabAlignment.center,
+                tabAlignment: TabAlignment.start,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 indicatorColor: theme.colorScheme.primary,
                 indicatorWeight: 2.5,
                 labelColor: theme.colorScheme.primary,
@@ -395,22 +401,16 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
                   Tab(
                     child: Text(
                       'Multiple Choice (${_mcItems.length})',
-                      maxLines: 1,
-                      softWrap: false,
                     ),
                   ),
                   Tab(
                     child: Text(
                       'True or False (${_tfItems.length})',
-                      maxLines: 1,
-                      softWrap: false,
                     ),
                   ),
                   Tab(
                     child: Text(
                       'Identification (${_idItems.length})',
-                      maxLines: 1,
-                      softWrap: false,
                     ),
                   ),
                 ],
@@ -706,7 +706,7 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final useColumn = constraints.maxWidth < 340;
+                final useColumn = constraints.maxWidth < 460;
                 final yourAnsWidget = Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

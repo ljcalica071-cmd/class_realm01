@@ -15,6 +15,7 @@ import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/learning_material_repository.dart';
 import 'package:class_realm/data/repositories/supabase_learning_material_repository.dart';
 
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class TeacherLearningMaterialsTab extends StatefulWidget {
@@ -33,6 +34,7 @@ class _TeacherLearningMaterialsTabState
   final _subjectRepo = SubjectRepository.instance;
 
   bool _isLoading = true;
+  bool _isDialogOpen = false;
   String? _errorMessage;
 
   // Teacher offerings (only offerings with actively enrolled students)
@@ -484,7 +486,10 @@ class _TeacherLearningMaterialsTabState
     bool isUploading = false;
     String? inModalUploadError;
 
-    await showDialog(
+    if (_isDialogOpen) return;
+    _isDialogOpen = true;
+    try {
+      await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
@@ -937,6 +942,9 @@ class _TeacherLearningMaterialsTabState
         },
       ),
     );
+    } finally {
+      _isDialogOpen = false;
+    }
   }
 
   // --- Create Folder Dialog with Inline Error Messages (No bottom banners!) ---
@@ -957,7 +965,10 @@ class _TeacherLearningMaterialsTabState
     final gradeLevel = _selectedOffering!['grade_level'] ?? 11;
     final sectionName = _formatSectionName(_selectedOffering!['section_name']);
 
-    await showDialog(
+    if (_isDialogOpen) return;
+    _isDialogOpen = true;
+    try {
+      await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
@@ -1094,6 +1105,9 @@ class _TeacherLearningMaterialsTabState
         },
       ),
     );
+    } finally {
+      _isDialogOpen = false;
+    }
   }
 
   // --- Folder Visibility Toggle (Default folders are locked as visible, custom folders can toggle) ---
@@ -1152,18 +1166,25 @@ class _TeacherLearningMaterialsTabState
       return;
     }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _ArchiveCooldownDialog(
-        title: 'Archive Folder?',
-        content:
-            'Archiving "${folder.folderName}" will hide it from students and move the folder and all its ${folder.fileCount} materials to the Archived Items view.\n\nYou can restore it to active status anytime.',
-        actionLabel: 'Archive Folder',
-        actionColor: Colors.orange.shade800,
-        icon: Icons.archive_outlined,
-      ),
-    );
+    if (_isDialogOpen) return;
+    _isDialogOpen = true;
+    final bool? confirmed;
+    try {
+      confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => _ArchiveCooldownDialog(
+          title: 'Archive Folder?',
+          content:
+              'Archiving "${folder.folderName}" will hide it from students and move the folder and all its ${folder.fileCount} materials to the Archived Items view.\n\nYou can restore it to active status anytime.',
+          actionLabel: 'Archive Folder',
+          actionColor: Colors.orange.shade800,
+          icon: Icons.archive_outlined,
+        ),
+      );
+    } finally {
+      _isDialogOpen = false;
+    }
 
     if (confirmed == true) {
       setState(() => _isLoading = true);
@@ -1190,16 +1211,23 @@ class _TeacherLearningMaterialsTabState
       );
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _PermanentDeleteConfirmDialog(
-        title: 'Permanently Delete Folder?',
-        itemName: folder.folderName,
-        details:
-            'This will permanently delete the folder "${folder.folderName}" and all of its ${folder.fileCount} materials from the school system.\n\nOnce deleted, these files and folders cannot be recovered.',
-      ),
-    );
+    if (_isDialogOpen) return;
+    _isDialogOpen = true;
+    final bool? confirmed;
+    try {
+      confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => _PermanentDeleteConfirmDialog(
+          title: 'Permanently Delete Folder?',
+          itemName: folder.folderName,
+          details:
+              'This will permanently delete the folder "${folder.folderName}" and all of its ${folder.fileCount} materials from the school system.\n\nOnce deleted, these files and folders cannot be recovered.',
+        ),
+      );
+    } finally {
+      _isDialogOpen = false;
+    }
 
     if (confirmed == true) {
       setState(() => _isLoading = true);
@@ -1219,18 +1247,25 @@ class _TeacherLearningMaterialsTabState
 
   // --- Archive & Delete Confirmations for Materials ---
   Future<void> _archiveMaterialConfirm(ClassRealmMaterial material) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _ArchiveCooldownDialog(
-        title: 'Archive Material?',
-        content:
-            'Archiving "${material.displayName}" will hide it from students and move it to the Archived Items view.\n\nYou can restore it to active status anytime.',
-        actionLabel: 'Archive Material',
-        actionColor: Colors.orange.shade800,
-        icon: Icons.archive_outlined,
-      ),
-    );
+    if (_isDialogOpen) return;
+    _isDialogOpen = true;
+    final bool? confirmed;
+    try {
+      confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => _ArchiveCooldownDialog(
+          title: 'Archive Material?',
+          content:
+              'Archiving "${material.displayName}" will hide it from students and move it to the Archived Items view.\n\nYou can restore it to active status anytime.',
+          actionLabel: 'Archive Material',
+          actionColor: Colors.orange.shade800,
+          icon: Icons.archive_outlined,
+        ),
+      );
+    } finally {
+      _isDialogOpen = false;
+    }
 
     if (confirmed == true) {
       setState(() => _isLoading = true);
@@ -1251,16 +1286,23 @@ class _TeacherLearningMaterialsTabState
   Future<void> _deleteMaterialPermanentlyConfirm(
     ClassRealmMaterial material,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _PermanentDeleteConfirmDialog(
-        title: 'Permanently Delete Material?',
-        itemName: material.displayName,
-        details:
-            'This will permanently erase "${material.displayName}" (${material.fileName}, ${material.formattedSize}) from the school database and purge the physical file from cloud storage.\n\nAll student reading logs and access history linked to this document will be permanently deleted and cannot be recovered.',
-      ),
-    );
+    if (_isDialogOpen) return;
+    _isDialogOpen = true;
+    final bool? confirmed;
+    try {
+      confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => _PermanentDeleteConfirmDialog(
+          title: 'Permanently Delete Material?',
+          itemName: material.displayName,
+          details:
+              'This will permanently erase "${material.displayName}" (${material.fileName}, ${material.formattedSize}) from the school database and purge the physical file from cloud storage.\n\nAll student reading logs and access history linked to this document will be permanently deleted and cannot be recovered.',
+        ),
+      );
+    } finally {
+      _isDialogOpen = false;
+    }
 
     if (confirmed == true) {
       setState(() => _isLoading = true);
@@ -1334,14 +1376,7 @@ class _TeacherLearningMaterialsTabState
     }
   }
 
-  // --- Storage Quota & User-Friendly Errors ---
-  int get _totalStorageBytes {
-    final activeBytes =
-        _materials.fold<int>(0, (acc, m) => acc + m.fileSizeBytes);
-    final archivedBytes =
-        _archivedMaterials.fold<int>(0, (acc, m) => acc + m.fileSizeBytes);
-    return activeBytes + archivedBytes;
-  }
+  // --- User-Friendly Errors ---
 
   static String getUserFriendlyUploadErrorMessage(dynamic error) {
     final errStr = error.toString().toLowerCase();
@@ -1592,10 +1627,13 @@ class _TeacherLearningMaterialsTabState
     String title,
     String message, {
     required bool isError,
-  }) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
+  }) async {
+    if (_isDialogOpen) return;
+    _isDialogOpen = true;
+    try {
+      await showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
@@ -1656,6 +1694,9 @@ class _TeacherLearningMaterialsTabState
         ),
       ),
     );
+    } finally {
+      _isDialogOpen = false;
+    }
   }
 
   // Input decoration matching Screenshot 4 with inline red error styling
@@ -1948,6 +1989,7 @@ class _TeacherLearningMaterialsTabState
     final availableGrades = _availableGrades;
     final availableSubjects = _availableSubjects;
     final availableSections = _availableSections;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1958,358 +2000,401 @@ class _TeacherLearningMaterialsTabState
           color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
         ),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.end,
         children: [
-          // 1. Grade Level Dropdown (NO ALL GRADES)
-          if (availableGrades.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                ),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: availableGrades.contains(_selectedGrade)
-                      ? _selectedGrade
-                      : availableGrades.first,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: theme.colorScheme.primary,
-                  ),
-                  items: availableGrades.map((g) {
-                    return DropdownMenuItem(value: g, child: Text('Grade $g'));
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val == null || val == _selectedGrade) return;
-                    setState(() {
-                      _selectedGrade = val;
-                      final subs = _availableSubjects;
-                      _selectedSubject = subs.isNotEmpty ? subs.first : null;
-                      final secs = _availableSections;
-                      _selectedOffering = secs.isNotEmpty ? secs.first : null;
-                      _folderStack.clear();
-                      _currentFolder = null;
-                    });
-                    _loadFolderContents();
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            children: [
+              // 1. Grade Level Dropdown
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'Grade Level',
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: theme.colorScheme.primary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.arrow_drop_down,
-                    size: 18,
-                    color: theme.colorScheme.primary,
+                  const SizedBox(height: 4),
+                  Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.18 : 0.16,
+                        ),
+                      ),
+                    ),
+                    child: availableGrades.isEmpty
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                LucideIcons.graduationCap,
+                                size: 13.5,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Grade Level',
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                LucideIcons.chevronDown,
+                                size: 14,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                              ),
+                            ],
+                          )
+                        : DropdownButtonHideUnderline(
+                            child: DropdownButton<int>(
+                              value: availableGrades.contains(_selectedGrade)
+                                  ? _selectedGrade
+                                  : availableGrades.first,
+                              dropdownColor: theme.colorScheme.surface,
+                              icon: Icon(
+                                LucideIcons.chevronDown,
+                                size: 14,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                              ),
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12.5,
+                              ),
+                              isDense: true,
+                              items: availableGrades.map((g) {
+                                return DropdownMenuItem<int>(
+                                  value: g,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        LucideIcons.graduationCap,
+                                        size: 13.5,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text('Grade $g'),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val == null || val == _selectedGrade) return;
+                                setState(() {
+                                  _selectedGrade = val;
+                                  final subs = _availableSubjects;
+                                  _selectedSubject = subs.isNotEmpty ? subs.first : null;
+                                  final secs = _availableSections;
+                                  _selectedOffering = secs.isNotEmpty ? secs.first : null;
+                                  _folderStack.clear();
+                                  _currentFolder = null;
+                                });
+                                _loadFolderContents();
+                              },
+                            ),
+                          ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 10),
-          ],
 
-          // 2. Subject Dropdown (NO All Subjects)
-          if (availableSubjects.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.35,
-                ),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
-                ),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: availableSubjects.contains(_selectedSubject)
-                      ? _selectedSubject
-                      : availableSubjects.first,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                  items: availableSubjects.map((name) {
-                    return DropdownMenuItem(
-                      value: name,
-                      child: Text(name, overflow: TextOverflow.ellipsis),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val == null || val == _selectedSubject) return;
-                    setState(() {
-                      _selectedSubject = val;
-                      final secs = _availableSections;
-                      _selectedOffering = secs.isNotEmpty ? secs.first : null;
-                      _folderStack.clear();
-                      _currentFolder = null;
-                    });
-                    _loadFolderContents();
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.35,
-                ),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
-                ),
-              ),
-              child: Row(
+              // 2. Subject Dropdown
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'Subject',
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.arrow_drop_down,
-                    size: 18,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  const SizedBox(height: 4),
+                  Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.18 : 0.16,
+                        ),
+                      ),
+                    ),
+                    child: availableSubjects.isEmpty
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                LucideIcons.bookOpen,
+                                size: 13.5,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Subject',
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                LucideIcons.chevronDown,
+                                size: 14,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                              ),
+                            ],
+                          )
+                        : DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: availableSubjects.contains(_selectedSubject)
+                                  ? _selectedSubject
+                                  : availableSubjects.first,
+                              dropdownColor: theme.colorScheme.surface,
+                              icon: Icon(
+                                LucideIcons.chevronDown,
+                                size: 14,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                              ),
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12.5,
+                              ),
+                              isDense: true,
+                              items: availableSubjects.map((name) {
+                                return DropdownMenuItem<String>(
+                                  value: name,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        LucideIcons.bookOpen,
+                                        size: 13.5,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 220),
+                                        child: Text(
+                                          name,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val == null || val == _selectedSubject) return;
+                                setState(() {
+                                  _selectedSubject = val;
+                                  final secs = _availableSections;
+                                  _selectedOffering = secs.isNotEmpty ? secs.first : null;
+                                  _folderStack.clear();
+                                  _currentFolder = null;
+                                });
+                                _loadFolderContents();
+                              },
+                            ),
+                          ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 10),
-          ],
 
-          // 3. Section Dropdown
-          if (availableSections.isNotEmpty) ...[
-            SizedBox(
-              width: 170,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.2,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                  ),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<Map<String, dynamic>>(
-                    value: availableSections.contains(_selectedOffering)
-                        ? _selectedOffering
-                        : availableSections.first,
-                    isExpanded: true,
-                    items: availableSections.map((offering) {
-                      final secName = _formatSectionName(
-                        offering['section_name'],
-                      );
-                      return DropdownMenuItem(
-                        value: offering,
-                        child: Text(
-                          secName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (newVal) {
-                      if (newVal == null || newVal == _selectedOffering) return;
-                      setState(() {
-                        _selectedOffering = newVal;
-                        _folderStack.clear();
-                        _currentFolder = null;
-                      });
-                      _loadFolderContents();
-                    },
-                  ),
-                ),
-              ),
-            ),
-            const Spacer(),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 7,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.2,
-                ),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                ),
-              ),
-              child: Row(
+              // 3. Section Dropdown
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'Section',
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.arrow_drop_down,
-                    size: 18,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  const SizedBox(height: 4),
+                  Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.18 : 0.16,
+                        ),
+                      ),
+                    ),
+                    child: availableSections.isEmpty
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                LucideIcons.users,
+                                size: 13.5,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Section',
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                LucideIcons.chevronDown,
+                                size: 14,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                              ),
+                            ],
+                          )
+                        : DropdownButtonHideUnderline(
+                            child: DropdownButton<Map<String, dynamic>>(
+                              value: availableSections.contains(_selectedOffering)
+                                  ? _selectedOffering
+                                  : availableSections.first,
+                              dropdownColor: theme.colorScheme.surface,
+                              icon: Icon(
+                                LucideIcons.chevronDown,
+                                size: 14,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                              ),
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12.5,
+                              ),
+                              isDense: true,
+                              items: availableSections.map((offering) {
+                                final secName = _formatSectionName(
+                                  offering['section_name'],
+                                );
+                                return DropdownMenuItem<Map<String, dynamic>>(
+                                  value: offering,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        LucideIcons.users,
+                                        size: 13.5,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 160),
+                                        child: Text(
+                                          secName,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (newVal) {
+                                if (newVal == null || newVal == _selectedOffering) return;
+                                setState(() {
+                                  _selectedOffering = newVal;
+                                  _folderStack.clear();
+                                  _currentFolder = null;
+                                });
+                                _loadFolderContents();
+                              },
+                            ),
+                          ),
                   ),
                 ],
               ),
-            ),
-            const Spacer(),
-          ],
+            ],
+          ),
 
-          const SizedBox(width: 12),
-
-          // Class Materials Meter (Total file size in this class)
-          Builder(
-            builder: (context) {
-              final usedMb = _totalStorageBytes / (1024 * 1024);
-
-              return Tooltip(
-                message:
-                    'Total size of learning materials in this class: ${usedMb.toStringAsFixed(1)} MB',
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
+          // Action Buttons
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                icon: Icon(
+                  _isViewingArchived ? Icons.arrow_back : Icons.archive_outlined,
+                  size: 16,
+                ),
+                label: Text(
+                  _isViewingArchived
+                      ? 'Active Materials'
+                      : 'Archived Items ($_archivedCount)',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  foregroundColor: _isViewingArchived
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface,
+                  side: BorderSide(
+                    color: _isViewingArchived
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.outline.withValues(alpha: 0.3),
                   ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: theme.colorScheme.outline.withValues(alpha: 0.15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _isViewingArchived = !_isViewingArchived;
+                  });
+                  _loadFolderContents();
+                },
+              ),
+              if (!_isViewingArchived)
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.upload_file, size: 18),
+                  label: const Text(
+                    'Upload Document',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.folder_open_outlined,
-                        size: 15,
-                        color: Color(0xFF3A6B88),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Class Files: ${usedMb.toStringAsFixed(1)} MB',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.75,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  onPressed: _showUploadFileDialog,
                 ),
-              );
-            },
+            ],
           ),
-          const SizedBox(width: 10),
-
-          // 4. Archive View Toggle Button (Like Classroom Setup)
-          OutlinedButton.icon(
-            icon: Icon(
-              _isViewingArchived ? Icons.arrow_back : Icons.archive_outlined,
-              size: 16,
-            ),
-            label: Text(
-              _isViewingArchived
-                  ? 'Active Materials'
-                  : 'Archived Items ($_archivedCount)',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              foregroundColor: _isViewingArchived
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface,
-              side: BorderSide(
-                color: _isViewingArchived
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.outline.withValues(alpha: 0.3),
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: () {
-              setState(() {
-                _isViewingArchived = !_isViewingArchived;
-              });
-              _loadFolderContents();
-            },
-          ),
-
-          // 5. Upload Document Button (Single action, NO redundant dropdown menu!)
-          if (!_isViewingArchived) ...[
-            const SizedBox(width: 10),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.upload_file, size: 18),
-              label: const Text(
-                'Upload Document',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              onPressed: _showUploadFileDialog,
-            ),
-          ],
         ],
       ),
     );

@@ -7,7 +7,6 @@ import 'package:class_realm/data/repositories/student_dashboard_repository.dart'
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class StudentAcademicPerformanceScreen extends StatefulWidget {
   const StudentAcademicPerformanceScreen({super.key});

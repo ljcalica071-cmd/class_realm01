@@ -348,7 +348,7 @@ class _AppTopToastViewState extends State<_AppTopToastView>
     };
 
     return Positioned(
-      top: media.padding.top + 32,
+      top: media.padding.top + kToolbarHeight + 8,
       left: 16,
       right: 16,
       child: IgnorePointer(

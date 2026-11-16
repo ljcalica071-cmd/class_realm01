@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/utils/file_download_helper.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -54,7 +56,21 @@ class _StudentLearningMaterialsScreenState
   void initState() {
     super.initState();
     _loadOfflineMaterialPaths();
-    _loadStudentEnrolledClasses();
+    final studentId = AuthRepository.instance.currentUser?.id;
+    if (studentId != null && studentId.isNotEmpty) {
+      final cachedSubs =
+          AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
+        'student_materials_subjects_$studentId',
+        (list) => (list as List)
+            .map((j) => Map<String, dynamic>.from(j as Map))
+            .toList(),
+      );
+      if (cachedSubs != null && cachedSubs.isNotEmpty) {
+        _allEnrolledSubjects = cachedSubs;
+        _isLoading = false;
+      }
+    }
+    _loadStudentEnrolledClasses(silent: _allEnrolledSubjects.isNotEmpty);
   }
 
   Future<void> _loadOfflineMaterialPaths() async {
@@ -255,6 +271,11 @@ class _StudentLearningMaterialsScreenState
         _isLoading = false;
       });
 
+      unawaited(AppDataCache.instance.setCache(
+        'student_materials_subjects_${user.id}',
+        mapped,
+      ));
+
       if (_selectedSubject != null) {
         await _loadMaterialsForOffering(silent: silent);
       }
@@ -280,7 +301,34 @@ class _StudentLearningMaterialsScreenState
     }
 
     final offeringId = _selectedSubject!['offering_id'] as String;
-    if (!silent) {
+    final user = AuthRepository.instance.currentUser;
+    final folderKey = _currentFolder?.id ?? 'root';
+
+    if (user != null && user.id.isNotEmpty) {
+      final cachedFolders =
+          AppDataCache.instance.getCached<List<ClassRealmFolder>>(
+        'student_materials_folders_${user.id}_${offeringId}_$folderKey',
+        (list) => (list as List)
+            .map((j) =>
+                ClassRealmFolder.fromMap(Map<String, dynamic>.from(j as Map)))
+            .toList(),
+      );
+      final cachedMaterials =
+          AppDataCache.instance.getCached<List<ClassRealmMaterial>>(
+        'student_materials_items_${user.id}_${offeringId}_$folderKey',
+        (list) => (list as List)
+            .map((j) => ClassRealmMaterial.fromMap(
+                Map<String, dynamic>.from(j as Map)))
+            .toList(),
+      );
+      if (cachedFolders != null || cachedMaterials != null) {
+        if (cachedFolders != null) _folders = cachedFolders;
+        if (cachedMaterials != null) _materials = cachedMaterials;
+        _isLoading = false;
+      }
+    }
+
+    if (!silent && _folders.isEmpty && _materials.isEmpty) {
       setState(() => _isLoading = true);
     }
 
@@ -328,6 +376,17 @@ class _StudentLearningMaterialsScreenState
         _errorMessage = null;
         _isLoading = false;
       });
+
+      if (user != null && user.id.isNotEmpty) {
+        unawaited(AppDataCache.instance.setCache(
+          'student_materials_folders_${user.id}_${offeringId}_$folderKey',
+          visibleFolders.map((f) => f.toMap()).toList(),
+        ));
+        unawaited(AppDataCache.instance.setCache(
+          'student_materials_items_${user.id}_${offeringId}_$folderKey',
+          visibleMaterials.map((m) => m.toMap()).toList(),
+        ));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -614,12 +673,12 @@ class _StudentLearningMaterialsScreenState
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 540),
-            child: _isLoading
-                ? Center(
-                    child: LoadingAnimationWidget.staggeredDotsWave(
-                      color: theme.colorScheme.primary,
-                      size: 42,
-                    ),
+            child: _isLoading &&
+                    (_selectedSubject == null
+                        ? _allEnrolledSubjects.isEmpty
+                        : (_folders.isEmpty && _materials.isEmpty))
+                ? ShimmerLearningMaterialsSkeleton(
+                    isInsideFolder: _selectedSubject != null,
                   )
                 : _selectedSubject == null
                     ? _buildEnrolledSubjectsView(theme)
@@ -917,19 +976,19 @@ class _StudentLearningMaterialsScreenState
   // LEVEL 2: Subject Explorer (Module Folders & Learning Documents)
   // ===========================================================================
   Widget _buildSubjectMaterialsView(ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Subject Context & Quick Switch Strip
-        _buildSubjectContextStrip(theme),
+    return AppPullToRefresh(
+      onRefresh: _refreshScreen,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Subject Context & Quick Switch Strip
+          _buildSubjectContextStrip(theme),
 
-        // Folder Breadcrumbs
-        _buildBreadcrumbs(theme),
+          // Folder Breadcrumbs
+          _buildBreadcrumbs(theme),
 
-        // Main Folder & Materials Content
-        Expanded(
-          child: AppPullToRefresh(
-            onRefresh: _refreshScreen,
+          // Main Folder & Materials Content
+          Expanded(
             child: _errorMessage != null
                 ? AppPullToRefresh.scrollableState(
                     child: _buildErrorView(theme),
@@ -986,8 +1045,8 @@ class _StudentLearningMaterialsScreenState
                         ],
                       ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

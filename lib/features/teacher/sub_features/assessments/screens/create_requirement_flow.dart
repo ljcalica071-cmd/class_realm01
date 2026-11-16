@@ -1347,12 +1347,7 @@ class _CreateRequirementFlowDialogState
                                         ),
                                       )
                                     else
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: DropdownButtonFormField<int?>(
+                                      DropdownButtonFormField<int?>(
                                               key: ValueKey(
                                                 'column-$_termNumber-$_maxAvailableSlots-${_occupiedColumns.join(',')}',
                                               ),
@@ -1447,48 +1442,6 @@ class _CreateRequirementFlowDialogState
                                           }
                                           return null;
                                         },
-                                      ),
-                                          ),
-                                          if (_maxAvailableSlots < 10) ...[
-                                            const SizedBox(width: 8),
-                                            Tooltip(
-                                              message:
-                                                  'Add ${widget.isPerformanceTask ? 'PT' : 'WW'} ${_maxAvailableSlots + 1} column (Max 10)',
-                                              child: SizedBox(
-                                                height: 44,
-                                                child: OutlinedButton(
-                                                  onPressed: () {
-                                                    final nextSlot =
-                                                        _maxAvailableSlots + 1;
-                                                    setState(() {
-                                                      _maxAvailableSlots =
-                                                          nextSlot;
-                                                      _gradebookColumnIndex =
-                                                          nextSlot;
-                                                    });
-                                                  },
-                                                  style: OutlinedButton.styleFrom(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 10,
-                                                        ),
-                                                    shape:
-                                                        RoundedRectangleBorder(
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                8,
-                                                              ),
-                                                        ),
-                                                  ),
-                                                  child: const Icon(
-                                                    Icons.add,
-                                                    size: 18,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
                                       ),
                                     if (_occupiedColumns.length >= 10)
                                       const Padding(
@@ -1633,7 +1586,7 @@ class _CreateRequirementFlowDialogState
 
                       // F. Detailed Instructions (2 lines + See more / See less + min 2 chars)
                       ExpandableInstructionsInputField(
-                        label: 'Detailed Instructions & Rubrics *',
+                        label: 'Detailed Instructions & Rubrics (Optional)',
                         hint:
                             'Provide step-by-step instructions for students...',
                         controller: _instructionsCtrl,

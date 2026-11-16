@@ -145,8 +145,8 @@ class UserModel {
         .where((p) => p.isNotEmpty)
         .toList();
     if (parts.length >= 3 && parts[1].length <= 2) {
-      // e.g. ["Carlos", "D.", "Cruz"] or ["Carlos", "D", "Cruz"]
-      final last = parts.last;
+      // e.g. ["Carlos", "D.", "Cruz"] or ["Rex", "G.", "San", "Juan"]
+      final last = parts.sublist(2).join(' ');
       final first = parts.first;
       final mid = parts[1].replaceAll('.', '').toUpperCase();
       return '$last, $first $mid.';

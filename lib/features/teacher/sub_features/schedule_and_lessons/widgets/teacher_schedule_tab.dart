@@ -36,6 +36,8 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
   String? _sectionFilter;
   List<ScheduleModel> _masterSchedules = [];
   bool _isLoadingMaster = false;
+  bool _isScheduleDialogOpen = false;
+  bool _isDeletingEntry = false;
 
   final SupabaseScheduleRepository _repo = SupabaseScheduleRepository.instance;
 
@@ -1014,29 +1016,35 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         color: AppTheme.catRed,
                       ),
                       onPressed: () async {
-                        final confirm = await AppModals.showConfirmDialog(
-                          context: context,
-                          title: 'Delete Schedule Entry',
-                          message:
-                              'Are you sure you want to remove this schedule for ${s.subject} (${s.section})?',
-                          confirmLabel: 'Delete',
-                          confirmColor: AppTheme.catRed,
-                        );
-                        if (confirm == true) {
-                          try {
-                            await _repo.deleteSchedule(s.id);
-                            await _loadData();
-                            await _refreshMasterSchedules();
-                          } catch (_) {
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Could not delete this schedule. Please try again.',
+                        if (_isDeletingEntry) return;
+                        _isDeletingEntry = true;
+                        try {
+                          final confirm = await AppModals.showConfirmDialog(
+                            context: context,
+                            title: 'Delete Schedule Entry',
+                            message:
+                                'Are you sure you want to remove this schedule for ${s.subject} (${s.section})?',
+                            confirmLabel: 'Delete',
+                            confirmColor: AppTheme.catRed,
+                          );
+                          if (confirm == true) {
+                            try {
+                              await _repo.deleteSchedule(s.id);
+                              await _loadData();
+                              await _refreshMasterSchedules();
+                            } catch (_) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Could not delete this schedule. Please try again.',
+                                  ),
                                 ),
-                              ),
-                            );
+                              );
+                            }
                           }
+                        } finally {
+                          _isDeletingEntry = false;
                         }
                       },
                       tooltip: 'Delete entry',
@@ -1302,11 +1310,14 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
   void _showScheduleEntryDialog(
     BuildContext context, {
     ScheduleModel? schedule,
-  }) {
-    if (_teacherOfferings.isEmpty) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
+  }) async {
+    if (_isScheduleDialogOpen) return;
+    _isScheduleDialogOpen = true;
+    try {
+      if (_teacherOfferings.isEmpty) {
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -1448,8 +1459,9 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
 
     String? clashErrorMessage;
     bool isSaving = false;
+    bool isDeleting = false;
 
-    showDialog(
+    await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
@@ -1862,27 +1874,35 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                     color: AppTheme.catRed,
                   ),
                   tooltip: 'Delete Schedule Entry',
-                  onPressed: isSaving
+                  onPressed: (isSaving || isDeleting)
                       ? null
                       : () async {
-                          final confirm = await AppModals.showConfirmDialog(
-                            context: ctx,
-                            title: 'Delete Schedule Entry',
-                            message:
-                                'Are you sure you want to remove this schedule for ${schedule.subject} (${schedule.section})?',
-                            confirmLabel: 'Delete',
-                            confirmColor: AppTheme.catRed,
-                          );
-                          if (confirm == true) {
-                            try {
-                              await _repo.deleteSchedule(schedule.id);
-                              if (ctx.mounted) Navigator.pop(ctx);
-                              await _loadData();
-                              await _refreshMasterSchedules();
-                            } catch (_) {
-                              setModalState(() {
-                                clashErrorMessage = 'Could not delete this schedule. Please try again.';
-                              });
+                          setModalState(() => isDeleting = true);
+                          try {
+                            final confirm = await AppModals.showConfirmDialog(
+                              context: ctx,
+                              title: 'Delete Schedule Entry',
+                              message:
+                                  'Are you sure you want to remove this schedule for ${schedule.subject} (${schedule.section})?',
+                              confirmLabel: 'Delete',
+                              confirmColor: AppTheme.catRed,
+                            );
+                            if (confirm == true) {
+                              try {
+                                await _repo.deleteSchedule(schedule.id);
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                await _loadData();
+                                await _refreshMasterSchedules();
+                              } catch (_) {
+                                setModalState(() {
+                                  clashErrorMessage =
+                                      'Could not delete this schedule. Please try again.';
+                                });
+                              }
+                            }
+                          } finally {
+                            if (ctx.mounted) {
+                              setModalState(() => isDeleting = false);
                             }
                           }
                         },
@@ -2081,5 +2101,8 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
         },
       ),
     );
+    } finally {
+      _isScheduleDialogOpen = false;
+    }
   }
 }

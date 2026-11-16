@@ -11,7 +11,6 @@ import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/features/parent/sub_features/child_details/widgets/parent_subject_details_sheet.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 /// Standalone screen wrapper for opening Report Card & Term Grades from the
 /// Parent Side Panel (Drawer) or Quick Actions on Home.

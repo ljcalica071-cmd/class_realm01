@@ -265,45 +265,27 @@ class ParentDrawer extends StatelessWidget {
                       }
                     },
                   ),
+                  _buildDrawerTile(
+                    context: context,
+                    theme: theme,
+                    isDark: isDark,
+                    icon: Icons.settings_outlined,
+                    title: 'Settings',
+                    subtitle: 'Password, security & app preferences',
+                    accentColor: AppTheme.catPurple,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ParentSettingsScreen(),
+                        ),
+                      );
+                    },
+                  ),
 
                   const SizedBox(height: 12),
-                  _buildDrawerSectionLabel(theme, 'MAIN NAVIGATION'),
-                  _buildNavShortcutTile(
-                    context: context,
-                    theme: theme,
-                    icon: Icons.home_outlined,
-                    activeIcon: Icons.home_rounded,
-                    label: 'Home Overview',
-                    isSelected: currentBottomTabIndex == 0,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onSelectBottomTab?.call(0);
-                    },
-                  ),
-                  _buildNavShortcutTile(
-                    context: context,
-                    theme: theme,
-                    icon: Icons.fact_check_outlined,
-                    activeIcon: Icons.fact_check_rounded,
-                    label: 'Attendance Records',
-                    isSelected: currentBottomTabIndex == 1,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onSelectBottomTab?.call(1);
-                    },
-                  ),
-                  _buildNavShortcutTile(
-                    context: context,
-                    theme: theme,
-                    icon: Icons.calendar_month_outlined,
-                    activeIcon: Icons.calendar_month_rounded,
-                    label: 'Class Schedule',
-                    isSelected: currentBottomTabIndex == 2,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onSelectBottomTab?.call(2);
-                    },
-                  ),
+                  _buildDrawerSectionLabel(theme, 'COMMUNICATION'),
                   _buildNavShortcutTile(
                     context: context,
                     theme: theme,
@@ -314,35 +296,6 @@ class ParentDrawer extends StatelessWidget {
                     onTap: () {
                       Navigator.pop(context);
                       onSelectBottomTab?.call(3);
-                    },
-                  ),
-                  _buildNavShortcutTile(
-                    context: context,
-                    theme: theme,
-                    icon: Icons.person_outline_rounded,
-                    activeIcon: Icons.person_rounded,
-                    label: 'Parent Profile',
-                    isSelected: currentBottomTabIndex == 4,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onSelectBottomTab?.call(4);
-                    },
-                  ),
-                  _buildNavShortcutTile(
-                    context: context,
-                    theme: theme,
-                    icon: Icons.settings_outlined,
-                    activeIcon: Icons.settings_rounded,
-                    label: 'Settings',
-                    isSelected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ParentSettingsScreen(),
-                        ),
-                      );
                     },
                   ),
                 ],

@@ -137,6 +137,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
   bool _isLoadingSubjects = false;
   bool _isSaving = false;
+  bool _isDialogOpen = false;
+  bool _isActionInProgress = false;
 
   int _idCounter = 0;
   String _newId(String prefix) =>
@@ -188,28 +190,34 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     required BuildContext context,
     required Widget child,
     double maxWidth = 460,
-  }) {
-    final theme = Theme.of(context);
-    return showDialog<T>(
-      context: context,
-      builder: (ctx) => Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: Dialog(
-            backgroundColor: theme.colorScheme.surface,
-            elevation: 8,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+  }) async {
+    if (_isDialogOpen) return null;
+    _isDialogOpen = true;
+    try {
+      final theme = Theme.of(context);
+      return await showDialog<T>(
+        context: context,
+        builder: (ctx) => Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: Dialog(
+              backgroundColor: theme.colorScheme.surface,
+              elevation: 8,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 24,
+              ),
+              child: Padding(padding: const EdgeInsets.all(24), child: child),
             ),
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 24,
-            ),
-            child: Padding(padding: const EdgeInsets.all(24), child: child),
           ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _isDialogOpen = false;
+    }
   }
 
   @override
@@ -600,7 +608,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth >= 950 ? 2 : 1;
+        final crossAxisCount =
+            _subjects.length == 1 ? 1 : (constraints.maxWidth >= 950 ? 2 : 1);
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -695,7 +704,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth >= 950 ? 2 : 1;
+        final crossAxisCount =
+            _archivedSubjects.length == 1 ? 1 : (constraints.maxWidth >= 950 ? 2 : 1);
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -2037,20 +2047,22 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   }
 
   void _removeSectionRow(_SectionRowDraft row) async {
+    if (_isActionInProgress) return;
     if (_sectionRows.length <= 1) return;
 
     if (row.isExisting && _editingSubject != null) {
-      final confirmed = await _showActionConfirmationDialog(
-        title: 'Archive Section?',
-        message:
-            'Are you sure you want to archive section "${row.nameCtrl.text}"? '
-            'It will be safely moved to Archived Sections and can be restored anytime.',
-        confirmLabel: 'Archive Section',
-        icon: LucideIcons.archive,
-      );
-      if (!confirmed) return;
-
+      _isActionInProgress = true;
       try {
+        final confirmed = await _showActionConfirmationDialog(
+          title: 'Archive Section?',
+          message:
+              'Are you sure you want to archive section "${row.nameCtrl.text}"? '
+              'It will be safely moved to Archived Sections and can be restored anytime.',
+          confirmLabel: 'Archive Section',
+          icon: LucideIcons.archive,
+        );
+        if (!confirmed) return;
+
         await SubjectRepository.instance.archiveSingleOffering(row.id);
         if (mounted) {
           AppTopToast.warning(
@@ -2064,6 +2076,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           AppTopToast.error(context, 'Failed to archive section: $e');
         }
         return;
+      } finally {
+        if (mounted) _isActionInProgress = false;
       }
     }
 
@@ -2462,60 +2476,64 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
   // Archive Modal (Uses DRY _showActionConfirmationDialog)
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _confirmArchive(_SubjectClass subject) async {
-    final confirmed = await _showActionConfirmationDialog(
-      title: 'Archive Subject?',
-      message:
-          'Are you sure you want to archive "${subject.name}" (${subject.gradeLevel})? '
-          'It will be hidden from your active classroom views.',
-      confirmLabel: 'Archive Subject',
-      icon: LucideIcons.archive,
-      countdownSeconds: 5,
-      detailsWidget: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest
-              .withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: const Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(LucideIcons.info, size: 16, color: Color(0xFF487898)),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Sections, learning materials, and grading records are kept safely. You can restore this subject anytime from the Archived Subjects view.',
-                style: TextStyle(fontSize: 12, height: 1.4),
+    if (_isActionInProgress) return;
+    _isActionInProgress = true;
+    try {
+      final confirmed = await _showActionConfirmationDialog(
+        title: 'Archive Subject?',
+        message:
+            'Are you sure you want to archive "${subject.name}" (${subject.gradeLevel})? '
+            'It will be hidden from your active classroom views.',
+        confirmLabel: 'Archive Subject',
+        icon: LucideIcons.archive,
+        countdownSeconds: 5,
+        detailsWidget: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest
+                .withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.info, size: 16, color: Color(0xFF487898)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Sections, learning materials, and grading records are kept safely. You can restore this subject anytime from the Archived Subjects view.',
+                  style: TextStyle(fontSize: 12, height: 1.4),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
-
-    if (!confirmed) return;
-
-    final teacherId = AuthRepository.instance.currentUser?.id;
-    if (teacherId != null) {
-      await SubjectRepository.instance.archiveSubjectOffering(
-        teacherId: teacherId,
-        subjectId: subject.subjectId,
       );
-    }
-    await _loadSubjects();
 
-    if (mounted) {
-      AppTopToast.warning(
-        context,
-        '${subject.name} moved to archived subjects.',
-      );
+      if (!confirmed) return;
+
+      final teacherId = AuthRepository.instance.currentUser?.id;
+      if (teacherId != null) {
+        await SubjectRepository.instance.archiveSubjectOffering(
+          teacherId: teacherId,
+          subjectId: subject.subjectId,
+        );
+      }
+      await _loadSubjects();
+
+      if (mounted) {
+        AppTopToast.warning(
+          context,
+          '${subject.name} moved to archived subjects.',
+        );
+      }
+    } finally {
+      if (mounted) _isActionInProgress = false;
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // Restore Subject (Checks Active Limit of 10 and Asks Confirmation)
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _restoreSubject(_SubjectClass subject) async {
+    if (_isActionInProgress) return;
     if (_subjects.length >= _maxSubjects) {
       _showLimitErrorDialog(
         title: 'Subject Limit Reached',
@@ -2526,187 +2544,201 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       return;
     }
 
-    final confirmed = await _showActionConfirmationDialog(
-      title: 'Restore Subject?',
-      message:
-          'Are you sure you want to restore "${subject.name}" (${subject.gradeLevel}) back to your active classroom?',
-      confirmLabel: 'Restore Subject',
-      icon: LucideIcons.rotateCcw,
-    );
-    if (!confirmed) return;
-
-    final teacherId = AuthRepository.instance.currentUser?.id;
-    if (teacherId != null) {
-      await SubjectRepository.instance.restoreSubjectOffering(
-        teacherId: teacherId,
-        subjectId: subject.subjectId,
+    _isActionInProgress = true;
+    try {
+      final confirmed = await _showActionConfirmationDialog(
+        title: 'Restore Subject?',
+        message:
+            'Are you sure you want to restore "${subject.name}" (${subject.gradeLevel}) back to your active classroom?',
+        confirmLabel: 'Restore Subject',
+        icon: LucideIcons.rotateCcw,
       );
-    }
+      if (!confirmed) return;
 
-    await _loadSubjects();
+      final teacherId = AuthRepository.instance.currentUser?.id;
+      if (teacherId != null) {
+        await SubjectRepository.instance.restoreSubjectOffering(
+          teacherId: teacherId,
+          subjectId: subject.subjectId,
+        );
+      }
 
-    if (mounted) {
-      AppTopToast.success(
-        context,
-        '${subject.name} restored to active classroom.',
-      );
+      await _loadSubjects();
+
+      if (mounted) {
+        AppTopToast.success(
+          context,
+          '${subject.name} restored to active classroom.',
+        );
+      }
+    } finally {
+      if (mounted) _isActionInProgress = false;
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // Permanent Delete Modal (Guarded by Academic Records Check)
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _confirmPermanentDelete(_SubjectClass subject) async {
+    if (_isActionInProgress) return;
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null) return;
 
-    // 1. Guard against academic records
-    final hasRecords = await SubjectRepository.instance
-        .hasSubjectAcademicRecords(teacherId, subject.subjectId);
+    _isActionInProgress = true;
+    try {
+      // 1. Guard against academic records
+      final hasRecords = await SubjectRepository.instance
+          .hasSubjectAcademicRecords(teacherId, subject.subjectId);
 
-    if (hasRecords) {
+      if (hasRecords) {
+        if (mounted) {
+          _showAcademicRecordsBlockedDialog(
+            itemName: subject.name,
+            isSection: false,
+          );
+        }
+        return;
+      }
+
+      // 2. Ask confirmation if no academic records exist
+      final confirmed = await _showActionConfirmationDialog(
+        title: 'Permanently Delete Subject?',
+        message:
+            'Are you sure you want to permanently delete "${subject.name}" (${subject.gradeLevel})? '
+            'This action cannot be undone.',
+        confirmLabel: 'Delete Permanently',
+        icon: LucideIcons.trash2,
+        isDestructive: true,
+        countdownSeconds: 5,
+        detailsWidget: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.green.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.shieldCheck, size: 16, color: Colors.green),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Student Accounts Are Safe: Deleting this subject will NOT delete student user accounts. '
+                  'Enrolled students will remain fully active in the system.',
+                  style: TextStyle(fontSize: 12, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (!confirmed) return;
+
+      await SubjectRepository.instance.deleteSubjectOffering(
+        teacherId: teacherId,
+        subjectId: subject.subjectId,
+      );
+
+      await _loadSubjects();
+
       if (mounted) {
-        _showAcademicRecordsBlockedDialog(
-          itemName: subject.name,
-          isSection: false,
+        AppTopToast.warning(context, '${subject.name} permanently deleted.');
+      }
+    } finally {
+      if (mounted) _isActionInProgress = false;
+    }
+  }
+
+  void _restoreSection(_ClassSection sec, _SubjectClass parentSubject) async {
+    if (_isActionInProgress) return;
+    _isActionInProgress = true;
+    try {
+      final confirmed = await _showActionConfirmationDialog(
+        title: 'Restore Section?',
+        message:
+            'Are you sure you want to restore section "${sec.name}" back to "${parentSubject.name}"?',
+        confirmLabel: 'Restore Section',
+        icon: LucideIcons.rotateCcw,
+      );
+      if (!confirmed) return;
+
+      await SubjectRepository.instance.restoreSingleOffering(sec.id);
+      await _loadSubjects();
+
+      if (mounted) {
+        AppTopToast.success(
+          context,
+          'Section "${sec.name}" restored to active classroom.',
         );
       }
-      return;
-    }
-
-    // 2. Ask confirmation if no academic records exist
-    final confirmed = await _showActionConfirmationDialog(
-      title: 'Permanently Delete Subject?',
-      message:
-          'Are you sure you want to permanently delete "${subject.name}" (${subject.gradeLevel})? '
-          'This action cannot be undone.',
-      confirmLabel: 'Delete Permanently',
-      icon: LucideIcons.trash2,
-      isDestructive: true,
-      countdownSeconds: 5,
-      detailsWidget: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.green.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-        ),
-        child: const Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(LucideIcons.shieldCheck, size: 16, color: Colors.green),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Student Accounts Are Safe: Deleting this subject will NOT delete student user accounts. '
-                'Enrolled students will remain fully active in the system.',
-                style: TextStyle(fontSize: 12, height: 1.4),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (!confirmed) return;
-
-    await SubjectRepository.instance.deleteSubjectOffering(
-      teacherId: teacherId,
-      subjectId: subject.subjectId,
-    );
-
-    await _loadSubjects();
-
-    if (mounted) {
-      AppTopToast.warning(context, '${subject.name} permanently deleted.');
+    } finally {
+      if (mounted) _isActionInProgress = false;
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // Restore Single Section
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  void _restoreSection(_ClassSection sec, _SubjectClass parentSubject) async {
-    final confirmed = await _showActionConfirmationDialog(
-      title: 'Restore Section?',
-      message:
-          'Are you sure you want to restore section "${sec.name}" back to "${parentSubject.name}"?',
-      confirmLabel: 'Restore Section',
-      icon: LucideIcons.rotateCcw,
-    );
-    if (!confirmed) return;
-
-    await SubjectRepository.instance.restoreSingleOffering(sec.id);
-    await _loadSubjects();
-
-    if (mounted) {
-      AppTopToast.success(
-        context,
-        'Section "${sec.name}" restored to active classroom.',
-      );
-    }
-  }
-
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // Permanent Delete Single Archived Section (Guarded by Academic Records)
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _confirmDeleteArchivedSection(
     _ClassSection sec,
     _SubjectClass parentSubject,
   ) async {
-    // 1. Guard against academic records
-    final hasRecords = await SubjectRepository.instance.hasAcademicRecords(
-      sec.id,
-    );
-    if (hasRecords) {
-      if (mounted) {
-        _showAcademicRecordsBlockedDialog(itemName: sec.name, isSection: true);
-      }
-      return;
-    }
-
-    // 2. Ask confirmation if no academic records exist
-    final confirmed = await _showActionConfirmationDialog(
-      title: 'Permanently Delete Section?',
-      message:
-          'Are you sure you want to permanently delete section "${sec.name}" from "${parentSubject.name}"? '
-          'This action cannot be undone.',
-      confirmLabel: 'Delete Permanently',
-      icon: LucideIcons.trash2,
-      isDestructive: true,
-      countdownSeconds: 5,
-      detailsWidget: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.green.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-        ),
-        child: const Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(LucideIcons.shieldCheck, size: 16, color: Colors.green),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Student Accounts Are Safe: Deleting this section will NOT delete student user accounts.',
-                style: TextStyle(fontSize: 12, height: 1.4),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (!confirmed) return;
-
-    await SubjectRepository.instance.deleteSingleOffering(sec.id);
-    await _loadSubjects();
-
-    if (mounted) {
-      AppTopToast.warning(
-        context,
-        'Section "${sec.name}" permanently deleted.',
+    if (_isActionInProgress) return;
+    _isActionInProgress = true;
+    try {
+      // 1. Guard against academic records
+      final hasRecords = await SubjectRepository.instance.hasAcademicRecords(
+        sec.id,
       );
+      if (hasRecords) {
+        if (mounted) {
+          _showAcademicRecordsBlockedDialog(itemName: sec.name, isSection: true);
+        }
+        return;
+      }
+
+      // 2. Ask confirmation if no academic records exist
+      final confirmed = await _showActionConfirmationDialog(
+        title: 'Permanently Delete Section?',
+        message:
+            'Are you sure you want to permanently delete section "${sec.name}" from "${parentSubject.name}"? '
+            'This action cannot be undone.',
+        confirmLabel: 'Delete Permanently',
+        icon: LucideIcons.trash2,
+        isDestructive: true,
+        countdownSeconds: 5,
+        detailsWidget: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.green.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.shieldCheck, size: 16, color: Colors.green),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Student Accounts Are Safe: Deleting this section will NOT delete student user accounts.',
+                  style: TextStyle(fontSize: 12, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (!confirmed) return;
+
+      await SubjectRepository.instance.deleteSingleOffering(sec.id);
+      await _loadSubjects();
+
+      if (mounted) {
+        AppTopToast.warning(
+          context,
+          'Section "${sec.name}" permanently deleted.',
+        );
+      }
+    } finally {
+      if (mounted) _isActionInProgress = false;
     }
   }
 
@@ -2782,7 +2814,8 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth >= 950 ? 2 : 1;
+        final crossAxisCount =
+            _archivedSectionsSubjects.length == 1 ? 1 : (constraints.maxWidth >= 950 ? 2 : 1);
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),

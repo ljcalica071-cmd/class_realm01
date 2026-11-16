@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
@@ -14,7 +14,8 @@ import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 
 /// Real-Time Paginated Parent Notifications Tab
-/// - Filters notifications so parents only see notifications for their linked children and their children's enrolled subjects (+ general announcements)
+/// - Filter & Sorting support: Newest to Oldest / Oldest to Newest
+/// - Filter by Subject dropdown (enrolled subjects of linked learners)
 /// - Child selector dropdown when parent has multiple linked children
 /// - Enforces 2-line expandable notification cards with subject/section badges
 /// - Adheres strictly to student-parent-ui-ux.md (maxWidth: 540, 60-30-10 palette, LucideIcons)
@@ -39,6 +40,15 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
   String? _selectedChildId; // null or child student_id
   RealtimeChannel? _channel;
 
+  /// Sorting: true = Newest to Oldest (default), false = Oldest to Newest.
+  bool _newestFirst = true;
+
+  /// Display names of the children's enrolled subjects (for filter dropdown).
+  List<String> _subjectOptions = [];
+
+  /// Currently selected subject filter. `null` means "All Subjects".
+  String? _selectedSubject;
+
   @override
   void initState() {
     super.initState();
@@ -47,7 +57,24 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
       _items.addAll(widget.notifications!);
       _isLoading = false;
     } else {
-      _loadNotifications(initial: true);
+      final parentId = AuthRepository.instance.currentUser?.id;
+      if (parentId != null && parentId.isNotEmpty) {
+        final cached =
+            AppDataCache.instance.getCached<List<AppNotificationModel>>(
+          'parent_notifications_$parentId',
+          (jsonList) => (jsonList as List)
+              .map((j) => AppNotificationModel.fromJson(
+                  Map<String, dynamic>.from(j as Map)))
+              .toList(),
+        );
+        if (cached != null && cached.isNotEmpty) {
+          _items
+            ..clear()
+            ..addAll(cached);
+          _isLoading = false;
+        }
+      }
+      _loadNotifications(initial: _items.isEmpty, silent: _items.isNotEmpty);
       _subscribeToRealtime();
     }
   }
@@ -72,9 +99,62 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
         setState(() {
           _linkedChildren = children;
         });
+        await _loadEnrolledSubjectsForChildren(children);
       }
     } catch (e) {
       debugPrint('Error loading linked children for parent notifications: $e');
+    }
+  }
+
+  Future<void> _loadEnrolledSubjectsForChildren(List<UserModel> children) async {
+    if (children.isEmpty) return;
+    try {
+      final childIds = children.map((c) => c.id).where((id) => id.isNotEmpty).toList();
+      if (childIds.isEmpty) return;
+
+      final res = await Supabase.instance.client
+          .from('student_enrollments')
+          .select(
+            'subject_offerings (subjects (subject_name), sections (section_name))',
+          )
+          .inFilter('student_id', childIds)
+          .ilike('status', 'enrolled');
+
+      final byKey = <String, String>{};
+      for (final row in (res as List)) {
+        final rawOffering = row['subject_offerings'];
+        final Map? offering = rawOffering is Map
+            ? rawOffering
+            : (rawOffering is List && rawOffering.isNotEmpty
+                  ? rawOffering.first as Map?
+                  : null);
+        final rawSub = offering?['subjects'];
+        final Map? subMap = rawSub is Map
+            ? rawSub
+            : (rawSub is List && rawSub.isNotEmpty
+                  ? rawSub.first as Map?
+                  : null);
+        final sName = subMap?['subject_name'] ?? offering?['subject_name'];
+        if (sName != null && '$sName'.trim().isNotEmpty) {
+          final trimmed = '$sName'.trim();
+          byKey.putIfAbsent(trimmed.toLowerCase(), () => trimmed);
+        }
+      }
+
+      final options = byKey.values.toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+      if (mounted) {
+        setState(() {
+          _subjectOptions = options;
+          if (_selectedSubject != null &&
+              !byKey.containsKey(_selectedSubject!.toLowerCase())) {
+            _selectedSubject = null;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading subjects for parent notifications: $e');
     }
   }
 
@@ -122,6 +202,10 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
       final fetched = await SupabaseNotificationRepository.instance
           .getUserNotifications(user, limit: _fetchLimit);
 
+      if (!_newestFirst) {
+        fetched.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      }
+
       if (mounted) {
         setState(() {
           _items
@@ -129,6 +213,15 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
             ..addAll(fetched);
           _isLoading = false;
         });
+
+        if (user.id.isNotEmpty) {
+          unawaited(
+            AppDataCache.instance.setCache(
+              'parent_notifications_${user.id}',
+              fetched.map((n) => n.toJson()).toList(),
+            ),
+          );
+        }
 
         SupabaseNotificationRepository.instance.calculateUnreadCount(user);
       }
@@ -140,6 +233,14 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
         });
       }
     }
+  }
+
+  void _toggleSort() {
+    setState(() {
+      _newestFirst = !_newestFirst;
+      _currentPage = 1;
+    });
+    _loadNotifications(initial: true);
   }
 
   /// Filter notifications: only show notifications relevant to linked children (+ general announcements)
@@ -155,17 +256,26 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
       );
     }
 
-    return _items.where((n) {
-      final childrenToCheck = specificChild != null
-          ? [specificChild]
-          : _linkedChildren;
-      return SupabaseNotificationRepository.instance
-          .isNotificationVisibleForUser(
-            n,
-            currentUser,
-            linkedChildren: childrenToCheck,
-          );
-    }).toList();
+    return _items
+        .where((n) {
+          final childrenToCheck = specificChild != null
+              ? [specificChild]
+              : _linkedChildren;
+          return SupabaseNotificationRepository.instance
+              .isNotificationVisibleForUser(
+                n,
+                currentUser,
+                linkedChildren: childrenToCheck,
+              );
+        })
+        .where((n) {
+          // Subject dropdown filter
+          final selected = _selectedSubject?.trim().toLowerCase();
+          if (selected == null || selected.isEmpty) return true;
+          final haystack = '${n.title} ${n.message}'.toLowerCase();
+          return haystack.contains(selected);
+        })
+        .toList();
   }
 
   @override
@@ -175,173 +285,111 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
     final displayedItems = _filteredNotifications;
 
     if (_isLoading && _items.isEmpty) {
-      return Center(
-        child: LoadingAnimationWidget.staggeredDotsWave(
-          color: theme.colorScheme.primary,
-          size: 40,
-        ),
-      );
+      return const ShimmerStudentNotificationsSkeleton();
     }
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 540),
-        child: Column(
-          children: [
-            // Child switcher if multiple children exist
-            if (_linkedChildren.length > 1)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Row(
-                  children: [
-                    Icon(
-                      LucideIcons.users,
-                      size: 15,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _selectedChildId ?? 'ALL',
-                        icon: const Icon(LucideIcons.chevronDown, size: 16),
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                        dropdownColor: isDark
-                            ? const Color(0xFF263040)
-                            : Colors.white,
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 0,
+    return AppPullToRefresh(
+      onRefresh: () => _loadNotifications(initial: true, silent: true),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: Column(
+            children: [
+              // Child switcher if multiple children exist
+              if (_linkedChildren.length > 1)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        LucideIcons.users,
+                        size: 15,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selectedChildId ?? 'ALL',
+                          icon: const Icon(LucideIcons.chevronDown, size: 16),
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
                           ),
-                          filled: true,
-                          fillColor: isDark
-                              ? const Color(0xFF1E293B)
+                          dropdownColor: isDark
+                              ? const Color(0xFF263040)
                               : Colors.white,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.1)
-                                  : const Color(0xFFE2E8F0),
+                          decoration: InputDecoration(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 0,
                             ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.1)
-                                  : const Color(0xFFE2E8F0),
+                            filled: true,
+                            fillColor: isDark
+                                ? const Color(0xFF1E293B)
+                                : Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.1)
+                                    : const Color(0xFFE2E8F0),
+                              ),
                             ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                              color: theme.colorScheme.primary,
-                              width: 1.5,
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.1)
+                                    : const Color(0xFFE2E8F0),
+                              ),
                             ),
-                          ),
-                        ),
-                        items: [
-                          const DropdownMenuItem<String>(
-                            value: 'ALL',
-                            child: Text('All Children'),
-                          ),
-                          ..._linkedChildren.map(
-                            (c) => DropdownMenuItem<String>(
-                              value: c.id,
-                              child: Text(
-                                c.fullName.isNotEmpty ? c.fullName : 'Learner',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: theme.colorScheme.primary,
+                                width: 1.5,
                               ),
                             ),
                           ),
-                        ],
-                        onChanged: (val) {
-                          setState(() {
-                            _selectedChildId = val;
-                            _currentPage = 1;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            // Mark All As Read Button
-            Builder(
-              builder: (btnCtx) {
-                final currentUserId =
-                    AuthRepository.instance.currentUser?.id ?? '';
-                final unreadInList = displayedItems
-                    .where(
-                      (n) => !LocalStorageService.isNotificationRead(
-                        currentUserId,
-                        n.id,
-                      ),
-                    )
-                    .map((n) => n.id)
-                    .toList();
-                if (unreadInList.isEmpty) return const SizedBox.shrink();
-
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: OutlinedButton.icon(
-                      icon: const Icon(LucideIcons.checkCheck, size: 14),
-                      label: Text(
-                        'Mark all as read (${unreadInList.length})',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: 'ALL',
+                              child: Text('All Children'),
+                            ),
+                            ..._linkedChildren.map(
+                              (c) => DropdownMenuItem<String>(
+                                value: c.id,
+                                child: Text(
+                                  c.fullName.isNotEmpty ? c.fullName : 'Learner',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            setState(() {
+                              _selectedChildId = val;
+                              _currentPage = 1;
+                            });
+                          },
                         ),
                       ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 0,
-                        ),
-                        minimumSize: const Size(0, 36),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      onPressed: () async {
-                        final user = AuthRepository.instance.currentUser;
-                        if (user != null) {
-                          await SupabaseNotificationRepository.instance
-                              .markAllAsRead(user.id, unreadInList);
-                          await SupabaseNotificationRepository.instance
-                              .calculateUnreadCount(user);
-                          if (btnCtx.mounted) {
-                            AppTopToast.success(
-                              btnCtx,
-                              'All notifications marked as read.',
-                            );
-                          }
-                        }
-                      },
-                    ),
+                    ],
                   ),
-                );
-              },
-            ),
+                ),
 
-            // Notification List
-            Expanded(
-              child: AppPullToRefresh(
-                onRefresh: () =>
-                    _loadNotifications(initial: true, silent: true),
+              // Filter & Sorting Bar: Sort Old/New Toggle + Subject Dropdown + Mark All Read
+              _buildFilterBar(theme, isDark, displayedItems),
+
+              // Notification List
+              Expanded(
                 child: displayedItems.isEmpty
                     ? AppPullToRefresh.scrollableState(
                         child: Container(
                           width: double.infinity,
+                          margin: const EdgeInsets.all(16),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 24,
                             vertical: 32,
@@ -377,7 +425,9 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                'No Announcements Yet',
+                                _selectedSubject != null
+                                    ? 'No Announcements for $_selectedSubject'
+                                    : 'No Announcements Yet',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 15,
@@ -387,7 +437,9 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'No notifications for your linked learners at this time.',
+                                _selectedSubject != null
+                                    ? 'No notifications matching "$_selectedSubject" for your linked learners.'
+                                    : 'No notifications for your linked learners at this time.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 12.5,
@@ -395,6 +447,18 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                                   height: 1.4,
                                 ),
                               ),
+                              if (_selectedSubject != null) ...[
+                                const SizedBox(height: 14),
+                                OutlinedButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedSubject = null;
+                                      _currentPage = 1;
+                                    });
+                                  },
+                                  child: const Text('Clear Filter'),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -446,9 +510,178 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                         },
                       ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFilterBar(
+    ThemeData theme,
+    bool isDark,
+    List<AppNotificationModel> displayedNotifications,
+  ) {
+    final borderColor = theme.colorScheme.onSurface.withValues(
+      alpha: isDark ? 0.14 : 0.09,
+    );
+    final surface = isDark ? const Color(0xFF263040) : Colors.white;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      child: Row(
+        children: [
+          // Sort button: Newest -> Oldest / Oldest -> Newest
+          Material(
+            color: surface,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              key: const Key('parent_notif_sort_button'),
+              borderRadius: BorderRadius.circular(12),
+              onTap: _toggleSort,
+              child: Container(
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _newestFirst
+                          ? LucideIcons.arrowDownWideNarrow
+                          : LucideIcons.arrowUpNarrowWide,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _newestFirst ? 'Newest' : 'Oldest',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Subject dropdown filter
+          Expanded(
+            child: Container(
+              height: 42,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String?>(
+                  key: const Key('parent_notif_subject_dropdown'),
+                  value: _selectedSubject,
+                  isExpanded: true,
+                  borderRadius: BorderRadius.circular(12),
+                  icon: Icon(
+                    LucideIcons.chevronDown,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text(
+                        'All Subjects',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    ..._subjectOptions.map(
+                      (s) => DropdownMenuItem<String?>(
+                        value: s,
+                        child: Text(s, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                  ],
+                  onChanged: (val) => setState(() {
+                    _selectedSubject = val;
+                    _currentPage = 1;
+                  }),
+                ),
+              ),
+            ),
+          ),
+
+          // Mark All Read Button
+          Builder(
+            builder: (btnCtx) {
+              final currentUserId =
+                  AuthRepository.instance.currentUser?.id ?? '';
+              final unreadInList = displayedNotifications
+                  .where(
+                    (n) => !LocalStorageService.isNotificationRead(
+                      currentUserId,
+                      n.id,
+                    ),
+                  )
+                  .map((n) => n.id)
+                  .toList();
+              if (unreadInList.isEmpty) return const SizedBox.shrink();
+
+              return Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Tooltip(
+                  message: 'Mark all as read',
+                  child: OutlinedButton.icon(
+                    icon: const Icon(LucideIcons.checkCheck, size: 14),
+                    label: Text(
+                      '${unreadInList.length}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 0,
+                      ),
+                      minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () async {
+                      final user = AuthRepository.instance.currentUser;
+                      if (user != null) {
+                        await SupabaseNotificationRepository.instance
+                            .markAllAsRead(user.id, unreadInList);
+                        await SupabaseNotificationRepository.instance
+                            .calculateUnreadCount(user);
+                        if (btnCtx.mounted) {
+                          AppTopToast.success(
+                            btnCtx,
+                            'All notifications marked as read.',
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -479,81 +712,98 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
         runSpacing: 8,
         children: [
           Text(
-            'Showing ${totalCount == 0 ? 0 : startIndex + 1} to $endIndex of $totalCount entries',
+            totalCount == 0
+                ? 'Showing 0 of 0 notifications'
+                : 'Showing ${startIndex + 1}–$endIndex of $totalCount notifications',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: FontWeight.w500,
-              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          if (totalPages > 1)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildPageButton(
-                  'First',
-                  () => setState(() => _currentPage = 1),
-                  safePage > 1,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton(
+                onPressed: safePage > 1
+                    ? () {
+                        setState(() {
+                          _currentPage--;
+                        });
+                        _scrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOut,
+                        );
+                      }
+                    : null,
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                _buildPageButton(
-                  '<',
-                  () => setState(() => _currentPage = safePage - 1),
-                  safePage > 1,
+                child: const Text('Previous', style: TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
                 ),
-                for (int p = 1; p <= totalPages; p++)
-                  if (p >= safePage - 2 && p <= safePage + 2)
-                    _buildPageButton(
-                      p.toString(),
-                      () => setState(() => _currentPage = p),
-                      true,
-                      isActive: p == safePage,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(
+                    alpha: isDark ? 0.2 : 0.08,
+                  ),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: theme.colorScheme.primary.withValues(
+                      alpha: isDark ? 0.4 : 0.2,
                     ),
-                _buildPageButton(
-                  '>',
-                  () => setState(() => _currentPage = safePage + 1),
-                  safePage < totalPages,
+                  ),
                 ),
-                _buildPageButton(
-                  'Last',
-                  () => setState(() => _currentPage = totalPages),
-                  safePage < totalPages,
+                child: Text(
+                  '$safePage of ${totalPages > 0 ? totalPages : 1}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPageButton(
-    String label,
-    VoidCallback onTap,
-    bool enabled, {
-    bool isActive = false,
-  }) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: enabled && !isActive ? onTap : null,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        decoration: BoxDecoration(
-          color: isActive ? theme.colorScheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            color: isActive
-                ? theme.colorScheme.onPrimary
-                : enabled
-                ? theme.colorScheme.onSurface
-                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: safePage < totalPages
+                    ? () {
+                        setState(() {
+                          _currentPage++;
+                        });
+                        _scrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOut,
+                        );
+                      }
+                    : null,
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Next', style: TextStyle(fontSize: 12)),
+              ),
+            ],
           ),
-        ),
+        ],
       ),
     );
   }

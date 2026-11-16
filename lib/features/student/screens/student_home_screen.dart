@@ -16,7 +16,6 @@ import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/features/student/sub_features/profile/widgets/student_notifications_tab.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/routes/app_routes.dart';
 
@@ -91,7 +90,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     if (initialStudentId != null && initialStudentId.isNotEmpty) {
       _checkAndAutoResumeAssessment(initialStudentId);
     }
-    _loadDashboard();
+    final cached = StudentDashboardRepository.instance.currentDashboard;
+    if (cached != null) {
+      _dashboard = cached;
+      _isLoading = false;
+    }
+    _loadDashboard(silent: cached != null);
     InAppNotificationService.subscribeToAnnouncements(role: 'student');
   }
 
@@ -280,6 +284,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             NotificationBellButton(
               role: 'student',
               tooltip: 'School Alerts & Notifications',
+              iconColor: Colors.white,
               onTap: () => _onSelectTab(2),
             ),
             const SizedBox(width: 6),
@@ -700,9 +705,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  student.firstName?.isNotEmpty == true
-                                      ? student.firstName!
-                                      : student.fullName,
+                                  student.lastFirstMi,
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16.5,
@@ -1039,6 +1042,10 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    if (_isLoading && _dashboard == null) {
+      return const ShimmerClassworkSkeleton();
+    }
+
     if (enrollments.isEmpty) {
       return AppPullToRefresh(
         onRefresh: () => _loadDashboard(forceRefresh: true, silent: true),
@@ -1083,11 +1090,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         .where((i) => i.type == 'exam')
         .toList();
 
-    return DefaultTabController(
-      key: ValueKey('student-cw-tabs-${activeEnrollment.subjectId}'),
-      length: 3,
-      child: Column(
-        children: [
+    return AppPullToRefresh(
+      onRefresh: () => _loadDashboard(forceRefresh: true, silent: true),
+      child: DefaultTabController(
+        key: ValueKey('student-cw-tabs-${activeEnrollment.subjectId}'),
+        length: 3,
+        child: Column(
+          children: [
           // Enrolled subject dropdown (single select, enrolled subjects only)
           Container(
             width: double.infinity,
@@ -1240,8 +1249,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildClassworkTabLabel(ThemeData theme, String label, int count) {
     return Tab(
@@ -1288,29 +1298,23 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     required String emptyMessage,
   }) {
     if (items.isEmpty) {
-      return AppPullToRefresh(
-        onRefresh: () => _loadDashboard(forceRefresh: true, silent: true),
-        child: AppPullToRefresh.scrollableState(
-          child: _buildEmptyCard(
-            context,
-            icon: emptyIcon,
-            title: emptyTitle,
-            message: emptyMessage,
-          ),
+      return AppPullToRefresh.scrollableState(
+        child: _buildEmptyCard(
+          context,
+          icon: emptyIcon,
+          title: emptyTitle,
+          message: emptyMessage,
         ),
       );
     }
-    return AppPullToRefresh(
-      onRefresh: () => _loadDashboard(forceRefresh: true, silent: true),
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemBuilder: (context, index) => StudentClassworkCard(
-          classwork: items[index],
-          onRefresh: () => _loadDashboard(forceRefresh: true),
-        ),
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      itemCount: items.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      itemBuilder: (context, index) => StudentClassworkCard(
+        classwork: items[index],
+        onRefresh: () => _loadDashboard(forceRefresh: true),
       ),
     );
   }
@@ -1634,122 +1638,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildStudentHomeSkeleton(ThemeData theme, bool isDark) {
-    return ShimmerLoading(
-      child: SingleChildScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top student header card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(
-                    alpha: isDark ? 0.16 : 0.1,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const ShimmerBox(width: 48, height: 48, borderRadius: 24),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        ShimmerBox(width: 120, height: 16, borderRadius: 4),
-                        SizedBox(height: 6),
-                        ShimmerBox(width: 180, height: 12, borderRadius: 4),
-                      ],
-                    ),
-                  ),
-                  const ShimmerBox(width: 50, height: 24, borderRadius: 12),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-
-            // Quick Access Row
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: isDark ? 0.16 : 0.1,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Container(
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: isDark ? 0.16 : 0.1,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // Section header
-            const ShimmerBox(width: 110, height: 18, borderRadius: 4),
-            const SizedBox(height: 6),
-            const ShimmerBox(width: 220, height: 12, borderRadius: 4),
-            const SizedBox(height: 14),
-
-            // 3 Classwork task cards
-            for (int i = 0; i < 3; i++)
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: theme.colorScheme.onSurface.withValues(
-                      alpha: isDark ? 0.16 : 0.1,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const ShimmerBox(width: 42, height: 42, borderRadius: 10),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          ShimmerBox(width: 140, height: 15, borderRadius: 4),
-                          SizedBox(height: 6),
-                          ShimmerBox(width: 90, height: 12, borderRadius: 4),
-                        ],
-                      ),
-                    ),
-                    const ShimmerBox(width: 60, height: 22, borderRadius: 8),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
+    return const ShimmerStudentHomeSkeleton();
   }
 }

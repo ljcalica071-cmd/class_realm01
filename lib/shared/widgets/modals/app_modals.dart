@@ -608,6 +608,10 @@ class AppModals {
     );
   }
 
+  static bool _isConfirmDialogOpen = false;
+  static bool _isArchiveDialogOpen = false;
+  static bool _isTypeToConfirmDialogOpen = false;
+
   static Future<bool?> showConfirmDialog({
     required BuildContext context,
     required String title,
@@ -615,79 +619,85 @@ class AppModals {
     String confirmLabel = 'Confirm',
     String cancelLabel = 'Cancel',
     Color? confirmColor,
-  }) {
-    final theme = Theme.of(context);
-    final isDelete =
-        confirmLabel.trim().toLowerCase().contains('delete') ||
-        title.trim().toLowerCase().contains('delete');
-    final effectiveColor =
-        confirmColor ??
-        (isDelete ? AppTheme.catRed : theme.colorScheme.primary);
+  }) async {
+    if (_isConfirmDialogOpen) return null;
+    _isConfirmDialogOpen = true;
+    try {
+      final theme = Theme.of(context);
+      final isDelete =
+          confirmLabel.trim().toLowerCase().contains('delete') ||
+          title.trim().toLowerCase().contains('delete');
+      final effectiveColor =
+          confirmColor ??
+          (isDelete ? AppTheme.catRed : theme.colorScheme.primary);
 
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => Theme(
-        data: theme,
-        child: Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          elevation: 16,
-          backgroundColor: theme.colorScheme.surface,
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 440),
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
+      return await showDialog<bool>(
+        context: context,
+        builder: (ctx) => Theme(
+          data: theme,
+          child: Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            elevation: 16,
+            backgroundColor: theme.colorScheme.surface,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 440),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  message,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                    height: 1.5,
+                  const SizedBox(height: 14),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                      height: 1.5,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                      child: Text(
-                        cancelLabel,
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.7,
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: Text(
+                          cancelLabel,
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.7,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    AppPrimaryButton(
-                      label: confirmLabel,
-                      backgroundColor: effectiveColor,
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                      height: 40,
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 8),
+                      AppPrimaryButton(
+                        label: confirmLabel,
+                        backgroundColor: effectiveColor,
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        height: 40,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _isConfirmDialogOpen = false;
+    }
   }
 
   /// Archive dialog with 5-second cooldown on the confirm button
@@ -699,25 +709,31 @@ class AppModals {
     String cancelLabel = 'Cancel',
     Color? confirmColor,
     int cooldownSeconds = 5,
-  }) {
-    final theme = Theme.of(context);
-    final effectiveColor = confirmColor ?? AppTheme.catOrange;
+  }) async {
+    if (_isArchiveDialogOpen) return null;
+    _isArchiveDialogOpen = true;
+    try {
+      final theme = Theme.of(context);
+      final effectiveColor = confirmColor ?? AppTheme.catOrange;
 
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => Theme(
-        data: theme,
-        child: _ArchiveCooldownDialog(
-          title: title,
-          message: message,
-          confirmLabel: confirmLabel,
-          cancelLabel: cancelLabel,
-          confirmColor: effectiveColor,
-          cooldownSeconds: cooldownSeconds,
+      return await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => Theme(
+          data: theme,
+          child: _ArchiveCooldownDialog(
+            title: title,
+            message: message,
+            confirmLabel: confirmLabel,
+            cancelLabel: cancelLabel,
+            confirmColor: effectiveColor,
+            cooldownSeconds: cooldownSeconds,
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _isArchiveDialogOpen = false;
+    }
   }
 
   /// Permanent delete dialog requiring user to type 'I confirm'.
@@ -729,22 +745,28 @@ class AppModals {
     required String message,
     String requiredText = 'I confirm',
     String cancelLabel = 'Cancel',
-  }) {
-    final theme = Theme.of(context);
+  }) async {
+    if (_isTypeToConfirmDialogOpen) return null;
+    _isTypeToConfirmDialogOpen = true;
+    try {
+      final theme = Theme.of(context);
 
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => Theme(
-        data: theme,
-        child: _TypeToConfirmDeleteDialog(
-          title: title,
-          message: message,
-          requiredText: requiredText,
-          cancelLabel: cancelLabel,
+      return await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => Theme(
+          data: theme,
+          child: _TypeToConfirmDeleteDialog(
+            title: title,
+            message: message,
+            requiredText: requiredText,
+            cancelLabel: cancelLabel,
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _isTypeToConfirmDialogOpen = false;
+    }
   }
 }
 

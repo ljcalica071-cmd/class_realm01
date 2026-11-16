@@ -11,7 +11,6 @@ import 'package:class_realm/data/repositories/supabase_attendance_repository.dar
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StudentAttendanceScreen extends StatefulWidget {
@@ -85,7 +84,35 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   void initState() {
     super.initState();
     _repo = widget.repository ?? SupabaseAttendanceRepository.instance;
-    _loadInitialData();
+    final studentId = _resolveStudentId();
+    if (studentId != null && studentId.isNotEmpty) {
+      final cachedSummary =
+          AppDataCache.instance.getCached<AttendanceStudentSummary>(
+        'student_attendance_summary_$studentId',
+        (json) => AttendanceStudentSummary.fromJson(
+          Map<String, dynamic>.from(json as Map),
+        ),
+      );
+      final cachedRecords =
+          AppDataCache.instance.getCached<List<AttendanceRecord>>(
+        'student_attendance_records_$studentId',
+        (list) => (list as List)
+            .map((j) => AttendanceRecord.fromJson(
+                  Map<String, dynamic>.from(j as Map),
+                ))
+            .toList(),
+      );
+      if (cachedSummary != null) {
+        _summary = cachedSummary;
+      }
+      if (cachedRecords != null && cachedRecords.isNotEmpty) {
+        _records
+          ..clear()
+          ..addAll(cachedRecords);
+        _isLoading = false;
+      }
+    }
+    _loadInitialData(silent: _records.isNotEmpty);
     _subscribeRealtimeAttendance();
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (mounted && !_isLoading) {
@@ -174,6 +201,18 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
         }
         _isLoading = false;
       });
+
+      final studentId = _resolveStudentId();
+      if (studentId != null && studentId.isNotEmpty) {
+        unawaited(AppDataCache.instance.setCache(
+          'student_attendance_summary_$studentId',
+          summary.toJson(),
+        ));
+        unawaited(AppDataCache.instance.setCache(
+          'student_attendance_records_$studentId',
+          page.rows.map((r) => r.toJson()).toList(),
+        ));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -348,13 +387,8 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   Widget _buildBody(ThemeData theme) {
     final isDark = theme.brightness == Brightness.dark;
 
-    if (_isLoading) {
-      return Center(
-        child: LoadingAnimationWidget.staggeredDotsWave(
-          color: theme.colorScheme.primary,
-          size: 36,
-        ),
-      );
+    if (_isLoading && _records.isEmpty) {
+      return const ShimmerStudentAttendanceSkeleton();
     }
 
     if (_errorMessage != null) {
@@ -382,7 +416,9 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     final currentRows = _currentPageRecords;
     final totalCount = filtered.length;
 
-    return Column(
+    return AppPullToRefresh(
+      onRefresh: () => _loadInitialData(silent: true),
+      child: Column(
       children: [
         // ── 1. Top Section: 4 Stat Cards, Subject Filter Bar & Stretched Pills ──
         Container(
@@ -533,64 +569,62 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
 
         // ── 2. Table of Attendance Logs ──
         Expanded(
-          child: AppPullToRefresh(
-            onRefresh: () => _loadInitialData(silent: true),
-            child: currentRows.isEmpty
-                ? AppPullToRefresh.scrollableState(
-                    padding: EdgeInsets.zero,
-                    child: AppEmptyState(
-                      icon: Icons.fact_check_outlined,
-                      title: _selectedStatusFilter != null
-                          ? 'No ${_selectedStatusFilter!.name.toUpperCase()} Records'
-                          : (_selectedSubject != null
-                              ? 'No Records for $_selectedSubject'
-                              : 'No Attendance Records Yet'),
-                      message: _selectedStatusFilter != null
-                          ? 'No attendance records matching this status.'
-                          : (_selectedSubject != null
-                              ? 'No attendance logged for this subject yet.'
-                              : 'Your class attendance logs will appear here once recorded.'),
-                      actionLabel:
-                          (_selectedStatusFilter != null ||
-                              _selectedSubject != null)
-                          ? 'Clear Filters'
-                          : null,
-                      onAction:
-                          (_selectedStatusFilter != null ||
-                              _selectedSubject != null)
-                          ? () => setState(() {
-                                _selectedStatusFilter = null;
-                                _selectedSubject = null;
-                                _currentPage = 1;
-                              })
-                          : null,
-                    ),
-                  )
-                : ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    itemCount: currentRows.length + 1,
-                    itemBuilder: (ctx, i) {
-                      if (i == 0) {
-                        return _buildTableHeader(theme, isDark);
-                      }
-                      final record = currentRows[i - 1];
-                      return _buildTableRow(
-                        theme,
-                        isDark,
-                        record,
-                        i - 1,
-                        currentRows.length,
-                      );
-                    },
+          child: currentRows.isEmpty
+              ? AppPullToRefresh.scrollableState(
+                  padding: EdgeInsets.zero,
+                  child: AppEmptyState(
+                    icon: Icons.fact_check_outlined,
+                    title: _selectedStatusFilter != null
+                        ? 'No ${_selectedStatusFilter!.name.toUpperCase()} Records'
+                        : (_selectedSubject != null
+                            ? 'No Records for $_selectedSubject'
+                            : 'No Attendance Records Yet'),
+                    message: _selectedStatusFilter != null
+                        ? 'No attendance records matching this status.'
+                        : (_selectedSubject != null
+                            ? 'No attendance logged for this subject yet.'
+                            : 'Your class attendance logs will appear here once recorded.'),
+                    actionLabel:
+                        (_selectedStatusFilter != null ||
+                            _selectedSubject != null)
+                        ? 'Clear Filters'
+                        : null,
+                    onAction:
+                        (_selectedStatusFilter != null ||
+                            _selectedSubject != null)
+                        ? () => setState(() {
+                              _selectedStatusFilter = null;
+                              _selectedSubject = null;
+                              _currentPage = 1;
+                            })
+                        : null,
                   ),
-          ),
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  itemCount: currentRows.length + 1,
+                  itemBuilder: (ctx, i) {
+                    if (i == 0) {
+                      return _buildTableHeader(theme, isDark);
+                    }
+                    final record = currentRows[i - 1];
+                    return _buildTableRow(
+                      theme,
+                      isDark,
+                      record,
+                      i - 1,
+                      currentRows.length,
+                    );
+                  },
+                ),
         ),
 
         // ── 3. Table Pagination Bar (10 per page, always visible) ──
         _buildPaginationBar(theme, isDark, totalCount),
       ],
-    );
+    ),
+  );
   }
 
   Widget _buildSubjectSelectorBar(ThemeData theme, bool isDark) {

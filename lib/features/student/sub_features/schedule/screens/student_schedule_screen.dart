@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/supabase_schedule_repository.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/student_dashboard_models.dart';
 import 'package:class_realm/features/teacher/widgets/timetable_grid_widget.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 enum ScheduleViewMode { list, grid }
 
@@ -27,7 +29,27 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSchedules();
+    final currentUser = AuthRepository.instance.currentUser;
+    final studentId = (widget.dashboardData?.student.studentId ??
+            widget.dashboardData?.student.id ??
+            currentUser?.studentId ??
+            currentUser?.id ??
+            '')
+        .trim();
+    if (studentId.isNotEmpty) {
+      final cached = AppDataCache.instance.getCached<List<ScheduleModel>>(
+        'student_schedule_$studentId',
+        (list) => (list as List)
+            .map((j) =>
+                ScheduleModel.fromMap(Map<String, dynamic>.from(j as Map)))
+            .toList(),
+      );
+      if (cached != null && cached.isNotEmpty) {
+        _schedules = cached;
+        _isLoading = false;
+      }
+    }
+    _loadSchedules(silent: _schedules.isNotEmpty);
   }
 
   Future<void> _loadSchedules({bool silent = false}) async {
@@ -54,6 +76,13 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
         _schedules = rows;
         _isLoading = false;
       });
+
+      if (studentId.isNotEmpty) {
+        unawaited(AppDataCache.instance.setCache(
+          'student_schedule_$studentId',
+          rows.map((s) => s.toMap()).toList(),
+        ));
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -232,162 +261,173 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen> {
           constraints: const BoxConstraints(maxWidth: 540),
           child: Container(
             color: theme.scaffoldBackgroundColor,
-            child: Column(
-          children: [
-            // Top View Switcher Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                border: Border(
-                  bottom: BorderSide(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
+            child: _isLoading && _schedules.isEmpty
+                ? ShimmerStudentScheduleSkeleton(
+                    isTimetable: _viewMode == ScheduleViewMode.grid,
+                  )
+                : AppPullToRefresh(
+                    onRefresh: () => _loadSchedules(silent: true),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '$section Schedule',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                        Text(
-                          _viewMode == ScheduleViewMode.list
-                              ? 'Daily Agenda View'
-                              : 'Weekly Timetable Grid',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
+                        // Top View Switcher Header
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surface,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.1),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SegmentedButton<ScheduleViewMode>(
-                    segments: const [
-                      ButtonSegment<ScheduleViewMode>(
-                        value: ScheduleViewMode.list,
-                        label: Text('List'),
-                        icon: Icon(Icons.view_agenda_outlined, size: 16),
-                      ),
-                      ButtonSegment<ScheduleViewMode>(
-                        value: ScheduleViewMode.grid,
-                        label: Text('Timetable'),
-                        icon: Icon(Icons.calendar_view_week_rounded, size: 16),
-                      ),
-                    ],
-                    selected: {_viewMode},
-                    onSelectionChanged: (Set<ScheduleViewMode> newSelection) {
-                      setState(() {
-                        _viewMode = newSelection.first;
-                      });
-                    },
-                    style: const ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Main Content Area with Branded Mobile Swipe-Down Refresh
-            Expanded(
-              child: _isLoading
-                  ? Center(
-                      child: LoadingAnimationWidget.staggeredDotsWave(
-                        color: theme.colorScheme.primary,
-                        size: 40,
-                      ),
-                    )
-                  : AppPullToRefresh(
-                      onRefresh: () => _loadSchedules(silent: true),
-                      child: _loadError != null
-                          ? AppPullToRefresh.scrollableState(
-                              child: Text(
-                                'Error loading schedule: $_loadError',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: theme.colorScheme.error,
-                                ),
-                              ),
-                            )
-                          : _schedules.isEmpty
-                          ? AppPullToRefresh.scrollableState(
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(28),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.surface,
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: isDark ? 0.14 : 0.1),
-                                  ),
-                                ),
+                          child: Row(
+                            children: [
+                              Expanded(
                                 child: Column(
-                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Container(
-                                      width: 64,
-                                      height: 64,
-                                      decoration: BoxDecoration(
-                                        color: theme.colorScheme.primary
-                                            .withValues(
-                                              alpha: isDark ? 0.18 : 0.1,
-                                            ),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        Icons.calendar_today_outlined,
-                                        size: 30,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 14),
-                                    const Text(
-                                      'No schedule records found.',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
                                     Text(
-                                      'Pull down to refresh once your class schedule is plotted.',
-                                      textAlign: TextAlign.center,
+                                      '$section Schedule',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    Text(
+                                      _viewMode == ScheduleViewMode.list
+                                          ? 'Daily Agenda View'
+                                          : 'Weekly Timetable Grid',
                                       style: TextStyle(
-                                        fontSize: 12.5,
+                                        fontSize: 12,
                                         color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.6),
+                                            .withValues(
+                                          alpha: 0.6,
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            )
-                          : AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 300),
-                              child: _viewMode == ScheduleViewMode.list
-                                  ? _buildListView(context, theme, _schedules)
-                                  : _buildGridView(context, theme, _schedules),
-                            ),
+                              SegmentedButton<ScheduleViewMode>(
+                                segments: const [
+                                  ButtonSegment<ScheduleViewMode>(
+                                    value: ScheduleViewMode.list,
+                                    label: Text('List'),
+                                    icon: Icon(Icons.view_agenda_outlined,
+                                        size: 16),
+                                  ),
+                                  ButtonSegment<ScheduleViewMode>(
+                                    value: ScheduleViewMode.grid,
+                                    label: Text('Timetable'),
+                                    icon: Icon(
+                                        Icons.calendar_view_week_rounded,
+                                        size: 16),
+                                  ),
+                                ],
+                                selected: {_viewMode},
+                                onSelectionChanged:
+                                    (Set<ScheduleViewMode> newSelection) {
+                                  setState(() {
+                                    _viewMode = newSelection.first;
+                                  });
+                                },
+                                style: const ButtonStyle(
+                                  visualDensity: VisualDensity.compact,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Main Content Area
+                        Expanded(
+                          child: _loadError != null
+                              ? AppPullToRefresh.scrollableState(
+                                  child: Text(
+                                    'Error loading schedule: $_loadError',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: theme.colorScheme.error,
+                                    ),
+                                  ),
+                                )
+                              : _schedules.isEmpty
+                                  ? AppPullToRefresh.scrollableState(
+                                      child: Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(28),
+                                        decoration: BoxDecoration(
+                                          color: theme.colorScheme.surface,
+                                          borderRadius:
+                                              BorderRadius.circular(18),
+                                          border: Border.all(
+                                            color: theme.colorScheme.onSurface
+                                                .withValues(
+                                                    alpha: isDark ? 0.14 : 0.1),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              width: 64,
+                                              height: 64,
+                                              decoration: BoxDecoration(
+                                                color: theme.colorScheme.primary
+                                                    .withValues(
+                                                  alpha: isDark ? 0.18 : 0.1,
+                                                ),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                Icons.calendar_today_outlined,
+                                                size: 30,
+                                                color:
+                                                    theme.colorScheme.primary,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 14),
+                                            const Text(
+                                              'No schedule records found.',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              'Pull down to refresh once your class schedule is plotted.',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontSize: 12.5,
+                                                color: theme
+                                                    .colorScheme.onSurface
+                                                    .withValues(alpha: 0.6),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : AnimatedSwitcher(
+                                      duration:
+                                          const Duration(milliseconds: 300),
+                                      child: _viewMode == ScheduleViewMode.list
+                                          ? _buildListView(
+                                              context, theme, _schedules)
+                                          : _buildGridView(
+                                              context, theme, _schedules),
+                                    ),
+                        ),
+                      ],
                     ),
-            ),
-          ],
+                  ),
+          ),
         ),
       ),
-    ),
-    ),
     );
   }
 

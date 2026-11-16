@@ -636,12 +636,10 @@ void main() {
     );
 
     test(
-      'AppValidators.validateClassworkInstructions enforces min 2 non-space characters and max 1000',
+      'AppValidators.validateClassworkInstructions allows optional empty instructions and enforces min 2 characters if provided and max 1000',
       () {
-        expect(
-          AppValidators.validateClassworkInstructions(''),
-          'Detailed instructions are required.',
-        );
+        expect(AppValidators.validateClassworkInstructions(''), isNull);
+        expect(AppValidators.validateClassworkInstructions(null), isNull);
         expect(
           AppValidators.validateClassworkInstructions('    '),
           'Instructions cannot contain only spaces.',

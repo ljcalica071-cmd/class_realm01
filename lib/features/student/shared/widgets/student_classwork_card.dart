@@ -456,7 +456,10 @@ class StudentClassworkCard extends StatelessWidget {
                 buttonLabel: 'View Your Work',
                 isSubmittedWork: true,
               ),
-            ] else if (isSubmitted && classwork.completionMode != 'in_person') ...[
+            ] else if (isSubmitted &&
+                classwork.completionMode != 'in_person' &&
+                classwork.type != 'quiz' &&
+                classwork.type != 'exam') ...[
               const SizedBox(height: 12),
               _buildDocumentCard(
                 context: context,
@@ -468,6 +471,14 @@ class StudentClassworkCard extends StatelessWidget {
                 fileName: 'Online Submission Received',
                 buttonLabel: 'View Your Work',
                 isSubmittedWork: true,
+              ),
+            ] else if (isSubmitted &&
+                (classwork.type == 'quiz' || classwork.type == 'exam')) ...[
+              const SizedBox(height: 12),
+              _buildAssessmentStatusCard(
+                context: context,
+                theme: theme,
+                isDark: isDark,
               ),
             ],
 
@@ -887,14 +898,177 @@ class StudentClassworkCard extends StatelessWidget {
 
             if (classwork.feedback?.isNotEmpty == true) ...[
               const SizedBox(height: 8),
-              Text(
-                'Teacher remarks: ${classwork.feedback!}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontStyle: FontStyle.italic,
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.comment_outlined,
+                      size: 15,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Teacher remarks: ${classwork.feedback!}',
+                        softWrap: true,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAssessmentStatusCard({
+    required BuildContext context,
+    required ThemeData theme,
+    required bool isDark,
+  }) {
+    final isQuiz = classwork.type == 'quiz';
+    final label = isQuiz ? 'Quiz' : 'Periodical Examination';
+    return InkWell(
+      onTap: () {
+        if (classwork.resultsReleased) {
+          _openExamReview(context);
+        } else {
+          AppTopToast.info(
+            context,
+            'Your $label answers have been submitted. Review and answer keys will unlock once released by your teacher.',
+          );
+        }
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F8A48).withValues(alpha: isDark ? 0.12 : 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: const Color(0xFF0F8A48).withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F8A48).withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.task_alt,
+                size: 20,
+                color: Color(0xFF0F8A48),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F8A48).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isQuiz ? 'QUIZ' : 'EXAM',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0F8A48),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'Online Assessment Completed',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    classwork.submittedAt != null
+                        ? 'Turned in on ${_formatDate(classwork.submittedAt!)}'
+                        : 'Submitted online',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (classwork.resultsReleased)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F8A48).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: const Color(0xFF0F8A48).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Review',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F8A48),
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(
+                      Icons.open_in_new,
+                      size: 13,
+                      color: Color(0xFF0F8A48),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -914,6 +1088,7 @@ class StudentClassworkCard extends StatelessWidget {
     bool isTeacherAttachment = false,
   }) {
     final isPdf = fileName.toLowerCase().endsWith('.pdf');
+    final hasValidFile = signedUrl != null && signedUrl.trim().isNotEmpty;
     final accentColor = isSubmittedWork
         ? const Color(0xFF0F8A48) // Green for Your Work
         : (isPdf
@@ -924,7 +1099,14 @@ class StudentClassworkCard extends StatelessWidget {
         : (isPdf ? Icons.picture_as_pdf : Icons.description);
 
     return InkWell(
-      onTap: () => _openAttachment(context, signedUrl),
+      onTap: hasValidFile
+          ? () => _openAttachment(context, signedUrl)
+          : () {
+              AppTopToast.info(
+                context,
+                'This submission was recorded without an uploaded file attachment.',
+              );
+            },
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: const EdgeInsets.all(12),
@@ -1098,7 +1280,7 @@ class StudentClassworkCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                ] else if (actionLabel != null || buttonLabel != null)
+                ] else if (hasValidFile && (actionLabel != null || buttonLabel != null))
                   Container(
                     padding: EdgeInsets.symmetric(
                       horizontal: actionLabel != null ? 8 : 6,
