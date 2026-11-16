@@ -602,6 +602,7 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
   }
 
   Widget _buildOtpDigitBoxes(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
     final hasError = _error != null;
     final currentLength = _otpController.text.length;
     final isFocused = _focusNode.hasFocus && !_isCodeExpired;
@@ -662,14 +663,18 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                       mainAxisSize: MainAxisSize.min,
                       children: List.generate(6, (index) {
                         final isFilled = index < currentLength;
-                        final digit = isFilled ? _otpController.text[index] : '';
+                        final digit = isFilled
+                            ? _otpController.text[index]
+                            : '';
 
-                        final isSelected = isFocused && (_selectedIndex == index);
+                        final isSelected =
+                            isFocused && (_selectedIndex == index);
                         final isNextEmpty =
                             isFocused &&
                             (index == currentLength && currentLength < 6) &&
                             (_selectedIndex >= currentLength);
-                        final isActive = (isSelected || isNextEmpty) && !_isLockedOut;
+                        final isActive =
+                            (isSelected || isNextEmpty) && !_isLockedOut;
 
                         Color borderColor;
                         double borderWidth = 1.0;
@@ -679,35 +684,51 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                         if (hasError) {
                           borderColor = Colors.red.shade500;
                           borderWidth = isActive ? 2.0 : 1.6;
-                          boxBg = Colors.red.withValues(alpha: 0.04);
+                          boxBg = Colors.red.withValues(
+                            alpha: isDark ? 0.12 : 0.04,
+                          );
                           if (isActive) {
                             shadows = [
                               BoxShadow(
-                                color: Colors.red.withValues(alpha: 0.18),
+                                color: Colors.red.withValues(
+                                  alpha: isDark ? 0.3 : 0.18,
+                                ),
                                 blurRadius: 6,
                                 spreadRadius: 0,
                               ),
                             ];
                           }
                         } else if (isActive) {
-                          borderColor = const Color(0xFF2563EB);
+                          borderColor = isDark
+                              ? const Color(0xFF60A5FA)
+                              : const Color(0xFF2563EB);
                           borderWidth = 2.2;
-                          boxBg = const Color(0xFF2563EB).withValues(alpha: 0.06);
+                          boxBg = const Color(0xFF2563EB)
+                              .withValues(alpha: isDark ? 0.18 : 0.06);
                           shadows = [
                             BoxShadow(
-                              color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                              color: const Color(0xFF2563EB)
+                                  .withValues(alpha: isDark ? 0.4 : 0.25),
                               blurRadius: 8,
                               spreadRadius: 1,
                             ),
                           ];
                         } else if (isFilled) {
-                          borderColor = const Color(0xFF94A3B8);
+                          borderColor = isDark
+                              ? const Color(0xFF475569)
+                              : const Color(0xFF94A3B8);
                           borderWidth = 1.4;
-                          boxBg = Colors.white;
+                          boxBg = isDark
+                              ? const Color(0xFF0F172A)
+                              : Colors.white;
                         } else {
-                          borderColor = const Color(0xFFCBD5E1);
+                          borderColor = isDark
+                              ? const Color(0xFF334155)
+                              : const Color(0xFFCBD5E1);
                           borderWidth = 1.0;
-                          boxBg = const Color(0xFFF8FAFC);
+                          boxBg = isDark
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFF8FAFC);
                         }
 
                         return GestureDetector(
@@ -738,11 +759,16 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
                                       color: hasError
-                                          ? Colors.red.shade600
-                                          : const Color(0xFF0F172A),
+                                          ? (isDark
+                                                ? Colors.red.shade400
+                                                : Colors.red.shade600)
+                                          : (isDark
+                                                ? Colors.white
+                                                : const Color(0xFF0F172A)),
                                     ),
                                   )
-                                else if (isActive && _cursorBlinkController != null)
+                                else if (isActive &&
+                                    _cursorBlinkController != null)
                                   FadeTransition(
                                     opacity: _cursorBlinkController!,
                                     child: Container(
@@ -750,8 +776,12 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                                       height: 24,
                                       decoration: BoxDecoration(
                                         color: hasError
-                                            ? Colors.red.shade600
-                                            : const Color(0xFF2563EB),
+                                            ? (isDark
+                                                  ? Colors.red.shade400
+                                                  : Colors.red.shade600)
+                                            : (isDark
+                                                  ? const Color(0xFF60A5FA)
+                                                  : const Color(0xFF2563EB)),
                                         borderRadius: BorderRadius.circular(1),
                                       ),
                                     ),
@@ -761,7 +791,9 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                                     width: 6,
                                     height: 6,
                                     decoration: BoxDecoration(
-                                      color: Colors.grey.shade400,
+                                      color: isDark
+                                          ? const Color(0xFF475569)
+                                          : Colors.grey.shade400,
                                       shape: BoxShape.circle,
                                     ),
                                   ),
@@ -773,7 +805,9 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
                                       width: 18,
                                       height: 3,
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF2563EB),
+                                        color: isDark
+                                            ? const Color(0xFF60A5FA)
+                                            : const Color(0xFF2563EB),
                                         borderRadius: BorderRadius.circular(2),
                                       ),
                                     ),
@@ -816,20 +850,21 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return PopScope(
       canPop: !_isVerifying,
       child: AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+          side: BorderSide(
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+            width: 1.5,
+          ),
         ),
-        insetPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 24,
-        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 20,
           vertical: 22,
@@ -844,243 +879,275 @@ class _PasswordOtpDialogState extends State<PasswordOtpDialog>
               SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 4),
+                  children: [
+                    const SizedBox(height: 4),
 
-                  // Shield Icon
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEFF6FF),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      LucideIcons.shieldCheck,
-                      size: 36,
-                      color: Color(0xFF2563EB),
-                    ),
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  // Title
-                  Text(
-                    widget.title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // Subtitle
-                  Text(
-                    widget.subtitle ??
-                        'We sent a 6-digit verification code to:\n${widget.email}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF475569),
-                      height: 1.5,
-                    ),
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  // 1. Timer badge placed DIRECTLY ABOVE the 6 input boxes
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _inputCountdown <= 60
-                          ? Colors.red.withValues(alpha: 0.08)
-                          : const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: _inputCountdown <= 60
-                            ? Colors.red.shade400
-                            : const Color(0xFFBFDBFE),
-                        width: 1.2,
+                    // Shield Icon
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF1E3A5F)
+                            : const Color(0xFFEFF6FF),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        LucideIcons.shieldCheck,
+                        size: 36,
+                        color: isDark
+                            ? const Color(0xFF60A5FA)
+                            : const Color(0xFF2563EB),
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          LucideIcons.clock,
-                          size: 14,
+
+                    const SizedBox(height: 18),
+
+                    // Title
+                    Text(
+                      widget.title,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Subtitle
+                    Text(
+                      widget.subtitle ??
+                          'We sent a 6-digit verification code to:\n${widget.email}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? const Color(0xFF94A3B8)
+                            : const Color(0xFF475569),
+                        height: 1.5,
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // 1. Timer badge placed DIRECTLY ABOVE the 6 input boxes
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _inputCountdown <= 60
+                            ? Colors.red.withValues(alpha: isDark ? 0.15 : 0.08)
+                            : (isDark
+                                  ? const Color(0xFF1E3A5F)
+                                  : const Color(0xFFEFF6FF)),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
                           color: _inputCountdown <= 60
-                              ? Colors.red.shade600
-                              : const Color(0xFF2563EB),
+                              ? Colors.red.shade400
+                              : (isDark
+                                    ? const Color(0xFF2563EB)
+                                    : const Color(0xFFBFDBFE)),
+                          width: 1.2,
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _isLockedOut
-                              ? 'Locked: try again in ${_formatOtpTimer(_inputCountdown)}'
-                              : _inputCountdown > 0
-                              ? 'Expires in ${_formatOtpTimer(_inputCountdown)}'
-                              : 'Code expired (time passed)',
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.clock,
+                            size: 14,
+                            color: _inputCountdown <= 60
+                                ? (isDark
+                                      ? Colors.red.shade300
+                                      : Colors.red.shade600)
+                                : (isDark
+                                      ? const Color(0xFF93C5FD)
+                                      : const Color(0xFF2563EB)),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _isLockedOut
+                                ? 'Locked: try again in ${_formatOtpTimer(_inputCountdown)}'
+                                : _inputCountdown > 0
+                                ? 'Expires in ${_formatOtpTimer(_inputCountdown)}'
+                                : 'Code expired (time passed)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'monospace',
+                              color: _inputCountdown <= 60 || _isLockedOut
+                                  ? (isDark
+                                        ? Colors.red.shade300
+                                        : Colors.red.shade700)
+                                  : (isDark
+                                        ? const Color(0xFF93C5FD)
+                                        : const Color(0xFF2563EB)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // 2. 6-digit OTP input boxes with active cursor & selection indicators
+                    _buildOtpDigitBoxes(theme),
+
+                    // 3. Error message below input field
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      Center(
+                        child: Text(
+                          _error!,
+                          textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'monospace',
-                            color: _inputCountdown <= 60 || _isLockedOut
-                                ? Colors.red.shade700
-                                : const Color(0xFF2563EB),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.red.shade600,
                           ),
                         ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 22),
+
+                    // 4. Verify Account Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed:
+                            _inputCountdown > 0 &&
+                                !_isLockedOut &&
+                                !_isVerifying &&
+                                _otpController.text.length == 6
+                            ? _verify
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: _isVerifying
+                            ? LoadingAnimationWidget.staggeredDotsWave(
+                                color: Colors.white,
+                                size: 20,
+                              )
+                            : Text(
+                                widget.submitButtonLabel,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // 5. Resend Code Section
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        Text(
+                          "Didn't receive the code?",
+                          style: TextStyle(
+                            color: isDark
+                                ? const Color(0xFF94A3B8)
+                                : const Color(0xFF64748B),
+                            fontSize: 13,
+                          ),
+                        ),
+                        _isResending
+                            ? LoadingAnimationWidget.staggeredDotsWave(
+                                color: isDark
+                                    ? const Color(0xFF60A5FA)
+                                    : const Color(0xFF2563EB),
+                                size: 16,
+                              )
+                            : OutlinedButton(
+                                onPressed:
+                                    !_isLockedOut &&
+                                        _resendCooldown == 0 &&
+                                        _resendAttempts < 4
+                                    ? _handleResend
+                                    : null,
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: isDark
+                                      ? const Color(0xFF0F172A)
+                                      : const Color(0xFFF8FAFC),
+                                  side: BorderSide(
+                                    color: isDark
+                                        ? const Color(0xFF334155)
+                                        : const Color(0xFFCBD5E1),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: Text(
+                                  _resendAttempts >= 4
+                                      ? 'Limit Reached'
+                                      : _resendCooldown > 0
+                                      ? 'Resend in ${_resendCooldown}s'
+                                      : 'Resend',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: _resendAttempts >= 4
+                                        ? const Color(0xFFDC2626)
+                                        : _resendCooldown > 0
+                                        ? (isDark
+                                              ? const Color(0xFF94A3B8)
+                                              : const Color(0xFF64748B))
+                                        : (isDark
+                                              ? const Color(0xFF60A5FA)
+                                              : const Color(0xFF2563EB)),
+                                  ),
+                                ),
+                              ),
                       ],
                     ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // 2. 6-digit OTP input boxes with active cursor & selection indicators
-                  _buildOtpDigitBoxes(theme),
-
-                  // 3. Error message below input field
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Center(
-                      child: Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.red.shade600,
-                        ),
-                      ),
-                    ),
                   ],
-
-                  const SizedBox(height: 22),
-
-                  // 4. Verify Account Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed:
-                          _inputCountdown > 0 &&
-                              !_isLockedOut &&
-                              !_isVerifying &&
-                              _otpController.text.length == 6
-                          ? _verify
-                          : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: _isVerifying
-                          ? LoadingAnimationWidget.staggeredDotsWave(
-                              color: Colors.white,
-                              size: 20,
-                            )
-                          : Text(
-                              widget.submitButtonLabel,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // 5. Resend Code Section
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      const Text(
-                        "Didn't receive the code?",
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 13,
-                        ),
-                      ),
-                      _isResending
-                          ? LoadingAnimationWidget.staggeredDotsWave(
-                              color: const Color(0xFF2563EB),
-                              size: 16,
-                            )
-                          : OutlinedButton(
-                              onPressed:
-                                  !_isLockedOut &&
-                                      _resendCooldown == 0 &&
-                                      _resendAttempts < 4
-                                  ? _handleResend
-                                  : null,
-                              style: OutlinedButton.styleFrom(
-                                backgroundColor: const Color(0xFFF8FAFC),
-                                side: const BorderSide(
-                                  color: Color(0xFFCBD5E1),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: Text(
-                                _resendAttempts >= 4
-                                    ? 'Limit Reached'
-                                    : _resendCooldown > 0
-                                    ? 'Resend in ${_resendCooldown}s'
-                                    : 'Resend',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: _resendAttempts >= 4
-                                      ? const Color(0xFFDC2626)
-                                      : _resendCooldown > 0
-                                      ? const Color(0xFF64748B)
-                                      : const Color(0xFF2563EB),
-                                ),
-                              ),
-                            ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // Top-right Close ('X') button positioned inside bounds and placed LAST in Stack to receive gestures
-            Positioned(
-              top: 0,
-              right: 0,
-              child: IconButton(
-                icon: const Icon(
-                  LucideIcons.x,
-                  size: 20,
-                  color: Color(0xFF64748B),
                 ),
-                splashRadius: 20,
-                tooltip: 'Close',
-                onPressed: _isVerifying
-                    ? null
-                    : () => Navigator.pop(context, false),
               ),
-            ),
-          ],
+
+              // Top-right Close ('X') button positioned inside bounds and placed LAST in Stack to receive gestures
+              Positioned(
+                top: 0,
+                right: 0,
+                child: IconButton(
+                  icon: Icon(
+                    LucideIcons.x,
+                    size: 20,
+                    color: isDark
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFF64748B),
+                  ),
+                  splashRadius: 20,
+                  tooltip: 'Close',
+                  onPressed: _isVerifying
+                      ? null
+                      : () => Navigator.pop(context, false),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

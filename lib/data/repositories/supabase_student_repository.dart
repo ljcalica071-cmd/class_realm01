@@ -667,9 +667,18 @@ class SupabaseStudentRepository implements StudentRepository {
       );
     } catch (e) {
       debugPrint('Firebase student creation error: $e');
+      throw Exception(
+        'Failed to provision authentication credentials for student account ($cleanEmail): $e',
+      );
     }
 
-    final studentId = fbUid ?? 'std_$lrn';
+    if (fbUid == null || fbUid.isEmpty) {
+      throw Exception(
+        'Failed to provision authentication credentials for student account ($cleanEmail). Please verify that the email address is valid and active.',
+      );
+    }
+
+    final studentId = fbUid;
 
     try {
       // 1. Direct Pure Dart insert into Supabase users, profiles, settings, and enrollments

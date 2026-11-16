@@ -277,19 +277,18 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
       final bool? verified = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (ctx) => Theme(
-          data: AppTheme.lightTheme,
-          child: PasswordOtpDialog(
-            email: user.email,
-            initialResendCooldown:
-                (otpResponse['resendAfter'] as num?)?.toInt() ?? 60,
-            initialInputCountdown:
-                (otpResponse['expiresIn'] as num?)?.toInt() ?? 300,
-            initialResendCount:
-                (otpResponse['resendCount'] as num?)?.toInt() ?? 0,
-            onResend: () =>
-                AuthRepository.instance.sendFirstLoginOtp(isResend: true),
-          ),
+        builder: (ctx) => PasswordOtpDialog(
+          email: user.email,
+          title: 'Activate Your Account',
+          submitButtonLabel: 'Activate Account',
+          initialResendCooldown:
+              (otpResponse['resendAfter'] as num?)?.toInt() ?? 60,
+          initialInputCountdown:
+              (otpResponse['expiresIn'] as num?)?.toInt() ?? 300,
+          initialResendCount:
+              (otpResponse['resendCount'] as num?)?.toInt() ?? 0,
+          onResend: () =>
+              AuthRepository.instance.sendFirstLoginOtp(isResend: true),
         ),
       );
 
@@ -479,29 +478,6 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
               height: 1.45,
               color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.85),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.info_outline_rounded,
-                size: 14,
-                color: theme.hintColor,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Mali o hindi mo ma-access ang email na ito? Lumapit sa iyong Subject Teacher para i-update ang iyong email sa ClassRealm bago magpatuloy.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                    color: theme.hintColor,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),

@@ -234,59 +234,154 @@ class EmailService {
     return "Failed to deliver verification code to '$email'. Please verify that the email address exists.";
   }
 
+  static const String _emailCommonStyles = '''
+    <style>
+      :root {
+        color-scheme: light dark;
+        supported-color-schemes: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        .cr-email-container {
+          background-color: #0f172a !important;
+          border-color: #334155 !important;
+          color: #f1f5f9 !important;
+        }
+        .cr-email-title {
+          color: #60a5fa !important;
+        }
+        .cr-email-greeting {
+          color: #f1f5f9 !important;
+        }
+        .cr-email-body {
+          color: #cbd5e1 !important;
+        }
+        .cr-email-box {
+          background-color: #1e293b !important;
+          border-color: #334155 !important;
+        }
+        .cr-email-label {
+          color: #94a3b8 !important;
+        }
+        .cr-email-code {
+          background-color: #1e3a5f !important;
+          border-color: #2563eb !important;
+          color: #93c5fd !important;
+        }
+        .cr-email-notice {
+          background-color: #382109 !important;
+          border-color: #b45309 !important;
+        }
+        .cr-email-notice-title {
+          color: #fde68a !important;
+        }
+        .cr-email-notice-body {
+          color: #fef3c7 !important;
+        }
+        .cr-email-note {
+          color: #94a3b8 !important;
+        }
+        .cr-email-hr {
+          border-top-color: #334155 !important;
+        }
+        .cr-email-footer {
+          color: #64748b !important;
+        }
+      }
+    </style>
+  ''';
+
   /// Builds the HTML body for First Login Account Activation OTP
   static String buildFirstLoginOtpHtml(String recipientName, String otpCode) {
     return '''
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 500px; margin: 40px auto; border: 1px solid #eaeaea; border-radius: 16px; padding: 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Activate Your Account</h2>
-        </div>
-        <p style="font-size: 15px; color: #475569; margin-bottom: 24px;">Hello <strong>$recipientName</strong>,</p>
-        <p style="font-size: 15px; color: #475569; margin-bottom: 32px;">To complete your first login and activate your account, please enter the 6-digit verification code below to confirm your new personalized password.</p>
+      $_emailCommonStyles
+      <div class="cr-email-container" style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <h2 class="cr-email-title" style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Activate Your Account</h2>
+        <p class="cr-email-greeting" style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$recipientName</strong>,</p>
+        <p class="cr-email-body" style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">To complete your first login and activate your account, please enter the 6-digit verification code below to confirm your new personalized password:</p>
         
-        <div style="background-color: #f8fafc; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 32px; border: 1px solid #e2e8f0;">
-          <span style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #2563eb;">$otpCode</span>
+        <div class="cr-email-box" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0; text-align: center;">
+          <span class="cr-email-label" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 8px; text-align: left;">6-Digit Verification Code</span>
+          <code class="cr-email-code" style="font-size: 28px; font-weight: 800; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 20px; border-radius: 8px; letter-spacing: 8px; display: inline-block; font-family: ui-monospace, SFMono-Regular, Consolas, monospace;">$otpCode</code>
         </div>
-        
-        <p style="font-size: 13px; color: #94a3b8; text-align: center; margin: 0;">This code will expire in 5 minutes. If you did not request this, please contact the administrator immediately.</p>
+
+        <div class="cr-email-notice" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
+          <p class="cr-email-notice-title" style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
+            ⏳ Notice: Verification Code Expires in 5 Minutes
+          </p>
+          <p class="cr-email-notice-body" style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
+            This code will expire in 5 minutes. For your security, do not share this code with anyone.
+          </p>
+        </div>
+
+        <p class="cr-email-note" style="font-size: 12px; color: #64748b; margin-top: 16px;">If you did not request this, please contact the administrator immediately.</p>
+        <hr class="cr-email-hr" style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
+        <p class="cr-email-footer" style="font-size: 11px; color: #94a3b8; margin: 0; text-align: center;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
       </div>
     ''';
   }
 
   /// Builds the HTML body for Forgot Password Reset OTP
-  static String buildForgotPasswordOtpHtml(String recipientName, String otpCode) {
+  static String buildForgotPasswordOtpHtml(
+    String recipientName,
+    String otpCode,
+  ) {
     return '''
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 500px; margin: 40px auto; border: 1px solid #eaeaea; border-radius: 16px; padding: 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Reset Your Password</h2>
-        </div>
-        <p style="font-size: 15px; color: #475569; margin-bottom: 24px;">Hello <strong>$recipientName</strong>,</p>
-        <p style="font-size: 15px; color: #475569; margin-bottom: 32px;">We received a request to reset the password for your ClassRealm account. Please enter the 6-digit verification code below to proceed with setting up a new password.</p>
+      $_emailCommonStyles
+      <div class="cr-email-container" style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <h2 class="cr-email-title" style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Reset Your Password</h2>
+        <p class="cr-email-greeting" style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$recipientName</strong>,</p>
+        <p class="cr-email-body" style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">We received a request to reset the password for your ClassRealm account. Please enter the 6-digit verification code below to proceed with setting up a new password:</p>
         
-        <div style="background-color: #f8fafc; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 32px; border: 1px solid #e2e8f0;">
-          <span style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #2563eb;">$otpCode</span>
+        <div class="cr-email-box" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0; text-align: center;">
+          <span class="cr-email-label" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 8px; text-align: left;">6-Digit Verification Code</span>
+          <code class="cr-email-code" style="font-size: 28px; font-weight: 800; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 20px; border-radius: 8px; letter-spacing: 8px; display: inline-block; font-family: ui-monospace, SFMono-Regular, Consolas, monospace;">$otpCode</code>
         </div>
-        
-        <p style="font-size: 13px; color: #94a3b8; text-align: center; margin: 0;">This code will expire in 5 minutes. If you did not request this password reset, please ignore this email or contact the administrator immediately.</p>
+
+        <div class="cr-email-notice" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
+          <p class="cr-email-notice-title" style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
+            ⏳ Notice: Verification Code Expires in 5 Minutes
+          </p>
+          <p class="cr-email-notice-body" style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
+            This code will expire in 5 minutes. If you did not request this password reset, please ignore this email or contact the administrator immediately.
+          </p>
+        </div>
+
+        <p class="cr-email-note" style="font-size: 12px; color: #64748b; margin-top: 16px;">Please keep your credentials secure. Do not share your verification code with unauthorized individuals.</p>
+        <hr class="cr-email-hr" style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
+        <p class="cr-email-footer" style="font-size: 11px; color: #94a3b8; margin: 0; text-align: center;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
       </div>
     ''';
   }
 
   /// Builds the HTML body for In-App Change Password OTP
-  static String buildChangePasswordOtpHtml(String recipientName, String otpCode) {
+  static String buildChangePasswordOtpHtml(
+    String recipientName,
+    String otpCode,
+  ) {
     return '''
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 500px; margin: 40px auto; border: 1px solid #eaeaea; border-radius: 16px; padding: 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Verify Password Change</h2>
-        </div>
-        <p style="font-size: 15px; color: #475569; margin-bottom: 24px;">Hello <strong>$recipientName</strong>,</p>
-        <p style="font-size: 15px; color: #475569; margin-bottom: 32px;">You requested to change your account password from your ClassRealm portal settings. Please enter the 6-digit verification code below to authorize this update.</p>
+      $_emailCommonStyles
+      <div class="cr-email-container" style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <h2 class="cr-email-title" style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Verify Password Change</h2>
+        <p class="cr-email-greeting" style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$recipientName</strong>,</p>
+        <p class="cr-email-body" style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">You requested to change your account password from your ClassRealm portal settings. Please enter the 6-digit verification code below to authorize this update:</p>
         
-        <div style="background-color: #f8fafc; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 32px; border: 1px solid #e2e8f0;">
-          <span style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #2563eb;">$otpCode</span>
+        <div class="cr-email-box" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0; text-align: center;">
+          <span class="cr-email-label" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 8px; text-align: left;">6-Digit Verification Code</span>
+          <code class="cr-email-code" style="font-size: 28px; font-weight: 800; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 20px; border-radius: 8px; letter-spacing: 8px; display: inline-block; font-family: ui-monospace, SFMono-Regular, Consolas, monospace;">$otpCode</code>
         </div>
-        
-        <p style="font-size: 13px; color: #94a3b8; text-align: center; margin: 0;">This code will expire in 5 minutes. If you did not authorize this password change from your portal, please secure your account immediately or contact your administrator.</p>
+
+        <div class="cr-email-notice" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
+          <p class="cr-email-notice-title" style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
+            ⏳ Notice: Verification Code Expires in 5 Minutes
+          </p>
+          <p class="cr-email-notice-body" style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
+            This code will expire in 5 minutes. If you did not authorize this password change from your portal, please secure your account immediately or contact your administrator.
+          </p>
+        </div>
+
+        <p class="cr-email-note" style="font-size: 12px; color: #64748b; margin-top: 16px;">Please keep your credentials secure. Do not share your verification code with unauthorized individuals.</p>
+        <hr class="cr-email-hr" style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
+        <p class="cr-email-footer" style="font-size: 11px; color: #94a3b8; margin: 0; text-align: center;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
       </div>
     ''';
   }
@@ -363,34 +458,35 @@ class EmailService {
     final cleanRecipient = recipientEmail.trim();
     final String htmlTemplate =
         '''
-      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-        <h2 style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Welcome to ClassRealm!</h2>
-        <p style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$studentName</strong>,</p>
-        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">Your student account for <strong>Eduardo Barretto Sr. Integrated School</strong> is ready. Use these credentials to log in to the ClassRealm app:</p>
+      $_emailCommonStyles
+      <div class="cr-email-container" style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <h2 class="cr-email-title" style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Welcome to ClassRealm!</h2>
+        <p class="cr-email-greeting" style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$studentName</strong>,</p>
+        <p class="cr-email-body" style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">Your student account for <strong>Eduardo Barretto Sr. Integrated School</strong> is ready. Use these credentials to log in to the ClassRealm app:</p>
         
-        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+        <div class="cr-email-box" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
           <div style="margin-bottom: 12px;">
-            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Email Address</span>
+            <span class="cr-email-label" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Email Address</span>
             <span style="font-size: 15px; font-weight: 600; color: #1e293b; font-family: monospace;">$cleanRecipient</span>
           </div>
           <div>
-            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Temporary Password</span>
-            <code style="font-size: 18px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 5px 12px; border-radius: 6px; letter-spacing: 1px; display: inline-block; font-family: monospace;">$tempPassword</code>
+            <span class="cr-email-label" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Temporary Password</span>
+            <code class="cr-email-code" style="font-size: 18px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 5px 12px; border-radius: 6px; letter-spacing: 1px; display: inline-block; font-family: monospace;">$tempPassword</code>
           </div>
         </div>
 
-        <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
-          <p style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
+        <div class="cr-email-notice" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
+          <p class="cr-email-notice-title" style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
             🔒 Notice: First-Time Password Change Required
           </p>
-          <p style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
+          <p class="cr-email-notice-body" style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
             For your security, you will be required to set a new password the first time you log in.
           </p>
         </div>
 
-        <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Please keep these credentials secure. Do not share your temporary password with unauthorized individuals.</p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
-        <p style="font-size: 11px; color: #94a3b8; margin: 0; text-align: center;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
+        <p class="cr-email-note" style="font-size: 12px; color: #64748b; margin-top: 16px;">Please keep these credentials secure. Do not share your temporary password with unauthorized individuals.</p>
+        <hr class="cr-email-hr" style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
+        <p class="cr-email-footer" style="font-size: 11px; color: #94a3b8; margin: 0; text-align: center;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
       </div>
     ''';
 
@@ -425,24 +521,29 @@ class EmailService {
   }) async {
     final String htmlTemplate =
         '''
-      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 20px auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-        <h2 style="color: #1e3a5f; margin-top: 0;">Teacher Account Verification</h2>
-        <p>Hello <strong>$teacherName</strong>,</p>
-        <p>Your 6-digit verification OTP code for ClassRealm teacher setup is:</p>
-        <div style="background: #f1f5f9; padding: 18px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #2563eb; border-radius: 8px; margin: 20px 0;">
-          $code
+      $_emailCommonStyles
+      <div class="cr-email-container" style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <h2 class="cr-email-title" style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Teacher Account Verification</h2>
+        <p class="cr-email-greeting" style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$teacherName</strong>,</p>
+        <p class="cr-email-body" style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">Your 6-digit verification code for ClassRealm teacher setup is:</p>
+        
+        <div class="cr-email-box" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0; text-align: center;">
+          <span class="cr-email-label" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 8px; text-align: left;">6-Digit Verification Code</span>
+          <code class="cr-email-code" style="font-size: 28px; font-weight: 800; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 20px; border-radius: 8px; letter-spacing: 8px; display: inline-block; font-family: ui-monospace, SFMono-Regular, Consolas, monospace;">$code</code>
         </div>
-        <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
-          <p style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
-            ⏳ Notice: This verification OTP code is valid for 5 minutes only.
+
+        <div class="cr-email-notice" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
+          <p class="cr-email-notice-title" style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
+            ⏳ Notice: Verification Code Expires in 5 Minutes
           </p>
-          <p style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
-            The cooldown for resending is 1 minute.
+          <p class="cr-email-notice-body" style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
+            This verification OTP code is valid for 5 minutes only. The cooldown for resending is 1 minute.
           </p>
         </div>
-        <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Do not share this code with anyone. If you did not request this, please disregard this email.</p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
-        <p style="font-size: 11px; color: #94a3b8; margin: 0;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
+
+        <p class="cr-email-note" style="font-size: 12px; color: #64748b; margin-top: 16px;">Do not share this code with anyone. If you did not request this, please disregard this email.</p>
+        <hr class="cr-email-hr" style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
+        <p class="cr-email-footer" style="font-size: 11px; color: #94a3b8; margin: 0; text-align: center;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
       </div>
     ''';
 
@@ -463,34 +564,35 @@ class EmailService {
   }) async {
     final String htmlTemplate =
         '''
-      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-        <h2 style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Welcome to ClassRealm!</h2>
-        <p style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$teacherName</strong>,</p>
-        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">Your teacher account for <strong>Eduardo Barretto Sr. Integrated School</strong> is ready. Use these credentials to log in:</p>
+      $_emailCommonStyles
+      <div class="cr-email-container" style="font-family: Arial, sans-serif; max-width: 520px; margin: 20px auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <h2 class="cr-email-title" style="color: #1e3a5f; margin-top: 0; font-size: 22px; font-weight: bold;">Welcome to ClassRealm!</h2>
+        <p class="cr-email-greeting" style="font-size: 15px; color: #334155; margin-bottom: 8px;">Hello <strong>$teacherName</strong>,</p>
+        <p class="cr-email-body" style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">Your teacher account for <strong>Eduardo Barretto Sr. Integrated School</strong> is ready. Use these credentials to log in:</p>
         
-        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+        <div class="cr-email-box" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
           <div style="margin-bottom: 12px;">
-            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Email Address</span>
+            <span class="cr-email-label" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Email Address</span>
             <span style="font-size: 15px; font-weight: 600; color: #1e293b; font-family: monospace;">$recipientEmail</span>
           </div>
           <div>
-            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Temporary Password</span>
-            <code style="font-size: 18px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 5px 12px; border-radius: 6px; letter-spacing: 1px; display: inline-block; font-family: monospace;">$tempPassword</code>
+            <span class="cr-email-label" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: block; margin-bottom: 4px;">Temporary Password</span>
+            <code class="cr-email-code" style="font-size: 18px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 5px 12px; border-radius: 6px; letter-spacing: 1px; display: inline-block; font-family: monospace;">$tempPassword</code>
           </div>
         </div>
 
-        <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
-          <p style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
+        <div class="cr-email-notice" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin: 20px 0;">
+          <p class="cr-email-notice-title" style="margin: 0; color: #92400e; font-size: 13px; font-weight: bold;">
             🔒 Notice: First-Time Password Change Required
           </p>
-          <p style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
+          <p class="cr-email-notice-body" style="margin: 4px 0 0 0; color: #b45309; font-size: 12px;">
             For your security, you will be required to set a new password the first time you log in.
           </p>
         </div>
 
-        <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Please keep these credentials secure. Do not share your temporary password with unauthorized individuals.</p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
-        <p style="font-size: 11px; color: #94a3b8; margin: 0; text-align: center;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
+        <p class="cr-email-note" style="font-size: 12px; color: #64748b; margin-top: 16px;">Please keep these credentials secure. Do not share your temporary password with unauthorized individuals.</p>
+        <hr class="cr-email-hr" style="border: none; border-top: 1px solid #e2e8f0; margin: 18px 0;" />
+        <p class="cr-email-footer" style="font-size: 11px; color: #94a3b8; margin: 0; text-align: center;">Eduardo Barretto Sr. Integrated School — ClassRealm</p>
       </div>
     ''';
 
