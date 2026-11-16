@@ -3106,13 +3106,19 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       for (final d in sortedDates) {
         final dayRecs = dateGroups[d]!;
         int dPres = 0;
+        int dLate = 0;
         int dAbs = 0;
+        int dExc = 0;
         for (final dr in dayRecs) {
           final st = dr['status']?.toString().toLowerCase();
-          if (st == 'present' || st == 'late') {
+          if (st == 'present') {
             dPres++;
-          } else if (st == 'absent' || st == 'excused') {
+          } else if (st == 'late') {
+            dLate++;
+          } else if (st == 'absent') {
             dAbs++;
+          } else if (st == 'excused') {
+            dExc++;
           }
         }
         final parsed = DateTime.tryParse(d);
@@ -3122,7 +3128,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             bucketStart: parsed,
             periodLabel: label,
             presentCount: dPres,
-            absentOrExcusedCount: dAbs,
+            lateCount: dLate,
+            absentCount: dAbs,
+            absentOrExcusedCount: dAbs + dExc,
           ),
         );
       }

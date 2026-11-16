@@ -3477,13 +3477,6 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                       today,
                       min2026,
                     ),
-                  AppButton.outline(
-                    label: 'Export Excel',
-                    icon: LucideIcons.fileSpreadsheet,
-                    isSmall: true,
-                    onPressed: () =>
-                        _analyticsViewKey.currentState?.exportSf2Csv(),
-                  ),
                 ],
               ),
           ],
@@ -4565,14 +4558,6 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
                   ),
                 ),
               ],
-            ),
-          ),
-          TextButton.icon(
-            onPressed: _loadSubjects,
-            icon: const Icon(LucideIcons.refreshCw, size: 13),
-            label: const Text(
-              'Reload Classes',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
         ],

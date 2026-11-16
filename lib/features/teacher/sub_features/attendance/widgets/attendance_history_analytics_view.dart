@@ -947,6 +947,7 @@ class AttendanceHistoryAnalyticsViewState
   ) {
     final isDark = theme.brightness == Brightness.dark;
     const cPresent = Color(0xFF10B981);
+    const cLate = Color(0xFFF59E0B);
     const cAbsent = Color(0xFFEF4444);
 
     return Container(
@@ -1041,8 +1042,9 @@ class AttendanceHistoryAnalyticsViewState
             spacing: 8,
             runSpacing: 6,
             children: [
-              _buildAttendanceCategoryPill('Present (On-Time)', cPresent, isDark, theme),
-              _buildAttendanceCategoryPill('Absent / Excused', cAbsent, isDark, theme),
+              _buildAttendanceCategoryPill('Present', cPresent, isDark, theme),
+              _buildAttendanceCategoryPill('Late', cLate, isDark, theme),
+              _buildAttendanceCategoryPill('Absent', cAbsent, isDark, theme),
             ],
           ),
           const SizedBox(height: 16),
@@ -1136,6 +1138,7 @@ class AttendanceHistoryAnalyticsViewState
                             painter: TrendChartPainter(
                               points: points,
                               presentColor: cPresent,
+                              lateColor: cLate,
                               absentColor: cAbsent,
                               textColor: theme.colorScheme.onSurface.withValues(
                                 alpha: 0.7,
@@ -1172,7 +1175,7 @@ class AttendanceHistoryAnalyticsViewState
                     child: Semantics(
                       label: 'Trend Summary',
                       child: Text(
-                        'Trend summary: ${points.length} periods recorded. Latest period had ${points.last.presentCount} present and ${points.last.absentOrExcusedCount} absent/excused.',
+                        'Trend summary: ${points.length} periods recorded. Latest period had ${points.last.presentCount} present, ${points.last.lateCount} late, and ${points.last.absentCount} absent.',
                         style: TextStyle(
                           fontSize: 11,
                           color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
@@ -2906,6 +2909,7 @@ class _AttendanceDonutChartPainter extends CustomPainter {
 class TrendChartPainter extends CustomPainter {
   final List<AttendanceTrendPoint> points;
   final Color presentColor;
+  final Color lateColor;
   final Color absentColor;
   final Color textColor;
   final double progress;
@@ -2915,6 +2919,7 @@ class TrendChartPainter extends CustomPainter {
   TrendChartPainter({
     required this.points,
     required this.presentColor,
+    this.lateColor = const Color(0xFFF59E0B),
     required this.absentColor,
     required this.textColor,
     this.progress = 1.0,
@@ -2962,8 +2967,10 @@ class TrendChartPainter extends CustomPainter {
 
     final maxVal = points.fold<int>(
       1,
-      (prev, elem) =>
-          max(prev, max(elem.presentCount, elem.absentOrExcusedCount)),
+      (prev, elem) => max(
+        prev,
+        max(elem.presentCount, max(elem.lateCount, elem.absentCount)),
+      ),
     );
 
     // Subtle horizontal grid lines with glassmorphism style
@@ -2981,25 +2988,26 @@ class TrendChartPainter extends CustomPainter {
     final clampedProgress = progress.clamp(0.0, 1.0);
 
     final presentOffsets = <Offset>[];
+    final lateOffsets = <Offset>[];
     final absentOffsets = <Offset>[];
 
     for (int i = 0; i < n; i++) {
       final x = n > 1 ? i * stepX : size.width / 2;
       final yPres = baseline -
           ((points[i].presentCount / maxVal) * chartHeight * clampedProgress);
+      final yLate = baseline -
+          ((points[i].lateCount / maxVal) * chartHeight * clampedProgress);
       final yAbs = baseline -
-          ((points[i].absentOrExcusedCount / maxVal) *
-              chartHeight *
-              clampedProgress);
+          ((points[i].absentCount / maxVal) * chartHeight * clampedProgress);
 
       presentOffsets.add(Offset(x, yPres));
+      lateOffsets.add(Offset(x, yLate));
       absentOffsets.add(Offset(x, yAbs));
     }
 
     // 1. Draw glowing gradient areas under smooth curves (Glassmorphism fill)
     if (presentOffsets.length > 1) {
       final presentAreaPath = _buildSmoothAreaPath(presentOffsets, baseline);
-
       final presentAreaPaint = Paint()
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
@@ -3010,11 +3018,22 @@ class TrendChartPainter extends CustomPainter {
           ],
         ).createShader(Rect.fromLTWH(0, topPadding, size.width, chartHeight))
         ..style = PaintingStyle.fill;
-
       canvas.drawPath(presentAreaPath, presentAreaPaint);
 
-      final absentAreaPath = _buildSmoothAreaPath(absentOffsets, baseline);
+      final lateAreaPath = _buildSmoothAreaPath(lateOffsets, baseline);
+      final lateAreaPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            lateColor.withValues(alpha: isDark ? 0.25 : 0.14),
+            lateColor.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromLTWH(0, topPadding, size.width, chartHeight))
+        ..style = PaintingStyle.fill;
+      canvas.drawPath(lateAreaPath, lateAreaPaint);
 
+      final absentAreaPath = _buildSmoothAreaPath(absentOffsets, baseline);
       final absentAreaPaint = Paint()
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
@@ -3025,13 +3044,19 @@ class TrendChartPainter extends CustomPainter {
           ],
         ).createShader(Rect.fromLTWH(0, topPadding, size.width, chartHeight))
         ..style = PaintingStyle.fill;
-
       canvas.drawPath(absentAreaPath, absentAreaPaint);
     }
 
     // 2. Smooth curved stroke lines
     final presentLinePaint = Paint()
       ..color = presentColor
+      ..strokeWidth = 2.6
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    final lateLinePaint = Paint()
+      ..color = lateColor
       ..strokeWidth = 2.6
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -3045,9 +3070,11 @@ class TrendChartPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     final presentPath = _buildSmoothLinePath(presentOffsets);
+    final latePath = _buildSmoothLinePath(lateOffsets);
     final absentPath = _buildSmoothLinePath(absentOffsets);
 
     canvas.drawPath(presentPath, presentLinePaint);
+    canvas.drawPath(latePath, lateLinePaint);
     canvas.drawPath(absentPath, absentLinePaint);
 
     // Hover vertical guide line
@@ -3065,6 +3092,7 @@ class TrendChartPainter extends CustomPainter {
     // 3. Glowing halo dots & X-axis date labels
     for (int i = 0; i < n; i++) {
       final ptPres = presentOffsets[i];
+      final ptLate = lateOffsets[i];
       final ptAbs = absentOffsets[i];
       final isHovered = hoveredIndex == i;
 
@@ -3082,6 +3110,24 @@ class TrendChartPainter extends CustomPainter {
       );
       canvas.drawCircle(
         ptPres,
+        isHovered ? 2.2 : 1.5,
+        Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
+      );
+
+      // Late Point
+      canvas.drawCircle(
+        ptLate,
+        isHovered ? 8.5 : 5.5,
+        Paint()
+          ..color = lateColor.withValues(alpha: isHovered ? 0.38 : 0.25),
+      );
+      canvas.drawCircle(
+        ptLate,
+        isHovered ? 5.0 : 3.5,
+        Paint()..color = lateColor,
+      );
+      canvas.drawCircle(
+        ptLate,
         isHovered ? 2.2 : 1.5,
         Paint()..color = isDark ? const Color(0xFF0F172A) : Colors.white,
       );
@@ -3136,7 +3182,10 @@ class TrendChartPainter extends CustomPainter {
       final idx = hoveredIndex!;
       final pt = points[idx];
       final hx = presentOffsets[idx].dx;
-      final hy = min(presentOffsets[idx].dy, absentOffsets[idx].dy);
+      final hy = min(
+        presentOffsets[idx].dy,
+        min(lateOffsets[idx].dy, absentOffsets[idx].dy),
+      );
 
       final dateTitle = pt.periodLabel ??
           (pt.bucketStart != null
@@ -3164,7 +3213,27 @@ class TrendChartPainter extends CustomPainter {
             ),
           ),
           TextSpan(
-            text: 'Present (On-Time): ${pt.presentCount}\n',
+            text: 'Present: ${pt.presentCount}\n',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : const Color(0xFF334155),
+              height: 1.4,
+            ),
+          ),
+          TextSpan(
+            text: '● ',
+            style: TextStyle(
+              fontSize: 10,
+              color: lateColor,
+              fontWeight: FontWeight.w800,
+              height: 1.4,
+            ),
+          ),
+          TextSpan(
+            text: 'Late: ${pt.lateCount}\n',
             style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
@@ -3184,7 +3253,7 @@ class TrendChartPainter extends CustomPainter {
             ),
           ),
           TextSpan(
-            text: 'Absent / Excused: ${pt.absentOrExcusedCount}',
+            text: 'Absent: ${pt.absentCount}',
             style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
@@ -3252,6 +3321,9 @@ class TrendChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant TrendChartPainter oldDelegate) {
     return oldDelegate.points != points ||
+        oldDelegate.presentColor != presentColor ||
+        oldDelegate.lateColor != lateColor ||
+        oldDelegate.absentColor != absentColor ||
         oldDelegate.textColor != textColor ||
         oldDelegate.progress != progress ||
         oldDelegate.isDark != isDark ||

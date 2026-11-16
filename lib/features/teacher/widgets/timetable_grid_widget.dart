@@ -124,22 +124,29 @@ class TimetableGridWidget extends StatelessWidget {
     return positioned;
   }
 
-  Color _getSectionColor(String subject, BuildContext context) {
-    final uniqueSubjects = schedules.map((s) => s.subject).toSet().toList();
-    final baseColor = SubjectPalette.getColorForSubject(
-      subject,
-      teacherSubjectNames: uniqueSubjects,
-    );
+  static int _getScheduleColorIndex(ScheduleModel s) {
+    final key = (s.teacherName != null && s.teacherName!.trim().isNotEmpty)
+        ? s.teacherName!.trim()
+        : ((s.teacherId != null && s.teacherId!.trim().isNotEmpty)
+            ? s.teacherId!.trim()
+            : s.subject.trim());
+
+    int hash = 5381;
+    for (int i = 0; i < key.length; i++) {
+      hash = ((hash << 5) + hash) + key.codeUnitAt(i);
+      hash &= 0x7FFFFFFF;
+    }
+    return hash % SubjectPalette.colors.length;
+  }
+
+  Color _getSectionColor(ScheduleModel s, BuildContext context) {
+    final baseColor = SubjectPalette.colors[_getScheduleColorIndex(s)];
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return SubjectPalette.getPastelBackground(baseColor, isDark: isDark);
   }
 
-  Color _getSubjectDarkColor(String subject, BuildContext context) {
-    final uniqueSubjects = schedules.map((s) => s.subject).toSet().toList();
-    final baseColor = SubjectPalette.getColorForSubject(
-      subject,
-      teacherSubjectNames: uniqueSubjects,
-    );
+  Color _getSubjectDarkColor(ScheduleModel s, BuildContext context) {
+    final baseColor = SubjectPalette.colors[_getScheduleColorIndex(s)];
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return SubjectPalette.getTextColor(baseColor, isDark: isDark);
   }
@@ -381,8 +388,8 @@ class TimetableGridWidget extends StatelessWidget {
     final double topOffset = startMinutesRelative * pixelsPerMinute;
     final double blockHeight = s.durationMinutes * pixelsPerMinute;
 
-    final Color bgColor = _getSectionColor(s.subject, context);
-    final Color textColor = _getSubjectDarkColor(s.subject, context);
+    final Color bgColor = _getSectionColor(s, context);
+    final Color textColor = _getSubjectDarkColor(s, context);
 
     final bool isOtherTeacher = currentTeacherId != null &&
         s.teacherId != null &&

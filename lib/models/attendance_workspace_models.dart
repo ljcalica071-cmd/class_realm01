@@ -236,12 +236,16 @@ class AttendanceTrendPoint {
   final DateTime? bucketStart;
   final String? periodLabel;
   final int presentCount;
+  final int lateCount;
+  final int absentCount;
   final int absentOrExcusedCount;
 
   const AttendanceTrendPoint({
     this.bucketStart,
     this.periodLabel,
     required this.presentCount,
+    this.lateCount = 0,
+    this.absentCount = 0,
     required this.absentOrExcusedCount,
   });
 }
