@@ -785,7 +785,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                     ),
                   ),
                   onPressed: widget.onNavigateToBroadcasts,
-                  icon: const Icon(LucideIcons.megaphone, size: 16),
+                  icon: const Icon(Icons.campaign_rounded, size: 16),
                   label: const Text(
                     'Quick Broadcast',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
