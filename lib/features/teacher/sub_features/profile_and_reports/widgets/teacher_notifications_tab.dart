@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_notification_repository.dart';
@@ -46,8 +47,28 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
   @override
   void initState() {
     super.initState();
+    final teacherId = AuthRepository.instance.currentUser?.id;
+    if (teacherId != null && teacherId.isNotEmpty) {
+      final cached =
+          AppDataCache.instance.getCached<List<AppNotificationModel>>(
+        'teacher_notifications_$teacherId',
+        (jsonList) => (jsonList as List)
+            .map((j) => AppNotificationModel.fromJson(
+                Map<String, dynamic>.from(j as Map)))
+            .toList(),
+      );
+      if (cached != null && cached.isNotEmpty) {
+        _notifications
+          ..clear()
+          ..addAll(cached);
+        _isLoading = false;
+      }
+    }
     _loadTeacherSubjects();
-    _loadNotifications(initial: true);
+    _loadNotifications(
+      initial: _notifications.isEmpty,
+      silent: _notifications.isNotEmpty,
+    );
     _subscribeToRealtime();
   }
 
@@ -110,8 +131,11 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
         .subscribe();
   }
 
-  Future<void> _loadNotifications({bool initial = false}) async {
-    if (initial && _notifications.isEmpty) {
+  Future<void> _loadNotifications({
+    bool initial = false,
+    bool silent = false,
+  }) async {
+    if (initial && _notifications.isEmpty && !silent) {
       setState(() {
         _isLoading = true;
       });
@@ -138,6 +162,14 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
             ..addAll(items);
           _isLoading = false;
         });
+
+        final teacherId = user.id;
+        if (teacherId.isNotEmpty) {
+          unawaited(AppDataCache.instance.setCache(
+            'teacher_notifications_$teacherId',
+            items.map((n) => n.toJson()).toList(),
+          ));
+        }
 
         SupabaseNotificationRepository.instance.calculateUnreadCount(user);
       }

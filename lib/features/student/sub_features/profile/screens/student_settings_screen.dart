@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
@@ -35,19 +37,37 @@ class _StudentSettingsScreenState extends State<StudentSettingsScreen> {
       _hideTermGrades = _student!.hideTermGradesFromParent;
       _hideFinalGrades = _student!.hideFinalGradesFromParent;
     }
+    final studentId = _student?.id;
     if (widget.linkedParentsOverride != null) {
       _linkedParents = widget.linkedParentsOverride!;
       _isLoadingPrivacy = false;
+    } else if (studentId != null && studentId.isNotEmpty) {
+      final cachedParents =
+          AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
+        'student_linked_parents_$studentId',
+        (list) => (list as List)
+            .map((j) => Map<String, dynamic>.from(j as Map))
+            .toList(),
+      );
+      if (cachedParents != null) {
+        _linkedParents = cachedParents;
+        _isLoadingPrivacy = false;
+      }
+      _loadPrivacyAndLinkedParents(silent: cachedParents != null);
     } else {
       _loadPrivacyAndLinkedParents();
     }
   }
 
-  Future<void> _loadPrivacyAndLinkedParents() async {
+  Future<void> _loadPrivacyAndLinkedParents({bool silent = false}) async {
     final student = _student;
     if (student == null || student.id.isEmpty) {
       if (mounted) setState(() => _isLoadingPrivacy = false);
       return;
+    }
+
+    if (!silent && _linkedParents.isEmpty) {
+      setState(() => _isLoadingPrivacy = true);
     }
 
     try {
@@ -66,6 +86,11 @@ class _StudentSettingsScreenState extends State<StudentSettingsScreen> {
         _hideFinalGrades = privacy['hideFinalGrades'] ?? _hideFinalGrades;
         _isLoadingPrivacy = false;
       });
+
+      unawaited(AppDataCache.instance.setCache(
+        'student_linked_parents_${student.id}',
+        parents,
+      ));
 
       final updatedStudent = student.copyWith(
         hideTermGradesFromParent: _hideTermGrades,

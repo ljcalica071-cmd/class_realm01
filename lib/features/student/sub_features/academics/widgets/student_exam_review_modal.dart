@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 
@@ -62,6 +64,32 @@ class _ReviewItem {
     required this.pointsEarned,
     required this.options,
   });
+
+  Map<String, dynamic> toMap() => {
+        'position': position,
+        'questionType': questionType,
+        'questionText': questionText,
+        'points': points,
+        'studentAnswer': studentAnswer,
+        'correctAnswer': correctAnswer,
+        'isCorrect': isCorrect,
+        'pointsEarned': pointsEarned,
+        'options': options,
+      };
+
+  factory _ReviewItem.fromMap(Map<String, dynamic> map) => _ReviewItem(
+        position: (map['position'] as num?)?.toInt() ?? 1,
+        questionType: map['questionType']?.toString() ?? 'multiple_choice',
+        questionText: map['questionText']?.toString() ?? '',
+        points: (map['points'] as num?)?.toDouble() ?? 1.0,
+        studentAnswer: map['studentAnswer']?.toString() ?? '',
+        correctAnswer: map['correctAnswer']?.toString() ?? '',
+        isCorrect: map['isCorrect'] == true,
+        pointsEarned: (map['pointsEarned'] as num?)?.toDouble() ?? 0.0,
+        options: (map['options'] as List? ?? [])
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList(),
+      );
 }
 
 class _StudentExamReviewModalState extends State<StudentExamReviewModal>
@@ -78,7 +106,36 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _loadReviewData();
+    final studentId = AuthRepository.instance.currentUser?.id;
+    if (studentId != null && studentId.isNotEmpty) {
+      final cacheKey =
+          'student_exam_review_${studentId}_${widget.assessmentId}';
+      final cached = AppDataCache.instance.getCached<Map<String, dynamic>>(
+        cacheKey,
+        (json) => Map<String, dynamic>.from(json as Map),
+      );
+      if (cached != null) {
+        _totalScoreEarned =
+            (cached['totalScoreEarned'] as num?)?.toDouble() ?? 0.0;
+        final mc = (cached['mc'] as List? ?? [])
+            .map((e) => _ReviewItem.fromMap(Map<String, dynamic>.from(e as Map)))
+            .toList();
+        final tf = (cached['tf'] as List? ?? [])
+            .map((e) => _ReviewItem.fromMap(Map<String, dynamic>.from(e as Map)))
+            .toList();
+        final id = (cached['id'] as List? ?? [])
+            .map((e) => _ReviewItem.fromMap(Map<String, dynamic>.from(e as Map)))
+            .toList();
+        _mcItems = mc;
+        _tfItems = tf;
+        _idItems = id;
+        _isLoading = false;
+      }
+    }
+    _loadReviewData(
+      silent:
+          _mcItems.isNotEmpty || _tfItems.isNotEmpty || _idItems.isNotEmpty,
+    );
   }
 
   @override
@@ -87,7 +144,10 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
     super.dispose();
   }
 
-  Future<void> _loadReviewData() async {
+  Future<void> _loadReviewData({bool silent = false}) async {
+    if (!silent && _mcItems.isEmpty && _tfItems.isEmpty && _idItems.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       final client = SupabaseService().client;
       final user = AuthRepository.instance.currentUser;
@@ -249,6 +309,15 @@ class _StudentExamReviewModalState extends State<StudentExamReviewModal>
           _idItems = id;
           _isLoading = false;
         });
+
+        final cacheKey =
+            'student_exam_review_${studentId}_${widget.assessmentId}';
+        unawaited(AppDataCache.instance.setCache(cacheKey, {
+          'totalScoreEarned': _totalScoreEarned,
+          'mc': mc.map((i) => i.toMap()).toList(),
+          'tf': tf.map((i) => i.toMap()).toList(),
+          'id': id.map((i) => i.toMap()).toList(),
+        }));
       }
     } catch (e) {
       debugPrint('Failed to load exam review: $e');

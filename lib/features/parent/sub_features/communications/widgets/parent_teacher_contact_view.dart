@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
@@ -41,10 +43,24 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
         widget.student ??
         widget.linkedStudent ??
         (widget.allChildren.isNotEmpty ? widget.allChildren.first : null);
+    final studentId = _activeStudent?.id;
     if (widget.initialOfferings != null &&
         widget.initialOfferings!.isNotEmpty) {
       _offerings = widget.initialOfferings!;
       _isLoading = false;
+    } else if (studentId != null && studentId.isNotEmpty) {
+      final cached =
+          AppDataCache.instance.getCached<List<Map<String, dynamic>>>(
+        'parent_child_teachers_$studentId',
+        (list) => (list as List)
+            .map((j) => Map<String, dynamic>.from(j as Map))
+            .toList(),
+      );
+      if (cached != null && cached.isNotEmpty) {
+        _offerings = cached;
+        _isLoading = false;
+      }
+      _loadTeachers(silent: _offerings.isNotEmpty);
     } else {
       _loadTeachers();
     }
@@ -57,7 +73,7 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
       return;
     }
 
-    if (!silent) {
+    if (!silent && _offerings.isEmpty) {
       setState(() => _isLoading = true);
     }
 
@@ -69,6 +85,13 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
         _offerings = rows;
         _isLoading = false;
       });
+
+      if (studentId.isNotEmpty) {
+        unawaited(AppDataCache.instance.setCache(
+          'parent_child_teachers_$studentId',
+          rows,
+        ));
+      }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -142,9 +165,22 @@ class _ParentTeacherContactViewState extends State<ParentTeacherContactView> {
                         : null,
                     onTap: () {
                       Navigator.pop(sheetCtx);
-                      setState(() => _activeStudent = child);
+                      setState(() {
+                        _activeStudent = child;
+                        final cached = AppDataCache.instance
+                            .getCached<List<Map<String, dynamic>>>(
+                          'parent_child_teachers_${child.id}',
+                          (list) => (list as List)
+                              .map((j) => Map<String, dynamic>.from(j as Map))
+                              .toList(),
+                        );
+                        if (cached != null && cached.isNotEmpty) {
+                          _offerings = cached;
+                          _isLoading = false;
+                        }
+                      });
                       widget.onSelectChild?.call(child);
-                      _loadTeachers();
+                      _loadTeachers(silent: _offerings.isNotEmpty);
                     },
                   );
                 }),

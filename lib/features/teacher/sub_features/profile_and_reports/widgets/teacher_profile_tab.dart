@@ -4,7 +4,6 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/utils/formatters.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/edit_teacher_profile_dialog.dart';
 import 'package:flutter/services.dart';
 
@@ -119,9 +118,10 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
             // --- HEADER (Avatar, Name, Edit Button) ---
             Container(
               color: theme.colorScheme.surface,
-              child: Center(
+              child: Align(
+                alignment: Alignment.centerLeft,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1040),
+                  constraints: const BoxConstraints(maxWidth: 1200),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -323,9 +323,10 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
             ),
 
             // --- TAB CONTENT (ABOUT or SETTINGS) ---
-            Center(
+            Align(
+              alignment: Alignment.centerLeft,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1040),
+                constraints: const BoxConstraints(maxWidth: 1200),
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
                   switchInCurve: Curves.easeOutCubic,

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
+import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/utils/file_download_helper.dart';
 import 'package:class_realm/models/academic_models.dart';
@@ -164,6 +165,9 @@ class _TeacherLearningMaterialsTabState
       final sections = _availableSections;
       _selectedOffering = sections.isNotEmpty ? sections.first : null;
       _isLoading = false;
+      if (_selectedOffering != null) {
+        unawaited(_loadFolderContents(silent: true));
+      }
     } else if (_offerings.isEmpty) {
       setState(() {
         _isLoading = true;
@@ -210,7 +214,7 @@ class _TeacherLearningMaterialsTabState
         _selectedOffering = sections.isNotEmpty ? sections.first : null;
       }
 
-      await _loadFolderContents();
+      await _loadFolderContents(silent: _folders.isNotEmpty || _materials.isNotEmpty);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -220,14 +224,52 @@ class _TeacherLearningMaterialsTabState
     }
   }
 
-  Future<void> _loadFolderContents() async {
+  void _invalidateMaterialsCache() {
+    AppDataCache.instance.invalidatePrefix('teacher_materials_');
+    AppDataCache.instance.invalidatePrefix('student_materials_');
+  }
+
+  Future<void> _loadFolderContents({
+    bool silent = false,
+    bool forceRefresh = false,
+  }) async {
     if (_selectedOffering == null) {
       setState(() => _isLoading = false);
       return;
     }
     final offeringId = _selectedOffering!['id'] as String;
+    final folderKey = _currentFolder?.id ?? 'root';
+    final teacherId = AuthRepository.instance.currentUser?.id ?? '';
 
-    setState(() => _isLoading = true);
+    if (forceRefresh) {
+      _invalidateMaterialsCache();
+    } else if (teacherId.isNotEmpty) {
+      final cachedFolders =
+          AppDataCache.instance.getCached<List<ClassRealmFolder>>(
+        'teacher_materials_folders_${teacherId}_${offeringId}_$folderKey',
+        (list) => (list as List)
+            .map((j) =>
+                ClassRealmFolder.fromMap(Map<String, dynamic>.from(j as Map)))
+            .toList(),
+      );
+      final cachedMaterials =
+          AppDataCache.instance.getCached<List<ClassRealmMaterial>>(
+        'teacher_materials_files_${teacherId}_${offeringId}_$folderKey',
+        (list) => (list as List)
+            .map((j) =>
+                ClassRealmMaterial.fromMap(Map<String, dynamic>.from(j as Map)))
+            .toList(),
+      );
+      if (cachedFolders != null) _folders = cachedFolders;
+      if (cachedMaterials != null) _materials = cachedMaterials;
+      if (cachedFolders != null || cachedMaterials != null) {
+        _isLoading = false;
+      }
+    }
+
+    if (!silent && _folders.isEmpty && _materials.isEmpty) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       // 1. Ensure the 4 default term folders exist in Supabase DB
@@ -262,10 +304,23 @@ class _TeacherLearningMaterialsTabState
         _archivedMaterials = archivedM;
         _isLoading = false;
       });
+
+      if (teacherId.isNotEmpty) {
+        unawaited(AppDataCache.instance.setCache(
+          'teacher_materials_folders_${teacherId}_${offeringId}_$folderKey',
+          fetchedFolders.map((f) => f.toMap()).toList(),
+        ));
+        unawaited(AppDataCache.instance.setCache(
+          'teacher_materials_files_${teacherId}_${offeringId}_$folderKey',
+          fetchedMaterials.map((m) => m.toMap()).toList(),
+        ));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = 'Failed to load materials: $e';
+        if (!silent || (_folders.isEmpty && _materials.isEmpty)) {
+          _errorMessage = 'Failed to load materials: $e';
+        }
         _isLoading = false;
       });
     }
@@ -925,7 +980,7 @@ class _TeacherLearningMaterialsTabState
                           if (ctx.mounted) {
                             Navigator.pop(ctx);
                           }
-                          await _loadFolderContents();
+                          await _loadFolderContents(forceRefresh: true);
                         } catch (e) {
                           if (ctx.mounted) {
                             setModalState(() {
@@ -1088,7 +1143,7 @@ class _TeacherLearningMaterialsTabState
                       parentFolderId: _currentFolder?.id,
                       isVisibleToStudents: isVisible,
                     );
-                    await _loadFolderContents();
+                    await _loadFolderContents(forceRefresh: true);
                   } catch (e) {
                     setState(() => _isLoading = false);
                     _showFeedbackModal(
@@ -1127,6 +1182,7 @@ class _TeacherLearningMaterialsTabState
         folderId: folder.id,
         isVisibleToStudents: nextState,
       );
+      _invalidateMaterialsCache();
 
       setState(() {
         final idx = _folders.indexWhere((f) => f.id == folder.id);
@@ -1190,7 +1246,7 @@ class _TeacherLearningMaterialsTabState
       setState(() => _isLoading = true);
       try {
         await _materialRepo.archiveFolder(folder.id);
-        await _loadFolderContents();
+        await _loadFolderContents(forceRefresh: true);
       } catch (e) {
         setState(() => _isLoading = false);
         _showFeedbackModal(
@@ -1233,7 +1289,7 @@ class _TeacherLearningMaterialsTabState
       setState(() => _isLoading = true);
       try {
         await _materialRepo.deleteFolder(folder.id);
-        await _loadFolderContents();
+        await _loadFolderContents(forceRefresh: true);
       } catch (e) {
         setState(() => _isLoading = false);
         _showFeedbackModal(
@@ -1271,7 +1327,7 @@ class _TeacherLearningMaterialsTabState
       setState(() => _isLoading = true);
       try {
         await _materialRepo.archiveMaterial(material.id);
-        await _loadFolderContents();
+        await _loadFolderContents(forceRefresh: true);
       } catch (e) {
         setState(() => _isLoading = false);
         _showFeedbackModal(
@@ -1311,7 +1367,7 @@ class _TeacherLearningMaterialsTabState
           materialId: material.id,
           storagePathUrl: material.storagePathUrl,
         );
-        await _loadFolderContents();
+        await _loadFolderContents(forceRefresh: true);
       } catch (e) {
         setState(() => _isLoading = false);
         _showFeedbackModal(
@@ -1328,7 +1384,7 @@ class _TeacherLearningMaterialsTabState
     setState(() => _isLoading = true);
     try {
       await _materialRepo.restoreFolder(folder.id);
-      await _loadFolderContents();
+      await _loadFolderContents(forceRefresh: true);
     } catch (e) {
       setState(() => _isLoading = false);
       _showFeedbackModal(
@@ -1343,7 +1399,7 @@ class _TeacherLearningMaterialsTabState
     setState(() => _isLoading = true);
     try {
       await _materialRepo.restoreMaterial(material.id);
-      await _loadFolderContents();
+      await _loadFolderContents(forceRefresh: true);
     } catch (e) {
       setState(() => _isLoading = false);
       _showFeedbackModal(
@@ -1361,6 +1417,7 @@ class _TeacherLearningMaterialsTabState
         materialId: material.id,
         isVisible: nextState,
       );
+      _invalidateMaterialsCache();
       setState(() {
         final idx = _materials.indexWhere((m) => m.id == material.id);
         if (idx != -1) {
