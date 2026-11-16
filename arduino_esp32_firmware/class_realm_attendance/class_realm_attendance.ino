@@ -34,8 +34,11 @@
 const char* SUPABASE_URL = "https://wfilyatkfgqtybujmahf.supabase.co";
 const char* SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmaWx5YXRrZmdxdHlidWptYWhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2NzQ0NjksImV4cCI6MjEwNjI1MDQ2OX0.YY6G7HJcXQX0PxrLC-IG__MT-ck8mSBzIX_8TvywkLM";
 
-// Active Class Offering Pairing (Auto-synced from public.teacher_schedule)
-String activeSubjectOfferingId = "d28fbca1-bbbe-478d-8c41-682391a37461";
+// Active Class Offering Pairing (Default: Sir Naruto Uzumaki - Grade 11 Section 1 Art Criticism):
+const char* DEFAULT_SUBJECT_OFFERING_ID = "d28fbca1-bbbe-478d-8c41-682391a37461";
+// Sir James Wick (Grade 12 Section B1 - General Science):
+// const char* DEFAULT_SUBJECT_OFFERING_ID = "7e5f2c1e-2dc2-429a-bc09-43ec9c107d8e";
+String activeSubjectOfferingId = DEFAULT_SUBJECT_OFFERING_ID;
 
 // Default Network credentials
 const char* DEFAULT_SSID = "connectka?";
@@ -69,11 +72,15 @@ const unsigned long ANY_CARD_COOLDOWN_MS = 1500;
 // Sync state & periodic refresh flags
 bool pendingSync = false;
 bool wasWifiConnected = false;
+bool hasInternetAccess = false;
+unsigned long lastInternetCheckMillis = 0;
+const unsigned long INTERNET_CHECK_INTERVAL_MS = 6000;
 unsigned long lastScheduleRefreshMillis = 0;
 unsigned long lastSyncRetryMillis = 0;
 
 // Layer 1 Offline Schedule & Cutoff Cache (Loaded from NVS Preferences)
 bool cachedHasScheduleToday = false;
+int cachedActiveDaysMask = 0; // Bitmask of active scheduled days: (1<<1)=Mon, ..., (1<<7)=Sun
 bool cachedIsHoliday = false;
 int cachedOpenBeforeMins = 15; // Default 15m before start_time
 int cachedStartMins = 480;     // Default 08:00 AM
@@ -110,6 +117,21 @@ void buzzDenied() { // 3 Short Beeps: TOO LATE / UNREGISTERED / NO CLASS / WRONG
 }
 
 // =========================================================================
+// INTERNET CONNECTIVITY CHECK (Instant, lightweight check)
+// =========================================================================
+bool checkInternetReachability() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  HTTPClient http;
+  // Lightweight HTTP 204 connectivity check (no SSL overhead, ultra-fast)
+  // Reliably detects cellular hotspot without data/load or captive portal redirect
+  http.begin("http://connectivitycheck.gstatic.com/generate_204");
+  http.setTimeout(1800);
+  int httpCode = http.GET();
+  http.end();
+  return (httpCode == 204);
+}
+
+// =========================================================================
 // OLED HELPERS (Master OLED Display Chart)
 // =========================================================================
 void showIdleScreen() {
@@ -129,13 +151,16 @@ void showIdleScreen() {
 
   // Subtext (Baba)
   display.setCursor(4, 50);
-  if (WiFi.status() == WL_CONNECTED) {
+  if (WiFi.status() == WL_CONNECTED && hasInternetAccess) {
     display.print("WiFi: Online");
     if (offlineQueueCount > 0) {
       display.print(" [Q:" + String(offlineQueueCount) + "]");
     }
   } else {
-    display.print("WiFi: Offline [Q:" + String(offlineQueueCount) + "]");
+    display.print("WiFi: Offline");
+    if (offlineQueueCount > 0) {
+      display.print(" [Q:" + String(offlineQueueCount) + "]");
+    }
   }
 
   display.display();
@@ -383,7 +408,7 @@ int parseTimeToMins(String timeStr) {
 
 // Auto-detect and sync today's active schedule offering, cutoffs, & holiday from Supabase
 void fetchActiveSchedule() {
-  if (WiFi.status() != WL_CONNECTED) return;
+  if (WiFi.status() != WL_CONNECTED || !hasInternetAccess) return;
 
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) return;
@@ -411,9 +436,43 @@ void fetchActiveSchedule() {
     http.end();
   }
 
-  // 2. Check active schedules for today and pick the one matching current time (or next upcoming)
+  // Ensure activeSubjectOfferingId is strictly valid (never empty)
+  if (activeSubjectOfferingId.length() == 0) {
+    activeSubjectOfferingId = String(DEFAULT_SUBJECT_OFFERING_ID);
+  }
+
+  // 1B. Fetch all active days of week for this paired offering (to cache for offline validation)
+  {
+    HTTPClient dHttp;
+    String dUrl = String(SUPABASE_URL) + "/rest/v1/teacher_schedule?subject_offering_id=eq." + activeSubjectOfferingId + "&is_active=eq.true&select=day_of_week";
+    dHttp.begin(dUrl);
+    dHttp.addHeader("apikey", SUPABASE_ANON_KEY);
+    dHttp.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+    dHttp.setTimeout(2500);
+    int dCode = dHttp.GET();
+    if (dCode == 200) {
+      String dPayload = dHttp.getString();
+      int mask = 0;
+      int cursor = 0;
+      while ((cursor = dPayload.indexOf("\"day_of_week\":", cursor)) != -1) {
+        cursor += 14;
+        while (cursor < dPayload.length() && (dPayload[cursor] == ' ' || dPayload[cursor] == ':')) cursor++;
+        int dowVal = dPayload.substring(cursor, cursor + 1).toInt();
+        if (dowVal >= 1 && dowVal <= 7) {
+          mask |= (1 << dowVal);
+        }
+      }
+      if (mask > 0) {
+        cachedActiveDaysMask = mask;
+        Serial.println("[SCHEDULE] Cached active days mask: " + String(cachedActiveDaysMask));
+      }
+    }
+    dHttp.end();
+  }
+
+  // 2. Check active schedule for TODAY strictly for this offering (NEVER overwrite with other sections!)
   HTTPClient http;
-  String url = String(SUPABASE_URL) + "/rest/v1/teacher_schedule?is_active=eq.true&day_of_week=eq." + String(isoDow) + "&select=subject_offering_id,start_time,end_time&order=start_time.asc";
+  String url = String(SUPABASE_URL) + "/rest/v1/teacher_schedule?subject_offering_id=eq." + activeSubjectOfferingId + "&is_active=eq.true&day_of_week=eq." + String(isoDow) + "&select=start_time,end_time&order=start_time.asc";
   http.begin(url);
   http.addHeader("apikey", SUPABASE_ANON_KEY);
   http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
@@ -423,7 +482,6 @@ void fetchActiveSchedule() {
   if (code == 200) {
     String payload = http.getString();
     if (payload.length() > 2 && payload != "[]") {
-      String chosenOffering = "";
       int chosenStart = -1;
       int chosenEnd = -1;
 
@@ -432,21 +490,16 @@ void fetchActiveSchedule() {
         int objEnd = payload.indexOf("}", cursor);
         if (objEnd == -1) break;
         String item = payload.substring(cursor, objEnd + 1);
-        String offId = extractJsonField(item, "subject_offering_id");
         int stMins = parseTimeToMins(extractJsonField(item, "start_time"));
         int enMins = parseTimeToMins(extractJsonField(item, "end_time"));
 
-        if (offId.length() > 0 && stMins >= 0) {
-          // Prefer the schedule currently active (from 30 mins before start until end_time)
+        if (stMins >= 0) {
           if (currentMins >= (stMins - 30) && (enMins < 0 || currentMins <= enMins)) {
-            chosenOffering = offId;
             chosenStart = stMins;
             chosenEnd = enMins;
             break;
           }
-          // Otherwise keep the first schedule of the day as fallback
-          if (chosenOffering.length() == 0) {
-            chosenOffering = offId;
+          if (chosenStart < 0) {
             chosenStart = stMins;
             chosenEnd = enMins;
           }
@@ -454,16 +507,13 @@ void fetchActiveSchedule() {
         cursor = objEnd + 1;
       }
 
-      if (chosenOffering.length() > 0) {
-        activeSubjectOfferingId = chosenOffering;
-        cachedHasScheduleToday = true;
-        if (chosenStart >= 0) cachedStartMins = chosenStart;
-        if (chosenEnd >= 0) cachedEndMins = chosenEnd;
-        Serial.println("[SCHEDULE] Active offering: " + activeSubjectOfferingId + " (" + formatMinsTo12h(cachedStartMins) + " - " + formatMinsTo12h(cachedEndMins) + ")");
-      }
+      cachedHasScheduleToday = true;
+      if (chosenStart >= 0) cachedStartMins = chosenStart;
+      if (chosenEnd >= 0) cachedEndMins = chosenEnd;
+      Serial.println("[SCHEDULE] Active offering: " + activeSubjectOfferingId + " (" + formatMinsTo12h(cachedStartMins) + " - " + formatMinsTo12h(cachedEndMins) + ")");
     } else {
       cachedHasScheduleToday = false;
-      Serial.println("[SCHEDULE] No active schedule plotted for today.");
+      Serial.println("[SCHEDULE] No active schedule plotted today for offering: " + activeSubjectOfferingId);
     }
   }
   http.end();
@@ -494,6 +544,7 @@ void fetchActiveSchedule() {
   prefs.begin("class_config", false);
   prefs.putString("active_offering", activeSubjectOfferingId);
   prefs.putBool("has_sched", cachedHasScheduleToday);
+  prefs.putInt("active_days", cachedActiveDaysMask);
   prefs.putBool("is_holiday", cachedIsHoliday);
   prefs.putInt("open_before", cachedOpenBeforeMins);
   prefs.putInt("start_mins", cachedStartMins);
@@ -514,7 +565,18 @@ void handleOfflineValidatedScan(String uid) {
     return;
   }
 
-  // Row 12: Walang Klase sa Araw na Ito
+  // Row 12: Walang Klase sa Araw na Ito (Strict day-of-week & schedule verification)
+  struct tm timeinfo;
+  bool hasTime = getLocalTime(&timeinfo);
+  if (hasTime && timeinfo.tm_year >= 120) { // Valid time (year >= 2020)
+    int isoDow = (timeinfo.tm_wday == 0) ? 7 : timeinfo.tm_wday;
+    if (cachedActiveDaysMask > 0 && !(cachedActiveDaysMask & (1 << isoDow))) {
+      buzzDenied();
+      showFeedbackScreen("[ SCHEDULE ]", "NO CLASS TODAY", "No Class Today");
+      return;
+    }
+  }
+
   if (!cachedHasScheduleToday) {
     buzzDenied();
     showFeedbackScreen("[ SCHEDULE ]", "NO CLASS TODAY", "No Class Today");
@@ -536,8 +598,7 @@ void handleOfflineValidatedScan(String uid) {
     return;
   }
 
-  struct tm timeinfo;
-  if (getLocalTime(&timeinfo)) {
+  if (hasTime) {
     int scanMins = (timeinfo.tm_hour * 60) + timeinfo.tm_min;
     int openMins = cachedStartMins - cachedOpenBeforeMins;
     int presentCutoff = cachedStartMins + cachedGraceMins;
@@ -586,7 +647,7 @@ void handleOfflineValidatedScan(String uid) {
 // SILENT BACKGROUND OFFLINE QUEUE DRAIN (No OLED interruption or freeze)
 // =========================================================================
 void syncOfflineQueue() {
-  if (WiFi.status() != WL_CONNECTED || offlineQueueCount == 0) return;
+  if (WiFi.status() != WL_CONNECTED || !hasInternetAccess || offlineQueueCount == 0) return;
 
   prefs.begin("offline_queue", false);
   int successCount = 0;
@@ -673,9 +734,9 @@ void processRfidScan(String uid) {
   Serial.println(uid);
 
   // -------------------------------------------------------------
-  // SITUATION A: OFFLINE MODE (Layer 1 Local Schedule & Cutoff Validation)
+  // SITUATION A: OFFLINE MODE (No WiFi OR No Internet Reachability)
   // -------------------------------------------------------------
-  if (WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED || !hasInternetAccess) {
     handleOfflineValidatedScan(uid);
     delay(2200);
     showIdleScreen();
@@ -700,6 +761,7 @@ void processRfidScan(String uid) {
 
   int httpCode = http.POST(body);
   if (httpCode == 200) {
+    hasInternetAccess = true;
     String payload = http.getString();
     Serial.println("[RPC RESPONSE] " + payload);
 
@@ -799,6 +861,9 @@ void processRfidScan(String uid) {
     }
   } else {
     Serial.println("[RPC ERROR] HTTP Code: " + String(httpCode));
+    if (httpCode <= 0 || httpCode >= 500) {
+      hasInternetAccess = false;
+    }
     // Fallback to Layer 1 local offline validation when cloud RPC fails/times out
     handleOfflineValidatedScan(uid);
   }
@@ -853,8 +918,15 @@ void setup() {
 
   // Load saved offering, schedule & cutoff cache, and queue count from flash
   prefs.begin("class_config", true);
-  activeSubjectOfferingId = prefs.getString("active_offering", activeSubjectOfferingId);
+  String savedOffering = prefs.getString("active_offering", "");
+  // Reset if active offering was corrupted to another section
+  if (savedOffering.length() > 0 && savedOffering == String(DEFAULT_SUBJECT_OFFERING_ID)) {
+    activeSubjectOfferingId = savedOffering;
+  } else {
+    activeSubjectOfferingId = String(DEFAULT_SUBJECT_OFFERING_ID);
+  }
   cachedHasScheduleToday = prefs.getBool("has_sched", false);
+  cachedActiveDaysMask = prefs.getInt("active_days", 0);
   cachedIsHoliday = prefs.getBool("is_holiday", false);
   cachedOpenBeforeMins = prefs.getInt("open_before", 15);
   cachedStartMins = prefs.getInt("start_mins", 480);
@@ -937,20 +1009,24 @@ void setup() {
       prefs.end();
     }
     Serial.println("\n[WIFI] Connected to " + connectedSsid + "! IP: " + WiFi.localIP().toString());
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-    buzzOnce();
 
-    // Auto-detect today's active schedule offering from cloud
-    fetchActiveSchedule();
-
-    // Set flag to sync students and queue in background without freezing boot
-    if (offlineQueueCount > 0) {
-      pendingSync = true;
+    // Verify real internet connectivity (detects hotspot without data / zero load)
+    hasInternetAccess = checkInternetReachability();
+    if (hasInternetAccess) {
+      configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+      buzzOnce();
+      fetchActiveSchedule();
+      if (offlineQueueCount > 0) {
+        pendingSync = true;
+      }
+      syncRegisteredStudentsCache();
+      lastScheduleRefreshMillis = millis();
+    } else {
+      Serial.println("[WIFI] Connected to AP, but NO INTERNET access (Hotspot without data/load).");
     }
-    syncRegisteredStudentsCache();
-    lastScheduleRefreshMillis = millis();
   } else {
     wasWifiConnected = false;
+    hasInternetAccess = false;
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
     if (savedSsid.length() > 0) {
@@ -978,24 +1054,47 @@ bool toggleReconnectNetwork = false;
 
 void loop() {
   unsigned long now = millis();
-  bool isOnline = (WiFi.status() == WL_CONNECTED);
+  bool wifiConnected = (WiFi.status() == WL_CONNECTED);
 
-  // Detect WiFi state transition (Offline <-> Online) to update Idle Screen & trigger auto-sync
-  if (isOnline != wasWifiConnected) {
-    wasWifiConnected = isOnline;
-    if (isOnline) {
-      configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-      fetchActiveSchedule();
-      syncRegisteredStudentsCache();
-      if (offlineQueueCount > 0) {
-        pendingSync = true;
+  // Detect WiFi state transition (Offline <-> Online)
+  if (wifiConnected != wasWifiConnected) {
+    wasWifiConnected = wifiConnected;
+    if (wifiConnected) {
+      hasInternetAccess = checkInternetReachability();
+      if (hasInternetAccess) {
+        configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+        fetchActiveSchedule();
+        syncRegisteredStudentsCache();
+        if (offlineQueueCount > 0) {
+          pendingSync = true;
+        }
       }
+    } else {
+      hasInternetAccess = false;
     }
     showIdleScreen();
   }
 
+  // Periodic internet reachability check every 6s when connected to WiFi
+  if (wifiConnected && (now - lastInternetCheckMillis >= INTERNET_CHECK_INTERVAL_MS)) {
+    lastInternetCheckMillis = now;
+    bool reachable = checkInternetReachability();
+    if (reachable != hasInternetAccess) {
+      hasInternetAccess = reachable;
+      if (hasInternetAccess) {
+        configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+        fetchActiveSchedule();
+        syncRegisteredStudentsCache();
+        if (offlineQueueCount > 0) {
+          pendingSync = true;
+        }
+      }
+      showIdleScreen();
+    }
+  }
+
   // Non-blocking background WiFi reconnect every 15s when offline (so turning Hotspot back ON auto-connects)
-  if (!isOnline && (now - lastWifiReconnectAttemptMillis >= 15000)) {
+  if (!wifiConnected && (now - lastWifiReconnectAttemptMillis >= 15000)) {
     lastWifiReconnectAttemptMillis = now;
     prefs.begin("wifi_creds", true);
     String savedSsid = prefs.getString("ssid", "");
@@ -1014,15 +1113,15 @@ void loop() {
     }
   }
 
-  // Automatically drain offline queue when WiFi is connected
-  if (isOnline && (pendingSync || (offlineQueueCount > 0 && (now - lastSyncRetryMillis >= 10000)))) {
+  // Automatically drain offline queue when WiFi AND internet are connected
+  if (wifiConnected && hasInternetAccess && (pendingSync || (offlineQueueCount > 0 && (now - lastSyncRetryMillis >= 10000)))) {
     pendingSync = false;
     lastSyncRetryMillis = now;
     syncOfflineQueue();
   }
 
   // Periodically refresh active schedule & registered cards cache every 90 seconds when online
-  if (isOnline && (now - lastScheduleRefreshMillis >= 90000)) {
+  if (wifiConnected && hasInternetAccess && (now - lastScheduleRefreshMillis >= 90000)) {
     lastScheduleRefreshMillis = now;
     fetchActiveSchedule();
     syncRegisteredStudentsCache();

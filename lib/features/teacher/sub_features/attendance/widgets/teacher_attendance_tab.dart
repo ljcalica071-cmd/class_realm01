@@ -557,6 +557,21 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     }
   }
 
+  Future<void> _claimHardwareScannerForOffering(String subjectOfferingId) async {
+    try {
+      final teacherId = AuthRepository.instance.currentUser?.id;
+      final client = Supabase.instance.client;
+      await client.from('rfid_devices').upsert({
+        'device_uid': 'HARDWARE_ESP32',
+        'device_name': 'Classroom RFID Scanner',
+        'subject_offering_id': subjectOfferingId,
+        'assigned_teacher_id': teacherId,
+        'last_sync_at': DateTime.now().toUtc().toIso8601String(),
+        'is_active': true,
+      }, onConflict: 'device_uid');
+    } catch (_) {}
+  }
+
   void _subscribeOfferingRealtime(String subjectOfferingId) {
     if (_subscribedOfferingId == subjectOfferingId &&
         _attendanceRealtimeChannel != null) {
@@ -569,6 +584,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       final client = Supabase.instance.client;
 
       _subscribedOfferingId = subjectOfferingId;
+      unawaited(_claimHardwareScannerForOffering(subjectOfferingId));
 
       _attendanceRealtimeChannel = client
           .channel('attendance_offering_$subjectOfferingId')
