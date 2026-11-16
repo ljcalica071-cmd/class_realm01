@@ -451,7 +451,7 @@ class _SessionActivityTrackerState extends State<SessionActivityTracker>
           actions: [
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('I Understand'),
+              child: const Text('Understood'),
             ),
           ],
         );

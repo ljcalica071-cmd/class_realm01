@@ -135,6 +135,32 @@ void main() {
       expect(res, isNotNull);
       expect(res, contains('cannot exceed 60 characters'));
     });
+
+    test('rejects random gibberish and keyboard mash usernames', () {
+      expect(
+        AppValidators.validateEmail('aqduyaainqfdaikd87ysvsa73ycai@gmail.com'),
+        contains('random string'),
+      );
+      expect(
+        AppValidators.validateEmail('asdfghjkl123@gmail.com'),
+        contains('random string'),
+      );
+      expect(
+        AppValidators.validateEmail('qwertyuiop@gmail.com'),
+        contains('random string'),
+      );
+    });
+
+    test('rejects temporary and disposable email domains', () {
+      expect(
+        AppValidators.validateEmail('student@tempmail.com'),
+        contains('disposable'),
+      );
+      expect(
+        AppValidators.validateEmail('user@10minutemail.com'),
+        contains('disposable'),
+      );
+    });
   });
 
   group('Domain Deliverability Validator', () {

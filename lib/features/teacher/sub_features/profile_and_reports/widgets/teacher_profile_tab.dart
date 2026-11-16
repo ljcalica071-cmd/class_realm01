@@ -9,7 +9,12 @@ import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:flutter/services.dart';
 
 class TeacherProfileTab extends StatefulWidget {
-  const TeacherProfileTab({super.key});
+  final int initialTab;
+
+  const TeacherProfileTab({
+    super.key,
+    this.initialTab = 0,
+  });
 
   @override
   State<TeacherProfileTab> createState() => _TeacherProfileTabState();
@@ -17,6 +22,7 @@ class TeacherProfileTab extends StatefulWidget {
 
 class _TeacherProfileTabState extends State<TeacherProfileTab> {
   late UserModel _teacher;
+  late int _selectedTab = widget.initialTab;
   final bool _isEditing = false;
   final bool _isLoading = false;
 
@@ -32,6 +38,16 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
   void initState() {
     super.initState();
     _loadTeacherData();
+  }
+
+  @override
+  void didUpdateWidget(covariant TeacherProfileTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTab != widget.initialTab) {
+      setState(() {
+        _selectedTab = widget.initialTab;
+      });
+    }
   }
 
   void _loadTeacherData() {
@@ -213,31 +229,416 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
                     ),
                   ),
                   const Divider(height: 1),
-                  // Facebook-style tabs could go here (e.g., Posts, About, Friends)
-                  // For this app, we'll just show "About" selected.
                   Container(
                     constraints: const BoxConstraints(maxWidth: 1000),
                     padding: const EdgeInsets.symmetric(horizontal: 32),
                     alignment: Alignment.centerLeft,
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: theme.colorScheme.primary,
-                                width: 3,
-                              ),
-                            ),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildProfileTab(
+                            index: 0,
+                            label: 'About',
+                            icon: Icons.person_outline_rounded,
+                            theme: theme,
                           ),
-                          child: Text(
-                            'About',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.primary,
-                            ),
+                          const SizedBox(width: 8),
+                          _buildProfileTab(
+                            index: 1,
+                            label: 'Settings',
+                            icon: Icons.settings_outlined,
+                            theme: theme,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // --- TAB CONTENT (ABOUT or SETTINGS) ---
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                final isSettings = child.key == const ValueKey<int>(1);
+                final offset = Tween<Offset>(
+                  begin: isSettings ? const Offset(0.04, 0) : const Offset(-0.04, 0),
+                  end: Offset.zero,
+                ).animate(animation);
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: offset,
+                    child: child,
+                  ),
+                );
+              },
+              child: _selectedTab == 0
+                  ? _buildAboutSection(theme)
+                  : _buildSettingsSection(theme),
+            ),
+            const SizedBox(height: 60), // bottom padding
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileTab({
+    required int index,
+    required String label,
+    required IconData icon,
+    required ThemeData theme,
+  }) {
+    final isSelected = _selectedTab == index;
+    return InkWell(
+      onTap: () {
+        if (_selectedTab != index) {
+          setState(() {
+            _selectedTab = index;
+          });
+        }
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+              width: 3,
+            ),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAboutSection(ThemeData theme) {
+    return Container(
+      key: const ValueKey<int>(0),
+      constraints: const BoxConstraints(maxWidth: 1000),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isStacked = constraints.maxWidth < 750;
+
+          final basicInfoCard = Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Basic Information',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _buildInfoRow(
+                  theme,
+                  Icons.person,
+                  'First Name',
+                  _teacher.firstName ?? '',
+                ),
+                if (_teacher.middleName != null &&
+                    _teacher.middleName!.isNotEmpty)
+                  _buildInfoRow(
+                    theme,
+                    Icons.person_outline,
+                    'Middle Initial',
+                    AppValidators.formatMiddleInitial(
+                      _teacher.middleName,
+                    ),
+                  ),
+                _buildInfoRow(
+                  theme,
+                  Icons.person,
+                  'Last Name',
+                  _teacher.lastName ?? '',
+                ),
+                _buildInfoRow(
+                  theme,
+                  Icons.cake,
+                  'Birthday',
+                  _teacher.birthday != null
+                      ? '${_teacher.birthday!.year}-${_teacher.birthday!.month.toString().padLeft(2, '0')}-${_teacher.birthday!.day.toString().padLeft(2, '0')}'
+                      : 'Not provided',
+                ),
+                _buildInfoRow(
+                  theme,
+                  Icons.timelapse,
+                  'Age',
+                  _teacher.birthday != null
+                      ? '${_calculateAge(_teacher.birthday)} years old'
+                      : 'Unknown',
+                ),
+                _buildInfoRow(
+                  theme,
+                  Icons.wc,
+                  'Gender',
+                  _teacher.gender ?? 'Not specified',
+                ),
+              ],
+            ),
+          );
+
+          final contactInfoCard = Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Contact & Professional Info',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Email is always visible and uneditable here
+                _buildInfoRow(
+                  theme,
+                  Icons.email,
+                  'Email',
+                  _teacher.email,
+                ),
+                const Divider(height: 32),
+
+                // Optional Fields
+                if (_isEditing) ...[
+                  _buildEditField(
+                    theme,
+                    Icons.science,
+                    'Subject Specialization',
+                    _subjectSpecializationCtrl,
+                    'e.g. General Mathematics',
+                  ),
+                  const SizedBox(height: 24),
+                  _buildEditField(
+                    theme,
+                    Icons.schedule,
+                    'Consultation Hours',
+                    _consultationHoursCtrl,
+                    'e.g. Mon & Wed 3:00 PM - 5:00 PM',
+                  ),
+                  const SizedBox(height: 24),
+                  _buildEditFieldWithToggle(
+                    theme,
+                    Icons.facebook,
+                    'Facebook Profile Link',
+                    _facebookLinkCtrl,
+                    'e.g. https://facebook.com/karen.gonzaga',
+                    _isFacebookPublic,
+                    (val) => setState(
+                      () => _isFacebookPublic = val ?? false,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildEditFieldWithToggle(
+                    theme,
+                    Icons.phone,
+                    'Phone Number',
+                    _phoneCtrl,
+                    'e.g. 09123456789',
+                    _isPhonePublic,
+                    (val) => setState(
+                      () => _isPhonePublic = val ?? false,
+                    ),
+                  ),
+                ] else ...[
+                  _buildInfoRow(
+                    theme,
+                    Icons.science,
+                    'Subject Specialization',
+                    _teacher.subjectSpecialization != null &&
+                            _teacher.subjectSpecialization!.isNotEmpty
+                        ? _teacher.subjectSpecialization!
+                        : 'Not specified',
+                  ),
+                  _buildInfoRow(
+                    theme,
+                    Icons.schedule,
+                    'Consultation Hours',
+                    _teacher.consultationHours != null &&
+                            _teacher.consultationHours!.isNotEmpty
+                        ? _teacher.consultationHours!
+                        : 'Not specified',
+                  ),
+                  _buildInfoRow(
+                    theme,
+                    Icons.facebook,
+                    'Facebook',
+                    _teacher.facebookLink != null &&
+                            _teacher.facebookLink!.isNotEmpty
+                        ? _teacher.facebookLink!
+                        : 'Not linked',
+                    privacyBadge: _buildPrivacyBadge(
+                      theme,
+                      _teacher.isFacebookPublic,
+                    ),
+                  ),
+                  _buildInfoRow(
+                    theme,
+                    Icons.phone,
+                    'Phone',
+                    _teacher.contactNumber != null &&
+                            _teacher.contactNumber!.isNotEmpty
+                        ? _teacher.contactNumber!
+                        : 'Not provided',
+                    privacyBadge: _buildPrivacyBadge(
+                      theme,
+                      _teacher.isPhonePublic,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+
+          if (isStacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                basicInfoCard,
+                const SizedBox(height: 24),
+                contactInfoCard,
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 1, child: basicInfoCard),
+              const SizedBox(width: 24),
+              Expanded(flex: 2, child: contactInfoCard),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSettingsSection(ThemeData theme) {
+    return Container(
+      key: const ValueKey<int>(1),
+      constraints: const BoxConstraints(maxWidth: 1000),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.settings_suggest_rounded,
+                      color: theme.colorScheme.primary,
+                      size: 26,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Settings & Privacy',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Manage your account security, passwords, and view official ClassRealm legal policies.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                           ),
                         ),
                       ],
@@ -246,224 +647,8 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
                 ],
               ),
             ),
-
-            // --- ABOUT SECTION ---
-            Container(
-              constraints: const BoxConstraints(maxWidth: 1000),
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Left side (Basic Info)
-                  Expanded(
-                    flex: 1,
-                    child: Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Basic Information',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          _buildInfoRow(
-                            theme,
-                            Icons.person,
-                            'First Name',
-                            _teacher.firstName ?? '',
-                          ),
-                          if (_teacher.middleName != null &&
-                              _teacher.middleName!.isNotEmpty)
-                            _buildInfoRow(
-                              theme,
-                              Icons.person_outline,
-                              'Middle Initial',
-                              AppValidators.formatMiddleInitial(
-                                _teacher.middleName,
-                              ),
-                            ),
-                          _buildInfoRow(
-                            theme,
-                            Icons.person,
-                            'Last Name',
-                            _teacher.lastName ?? '',
-                          ),
-                          _buildInfoRow(
-                            theme,
-                            Icons.cake,
-                            'Birthday',
-                            _teacher.birthday != null
-                                ? '${_teacher.birthday!.year}-${_teacher.birthday!.month.toString().padLeft(2, '0')}-${_teacher.birthday!.day.toString().padLeft(2, '0')}'
-                                : 'Not provided',
-                          ),
-                          _buildInfoRow(
-                            theme,
-                            Icons.timelapse,
-                            'Age',
-                            _teacher.birthday != null
-                                ? '${_calculateAge(_teacher.birthday)} years old'
-                                : 'Unknown',
-                          ),
-                          _buildInfoRow(
-                            theme,
-                            Icons.wc,
-                            'Gender',
-                            _teacher.gender ?? 'Not specified',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 24),
-
-                  // Right side (Contact & Optional Info)
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Contact & Professional Info',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Email is always visible and uneditable here
-                          _buildInfoRow(
-                            theme,
-                            Icons.email,
-                            'Email',
-                            _teacher.email,
-                          ),
-                          const Divider(height: 32),
-
-                          // Optional Fields
-                          if (_isEditing) ...[
-                            _buildEditField(
-                              theme,
-                              Icons.science,
-                              'Subject Specialization',
-                              _subjectSpecializationCtrl,
-                              'e.g. General Mathematics',
-                            ),
-                            const SizedBox(height: 24),
-                            _buildEditField(
-                              theme,
-                              Icons.schedule,
-                              'Consultation Hours',
-                              _consultationHoursCtrl,
-                              'e.g. Mon & Wed 3:00 PM - 5:00 PM',
-                            ),
-                            const SizedBox(height: 24),
-                            _buildEditFieldWithToggle(
-                              theme,
-                              Icons.facebook,
-                              'Facebook Profile Link',
-                              _facebookLinkCtrl,
-                              'e.g. https://facebook.com/karen.gonzaga',
-                              _isFacebookPublic,
-                              (val) => setState(
-                                () => _isFacebookPublic = val ?? false,
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            _buildEditFieldWithToggle(
-                              theme,
-                              Icons.phone,
-                              'Phone Number',
-                              _phoneCtrl,
-                              'e.g. 09123456789',
-                              _isPhonePublic,
-                              (val) =>
-                                  setState(() => _isPhonePublic = val ?? false),
-                            ),
-                          ] else ...[
-                            _buildInfoRow(
-                              theme,
-                              Icons.science,
-                              'Subject Specialization',
-                              _teacher.subjectSpecialization != null &&
-                                      _teacher.subjectSpecialization!.isNotEmpty
-                                  ? _teacher.subjectSpecialization!
-                                  : 'Not specified',
-                            ),
-                            _buildInfoRow(
-                              theme,
-                              Icons.schedule,
-                              'Consultation Hours',
-                              _teacher.consultationHours != null &&
-                                      _teacher.consultationHours!.isNotEmpty
-                                  ? _teacher.consultationHours!
-                                  : 'Not specified',
-                            ),
-                            _buildInfoRow(
-                              theme,
-                              Icons.facebook,
-                              'Facebook',
-                              _teacher.facebookLink != null &&
-                                      _teacher.facebookLink!.isNotEmpty
-                                  ? _teacher.facebookLink!
-                                  : 'Not linked',
-                              privacyBadge: _buildPrivacyBadge(
-                                theme,
-                                _teacher.isFacebookPublic,
-                              ),
-                            ),
-                            _buildInfoRow(
-                              theme,
-                              Icons.phone,
-                              'Phone',
-                              _teacher.contactNumber != null &&
-                                      _teacher.contactNumber!.isNotEmpty
-                                  ? _teacher.contactNumber!
-                                  : 'Not provided',
-                              privacyBadge: _buildPrivacyBadge(
-                                theme,
-                                _teacher.isPhonePublic,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 60), // bottom padding
+            const SizedBox(height: 24),
+            const PortalSettingsContent(portalLabel: 'Teacher'),
           ],
         ),
       ),

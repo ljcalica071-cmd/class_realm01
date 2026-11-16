@@ -44,6 +44,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
   bool _passwordsMatch = false;
   UserRole? _userRole;
   String? _displayName;
+  String? _userEmail;
 
   @override
   void initState() {
@@ -52,6 +53,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
 
     final activeUser = AuthRepository.instance.currentUser;
     _userRole = activeUser?.role;
+    _userEmail = activeUser?.email;
     _displayName = activeUser == null
         ? 'Faculty'
         : activeUser.role == UserRole.teacher
@@ -435,6 +437,77 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
     );
   }
 
+  Widget _buildStudentEmailNotice(ThemeData theme) {
+    final email = _userEmail ?? 'your registered email';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.22),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.mark_email_read_outlined,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Student Email Verification',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Your account is linked to: $email\nUpon setting your new password, a 6-digit confirmation code will be sent to this email to verify and activate your student portal.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.45,
+              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.85),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 14,
+                color: theme.hintColor,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Mali o hindi mo ma-access ang email na ito? Lumapit sa iyong Subject Teacher para i-update ang iyong email sa ClassRealm bago magpatuloy.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: theme.hintColor,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -460,6 +533,10 @@ class _FirstLoginScreenState extends State<FirstLoginScreen>
           if (_userRole == UserRole.parent) ...[
             _buildParentIdentityVerificationSection(theme),
             const SizedBox(height: 20),
+          ],
+          if (_userRole == UserRole.student) ...[
+            _buildStudentEmailNotice(theme),
+            const SizedBox(height: 18),
           ],
 
           // New Password

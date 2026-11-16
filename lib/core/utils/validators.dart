@@ -279,8 +279,8 @@ class AppValidators {
         lower == 'null') {
       return null;
     }
-    // Accept 1 letter with/without dot, OR full middle name (letters, hyphens, spaces, periods)
-    if (!RegExp(r"^[a-zA-ZñÑ\s\-\.]+$").hasMatch(trimmed)) {
+    // Accept 1 letter with or without period (e.g. 'D' or 'D.')
+    if (!RegExp(r"^[a-zA-ZñÑ]\.?$").hasMatch(trimmed)) {
       return invalidMiddleInitialMessage;
     }
     return null;
@@ -361,6 +361,11 @@ class AppValidators {
         localPart.endsWith('.') ||
         localPart.contains('..')) {
       return 'Invalid email username format.';
+    }
+
+    // Prevent keyboard mash or random gibberish usernames (e.g. aqduyaainqfdaikd87ysvsa73ycai)
+    if (_isGibberishUsername(localPart)) {
+      return 'Email username appears to be a random string. Please enter a valid email.';
     }
 
     // Domain part must contain at least one dot separating domain and TLD.
@@ -466,6 +471,25 @@ class AppValidators {
       }
     }
 
+    // Disposable or temporary email domains check
+    const disposableDomains = {
+      'tempmail.com',
+      '10minutemail.com',
+      'mailinator.com',
+      'guerrillamail.com',
+      'trashmail.com',
+      'yopmail.com',
+      'dispostable.com',
+      'sharklasers.com',
+      'getairmail.com',
+      'fakeinbox.com',
+      'throwawaymail.com',
+      'temp-mail.org',
+    };
+    if (disposableDomains.contains(domainPart)) {
+      return 'Temporary or disposable email addresses are not allowed.';
+    }
+
     // Full standard RFC 5322 regex match
     final emailRegex = RegExp(
       r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$",
@@ -501,6 +525,59 @@ class AppValidators {
       }
     }
     return v1[t.length];
+  }
+
+  /// Detects random keyboard mash, high-entropy random strings, or unnatural consonant clusters
+  static bool _isGibberishUsername(String localPart) {
+    final lower = localPart.toLowerCase();
+
+    // 1. Keyboard walks / mash
+    const keyboardPatterns = [
+      'qwerty',
+      'asdfgh',
+      'zxcvbn',
+      'qwert',
+      'asdfg',
+      'zxcvb',
+      '12345',
+      '23456',
+      '34567',
+      '45678',
+      '56789',
+      '67890',
+      'poiuy',
+      'lkjhg',
+      'mnbvc',
+    ];
+    for (final pat in keyboardPatterns) {
+      if (lower.contains(pat)) return true;
+    }
+
+    // 2. 6 or more consecutive consonants (without vowels or separators)
+    if (RegExp(r'[bcdfghjklmnpqrstvwxyz]{6,}').hasMatch(lower)) return true;
+
+    // 3. Repeated character sequences like 'aaaaa', 'abababab'
+    if (RegExp(r'(.)\1{4,}').hasMatch(lower)) return true;
+    if (RegExp(r'(.{2,3})\1{3,}').hasMatch(lower)) return true;
+
+    // 4. Excessive length with erratic mix of random letters and numbers (e.g. aqduyaainqfdaikd87ysvsa73ycai)
+    if (lower.length >= 22 &&
+        !lower.contains('.') &&
+        !lower.contains('_') &&
+        !lower.contains('-')) {
+      int transitions = 0;
+      bool wasDigit = RegExp(r'[0-9]').hasMatch(lower[0]);
+      for (int i = 1; i < lower.length; i++) {
+        bool isDigit = RegExp(r'[0-9]').hasMatch(lower[i]);
+        if (isDigit != wasDigit) {
+          transitions++;
+          wasDigit = isDigit;
+        }
+      }
+      if (transitions >= 3) return true;
+    }
+
+    return false;
   }
 
   /// Real-time domain deliverability check using DNS-over-HTTPS (DoH).

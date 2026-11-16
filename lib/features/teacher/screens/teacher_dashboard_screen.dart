@@ -591,7 +591,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   _buildNavItem(14, 'My Schedule', LucideIcons.calendar, theme),
                   _buildNavItem(15, 'Notifications', LucideIcons.bell, theme),
                   _buildNavItem(16, 'Profile', LucideIcons.user, theme),
-                  _buildNavItem(10, 'Settings', LucideIcons.settings, theme),
                 ],
               ),
             ),

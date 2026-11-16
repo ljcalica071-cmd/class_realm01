@@ -4245,54 +4245,64 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
       child: Tooltip(
         message: tooltipMessage,
         child: InkWell(
-          onTap: isDisabled ? null : _exportEcr,
+          mouseCursor: isDisabled
+              ? SystemMouseCursors.forbidden
+              : SystemMouseCursors.click,
+          onTap: isDisabled
+              ? () {
+                  AppTopToast.warning(context, tooltipMessage);
+                }
+              : _exportEcr,
           borderRadius: BorderRadius.circular(6),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: effectiveBg,
-              borderRadius: BorderRadius.circular(6),
-              border: effectiveBorder,
-              boxShadow: (!isDisabled && !_isExportingEcr)
-                  ? [
-                      BoxShadow(
-                        color: (isDark ? const Color(0xFF34D399) : ecrGreen)
-                            .withValues(alpha: 0.15),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1.5),
+          child: Opacity(
+            opacity: isDisabled ? 0.45 : 1.0,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: effectiveBg,
+                borderRadius: BorderRadius.circular(6),
+                border: effectiveBorder,
+                boxShadow: (!isDisabled && !_isExportingEcr)
+                    ? [
+                        BoxShadow(
+                          color: (isDark ? const Color(0xFF34D399) : ecrGreen)
+                              .withValues(alpha: 0.15),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1.5),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isExportingEcr)
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(effectiveFg),
                       ),
-                    ]
-                  : null,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_isExportingEcr)
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(effectiveFg),
+                    )
+                  else
+                    Icon(
+                      LucideIcons.fileSpreadsheet,
+                      size: 14,
+                      color: effectiveFg,
                     ),
-                  )
-                else
-                  Icon(
-                    LucideIcons.fileSpreadsheet,
-                    size: 14,
-                    color: effectiveFg,
+                  const SizedBox(width: 6),
+                  Text(
+                    _isExportingEcr ? 'Exporting...' : 'Export Excel',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: effectiveFg,
+                    ),
                   ),
-                const SizedBox(width: 6),
-                Text(
-                  _isExportingEcr ? 'Exporting...' : 'Export Excel',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: effectiveFg,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -4345,10 +4355,12 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
     final Border? effectiveBorder;
 
     if (isDisabled) {
-      effectiveFg = isDark ? Colors.white60 : const Color(0xFF475569);
-      effectiveBg = isDark ? Colors.white10 : const Color(0xFFF1F5F9);
+      effectiveFg = isDark ? Colors.white30 : const Color(0xFF94A3B8);
+      effectiveBg = isDark
+          ? Colors.white.withValues(alpha: 0.04)
+          : const Color(0xFFF1F5F9).withValues(alpha: 0.6);
       effectiveBorder = Border.all(
-        color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+        color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
       );
     } else if (isPublished) {
       effectiveFg = accentColor;
@@ -4364,7 +4376,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
     }
 
     final String tooltipMessage;
-    if (!canPublish) {
+    if (_students.isEmpty) {
+      tooltipMessage =
+          'Cannot publish: No enrolled students found for this subject and section.';
+    } else if (!canPublish) {
       tooltipMessage = isTermGrade
           ? 'Cannot publish: No computed grades available yet for Term $_selectedTerm.'
           : 'Cannot publish: No computed final grades available yet.';
@@ -4384,49 +4399,59 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
       child: Tooltip(
         message: tooltipMessage,
         child: InkWell(
-          onTap: isDisabled ? null : _togglePublish,
+          mouseCursor: isDisabled
+              ? SystemMouseCursors.forbidden
+              : SystemMouseCursors.click,
+          onTap: isDisabled
+              ? () {
+                  AppTopToast.warning(context, tooltipMessage);
+                }
+              : _togglePublish,
           borderRadius: BorderRadius.circular(6),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: effectiveBg,
-              borderRadius: BorderRadius.circular(6),
-              border: effectiveBorder,
-              boxShadow: (!isDisabled && !isPublished)
-                  ? [
-                      BoxShadow(
-                        color: accentColor.withValues(alpha: 0.25),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1.5),
+          child: Opacity(
+            opacity: isDisabled ? 0.45 : 1.0,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: effectiveBg,
+                borderRadius: BorderRadius.circular(6),
+                border: effectiveBorder,
+                boxShadow: (!isDisabled && !isPublished)
+                    ? [
+                        BoxShadow(
+                          color: accentColor.withValues(alpha: 0.25),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1.5),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isPublishing)
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(effectiveFg),
                       ),
-                    ]
-                  : null,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_isPublishing)
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(effectiveFg),
+                    )
+                  else
+                    Icon(icon, size: 13, color: effectiveFg),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: effectiveFg,
                     ),
-                  )
-                else
-                  Icon(icon, size: 13, color: effectiveFg),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: effectiveFg,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -384,11 +384,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (e.isAlreadyLoggedInElsewhere) {
           _passwordController.clear();
           _passwordFocusNode.unfocus();
-          AppModals.showErrorDialog(
-            context: context,
-            title: 'Account Active on Another Device',
-            message: e.message,
-          );
+          _showAccountActiveElsewhereDialog(e.message);
           return;
         }
         if (e.isMaintenanceBlocked) {
@@ -583,6 +579,85 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showAccountActiveElsewhereDialog(String message) {
+    if (!mounted) return;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.error_outline_rounded,
+                  color: Color(0xFFDC2626),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Account Active on Another Device',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This account is currently signed in on another device or browser.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    height: 1.45,
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'To prevent data conflicts and protect active work, simultaneous logins are not allowed. Please log out from your other device first before signing in here.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    height: 1.45,
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.85)
+                        : const Color(0xFF475569),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Understood'),
+            ),
+          ],
+        );
+      },
     );
   }
 
