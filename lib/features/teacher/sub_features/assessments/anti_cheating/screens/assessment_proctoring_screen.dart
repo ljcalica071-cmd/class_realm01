@@ -43,6 +43,7 @@ class AssessmentProctoringScreen extends StatefulWidget {
 
 class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
     with SingleTickerProviderStateMixin {
+  static final Map<String, List<StudentLiveProctorState>> _staticRosterCache = {};
   late final TeacherProctorChannelService _proctorService;
   StreamSubscription<List<StudentLiveProctorState>>? _proctorSub;
   late final TabController _tabController;
@@ -80,6 +81,11 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
   @override
   void initState() {
     super.initState();
+    final cachedRoster = _staticRosterCache[widget.assessment.id];
+    if (cachedRoster != null && cachedRoster.isNotEmpty) {
+      _rosterStudents = List.of(cachedRoster);
+      _isLoading = false;
+    }
     _resultsReleased = widget.assessment.resultsReleased;
 
     final initialPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
@@ -166,11 +172,22 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         _rosterStudents = _rosterStudents.map((st) {
           final live = map[st.studentId];
           if (live != null) {
+            final resetTs = _localResetTimestamps[st.studentId];
+            var resolvedStatus = live.status;
+            if (resetTs != null) {
+              final lastActive = live.lastActiveAt;
+              if (lastActive != null && lastActive.toUtc().isAfter(resetTs)) {
+                _localResetTimestamps.remove(st.studentId);
+              } else if (live.status != ProctorSessionStatus.submitted) {
+                resolvedStatus = ProctorSessionStatus.retakeRequested;
+              }
+            }
+
             final shouldKeepScore =
-                live.status == ProctorSessionStatus.submitted &&
+                resolvedStatus == ProctorSessionStatus.submitted &&
                 live.score != null;
             return st.copyWith(
-              status: live.status,
+              status: resolvedStatus,
               violationCount: live.violationCount,
               violations: live.violations,
               lastActiveAt: live.lastActiveAt,
@@ -187,6 +204,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
           }
           return st;
         }).toList();
+        _staticRosterCache[widget.assessment.id] = _rosterStudents;
       });
     });
 
@@ -771,10 +789,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
                 attempt = null;
               }
             } else if (attStatus == 'in_progress') {
-              if (attStartedAt != null &&
-                  attStartedAt.isBefore(
-                    resetAt.subtract(const Duration(seconds: 2)),
-                  )) {
+              if (attStartedAt == null || !attStartedAt.isAfter(resetAt)) {
                 attempt = null;
               }
             }
@@ -809,9 +824,14 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
             latestStart != null &&
             (resetAt == null || latestStart.isAfter(resetAt));
 
+        if (startedAfterReset) {
+          _localResetTimestamps.remove(sId);
+        }
+        final isLocallyReset = _localResetTimestamps.containsKey(sId);
+
         final isDisqualifiedInDb = rawStatus == 'disqualified';
         final isActivelyInProgress =
-            rawStatus == 'in_progress' ||
+            (attempt != null && rawStatus == 'in_progress') ||
             (startedAfterReset &&
                 rawStatus != 'submitted' &&
                 rawStatus != 'auto_submitted' &&
@@ -844,12 +864,13 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
             isActivelyInProgress ||
             isCompletedInDb ||
             isDisqualifiedInDb ||
-            resetAt != null;
+            resetAt != null ||
+            isLocallyReset;
         final isMissing = pastLateCutoff && !hasStarted;
 
         // Entry allowed check: default false if past 15m and never started, unless overridden or reset
         bool isAllowed;
-        if (resetAt != null) {
+        if (resetAt != null || isLocallyReset) {
           isAllowed = overridesMap[sId] ?? true;
         } else if (overridesMap.containsKey(sId)) {
           isAllowed = overridesMap[sId]!;
@@ -860,11 +881,11 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         ProctorSessionStatus status;
         if (isDisqualifiedInDb) {
           status = ProctorSessionStatus.kicked;
-        } else if (isActivelyInProgress) {
+        } else if (isActivelyInProgress && !isLocallyReset) {
           status = ProctorSessionStatus.inProgress;
         } else if (isCompletedInDb) {
           status = ProctorSessionStatus.submitted;
-        } else if (resetAt != null) {
+        } else if (resetAt != null || isLocallyReset) {
           status = ProctorSessionStatus.retakeRequested;
         } else {
           status = ProctorSessionStatus.notStarted;
@@ -943,13 +964,19 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         for (int i = 0; i < parsedList.length; i++) {
           final live = liveMap[parsedList[i].studentId];
           if (live != null) {
+            final isLocallyReset =
+                _localResetTimestamps.containsKey(parsedList[i].studentId);
+            final mergedStatus = (isLocallyReset &&
+                    live.status != ProctorSessionStatus.submitted)
+                ? ProctorSessionStatus.retakeRequested
+                : live.status;
             final shouldKeepScore =
-                live.status == ProctorSessionStatus.submitted;
+                mergedStatus == ProctorSessionStatus.submitted;
             final mergedScore = shouldKeepScore
                 ? (parsedList[i].score ?? live.score)
                 : null;
             parsedList[i] = parsedList[i].copyWith(
-              status: live.status,
+              status: mergedStatus,
               violationCount: live.violationCount,
               violations: live.violations,
               score: mergedScore,
@@ -960,7 +987,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
                   live.currentQuestionNumber ??
                   parsedList[i].currentQuestionNumber,
               isMissing:
-                  live.status == ProctorSessionStatus.notStarted &&
+                  mergedStatus == ProctorSessionStatus.notStarted &&
                   pastLateCutoff &&
                   !live.isEntryAllowed,
             );
@@ -976,6 +1003,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
                 parsedList.any(
                   (s) => s.status == ProctorSessionStatus.submitted,
                 ));
+        _staticRosterCache[widget.assessment.id] = parsedList;
         setState(() {
           _rosterStudents = parsedList;
           _isLoading = false;
@@ -1285,6 +1313,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
             isEntryAllowed: true,
             isMissing: false,
           );
+          _staticRosterCache[widget.assessment.id] = _rosterStudents;
         }
       });
       if (mounted) {
@@ -1296,7 +1325,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
       }
       await _proctorService.authorizeRetake(student.studentId);
       if (mounted) {
-        unawaited(_loadLearners(silent: true, forceFullRefresh: true));
+        unawaited(_loadLearners(silent: true));
       }
     }
   }
@@ -2088,7 +2117,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
 
           // ── ACTIVE TAB CONTENT ──
           if (_activeTab == ProctorViewTab.liveMonitor)
-            (_isLoading
+            ((_isLoading && _rosterStudents.isEmpty)
                 ? _buildProctoringSkeleton(theme, isDark)
                 : ProctoringRosterTable(
                     students: _rosterStudents,

@@ -639,7 +639,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'To prevent data conflicts and protect active work, simultaneous logins are not allowed. Please log out from your other device first before signing in here.',
+                  'To prevent data conflicts and protect active work, simultaneous logins are not allowed. Please log out from your other device first, or wait about 30 seconds if you recently closed the app.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     height: 1.45,
                     color: isDark

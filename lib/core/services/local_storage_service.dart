@@ -657,6 +657,20 @@ class LocalStorageService {
     await prefs.remove('session.last_interaction');
   }
 
+  static Future<void> saveLastTerminatedSessionId(String sessionId) async {
+    final prefs = await _prefs;
+    await prefs.setString('session.last_terminated_id', sessionId);
+  }
+
+  static String? getLastTerminatedSessionId() {
+    return _preferences?.getString('session.last_terminated_id');
+  }
+
+  static Future<void> clearLastTerminatedSessionId() async {
+    final prefs = await _prefs;
+    await prefs.remove('session.last_terminated_id');
+  }
+
   static Future<void> savePendingHeartbeat(
     String sessionId,
     DateTime dt,

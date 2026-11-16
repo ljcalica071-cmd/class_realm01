@@ -52,9 +52,7 @@ class TeacherProctorChannelService {
           existing?.status ??
           ProctorSessionStatus.notStarted;
 
-      if (isRecentlyReset &&
-          (resolvedStatus == ProctorSessionStatus.submitted ||
-              resolvedStatus == ProctorSessionStatus.notStarted)) {
+      if (isRecentlyReset) {
         resolvedStatus = ProctorSessionStatus.retakeRequested;
       }
 
@@ -246,19 +244,47 @@ class TeacherProctorChannelService {
     final current = _studentStates[studentId];
     if (current == null) return;
 
+    final resetAt = _studentResetAt[studentId];
+    final startedAtStr = record['started_at']?.toString();
+    final startedAt = startedAtStr != null
+        ? DateTime.tryParse(startedAtStr)?.toUtc()
+        : null;
+
     final rawStatus = record['status']?.toString().toLowerCase() ?? '';
     final scoreVal = (record['score_earned'] as num?)?.toDouble();
     final qIndex = (record['current_question_index'] as num?)?.toInt();
 
     if (rawStatus == 'in_progress') {
+      if (resetAt != null && (startedAt == null || !startedAt.isAfter(resetAt))) {
+        // Discard stale pre-reset attempt record
+        return;
+      }
+      if (resetAt != null && startedAt != null && startedAt.isAfter(resetAt)) {
+        _studentResetAt.remove(studentId);
+      }
       _studentStates[studentId] = current.copyWith(
         status: ProctorSessionStatus.inProgress,
         clearScore: true,
         isMissing: false,
-        currentQuestionNumber: qIndex != null ? qIndex + 1 : current.currentQuestionNumber,
+        currentQuestionNumber:
+            qIndex != null ? qIndex + 1 : current.currentQuestionNumber,
         lastActiveAt: DateTime.now(),
       );
     } else if (rawStatus == 'submitted' || rawStatus == 'auto_submitted') {
+      final submittedAtStr = record['submitted_at']?.toString();
+      final submittedAt = submittedAtStr != null
+          ? DateTime.tryParse(submittedAtStr)?.toUtc()
+          : null;
+      if (resetAt != null &&
+          (submittedAt == null || !submittedAt.isAfter(resetAt))) {
+        // Discard stale pre-reset submission record
+        return;
+      }
+      if (resetAt != null &&
+          submittedAt != null &&
+          submittedAt.isAfter(resetAt)) {
+        _studentResetAt.remove(studentId);
+      }
       _studentStates[studentId] = current.copyWith(
         status: ProctorSessionStatus.submitted,
         score: scoreVal ?? current.score,
@@ -302,6 +328,14 @@ class TeacherProctorChannelService {
     final timestamp = parsedUtc?.toLocal() ?? DateTime.now();
 
     if (eventType == 'session_started') {
+      final resetAt = _studentResetAt[studentId];
+      if (resetAt != null && parsedUtc != null && !parsedUtc.isAfter(resetAt)) {
+        // Stale session_started log from before reset
+        return;
+      }
+      if (resetAt != null && parsedUtc != null && parsedUtc.isAfter(resetAt)) {
+        _studentResetAt.remove(studentId);
+      }
       registerStudentStarted(
         studentId,
         forceRestart: true,

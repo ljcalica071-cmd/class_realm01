@@ -81,6 +81,14 @@ class AuthRepository {
 
   firebase.FirebaseAuth get _firebaseAuth => firebase.FirebaseAuth.instance;
   SupabaseClient get _supabaseClient => Supabase.instance.client;
+  bool get _isSupabaseInitialized {
+    try {
+      Supabase.instance.client;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   custom.UserModel? _currentUser;
   custom.UserModel? get currentUser =>
@@ -120,6 +128,7 @@ class AuthRepository {
     DateTime? lastInteraction,
     required String reason,
   }) async {
+    if (!_isSupabaseInitialized) return;
     try {
       final nowUtc = DateTime.now().toUtc();
       final cleanReason = reason == 'inactivity' ? 'inactivity' : 'terminated';
@@ -220,6 +229,11 @@ class AuthRepository {
     // Do NOT auto-login from localStorage. Terminate leftover session and require fresh login.
     if (!isWarmSession()) {
       if (oldSessionId != null || cached != null) {
+        if (oldSessionId != null) {
+          unawaited(
+            LocalStorageService.saveLastTerminatedSessionId(oldSessionId),
+          );
+        }
         unawaited(
           _closeLeftoverSessionAsync(
             sessionId: oldSessionId,
@@ -436,12 +450,13 @@ class AuthRepository {
           throw const LoginAttemptException(
             'This account is currently signed in on another device or browser.\n\n'
             'To prevent data conflicts and protect active work, simultaneous logins are not allowed. '
-            'Please log out from your other device first before signing in here.',
+            'Please log out from your other device first, or wait about 30 seconds if you recently closed the app.',
             isAlreadyLoggedInElsewhere: true,
           );
         }
 
         // Authentication succeeded! Reset failed attempt counters on this device
+        unawaited(LocalStorageService.clearLastTerminatedSessionId());
         unawaited(
           RateLimitService.instance.clearRateLimit(
             feature: 'login_account',
@@ -552,6 +567,11 @@ class AuthRepository {
     // terminate any leftover session and require logging in again.
     if (!isWarmSession() && _currentUser == null) {
       if (oldSessionId != null || cached != null) {
+        if (oldSessionId != null) {
+          unawaited(
+            LocalStorageService.saveLastTerminatedSessionId(oldSessionId),
+          );
+        }
         unawaited(
           _closeLeftoverSessionAsync(
             sessionId: oldSessionId,
@@ -983,11 +1003,12 @@ class AuthRepository {
   // =========================================================================
 
   /// Checks whether [userId] currently has an active, recently heartbeating
-  /// session on another device/browser (last_active_at within 2 minutes).
+  /// session on another device/browser (last_active_at within 30 seconds).
   Future<Map<String, dynamic>?> _findActiveOtherSession({
     required String userId,
     String? currentLocalSessionId,
   }) async {
+    if (!_isSupabaseInitialized) return null;
     try {
       final rows = await _supabaseClient
           .from('user_session_logs')
@@ -997,17 +1018,22 @@ class AuthRepository {
           .order('last_active_at', ascending: false);
 
       final nowUtc = DateTime.now().toUtc();
+      final lastTerminatedLocalId =
+          LocalStorageService.getLastTerminatedSessionId();
       for (final row in (rows as List)) {
         final rowMap = Map<String, dynamic>.from(row as Map);
         final rowId = rowMap['id']?.toString();
         if (currentLocalSessionId != null && rowId == currentLocalSessionId) {
           continue;
         }
+        if (lastTerminatedLocalId != null && rowId == lastTerminatedLocalId) {
+          continue;
+        }
         final lastActiveAt = DateTime.tryParse(
           rowMap['last_active_at']?.toString() ?? '',
         )?.toUtc();
         if (lastActiveAt != null &&
-            nowUtc.difference(lastActiveAt).inSeconds <= 120) {
+            nowUtc.difference(lastActiveAt).inSeconds <= 30) {
           return rowMap;
         }
       }

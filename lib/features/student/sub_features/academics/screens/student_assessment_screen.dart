@@ -76,6 +76,15 @@ class StudentAssessmentScreen extends StatefulWidget {
               if (overrideLog?['event_type'] == 'entry_disallowed') {
                 return null;
               }
+              final resetLog = await client
+                  .from('anti_cheating_logs')
+                  .select('event_type')
+                  .eq('assessment_id', model.id)
+                  .eq('student_id', studentId)
+                  .inFilter('event_type', ['reset', 'retake_authorized'])
+                  .order('event_at', ascending: false)
+                  .limit(1)
+                  .maybeSingle();
               final existingAtt = await client
                   .from('assessment_attempts')
                   .select('status')
@@ -83,12 +92,17 @@ class StudentAssessmentScreen extends StatefulWidget {
                   .eq('student_id', studentId)
                   .maybeSingle();
               final attSt = existingAtt?['status']?.toString().toLowerCase();
-              if (attSt == 'submitted' ||
+              if (resetLog != null ||
+                  attSt == null ||
+                  attSt == 'submitted' ||
                   attSt == 'auto_submitted' ||
                   attSt == 'cancelled' ||
                   attSt == 'disqualified') {
                 prefs.remove(pointerKey);
                 AppDataCache.instance.invalidate(pointerKey);
+                final vKey = vaultKeyFor(model.id, studentId);
+                prefs.remove(vKey);
+                AppDataCache.instance.invalidate(vKey);
                 return null;
               }
             } catch (_) {}
@@ -484,6 +498,31 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       );
       final persisted = prefs.getString(vaultKey);
       if (persisted != null && persisted.isNotEmpty) {
+        if (_isSupabaseReady) {
+          try {
+            final resetLog = await SupabaseService().client
+                .from('anti_cheating_logs')
+                .select('event_at')
+                .eq('assessment_id', widget.assessment.id)
+                .eq('student_id', studentId)
+                .inFilter('event_type', ['reset', 'retake_authorized'])
+                .order('event_at', ascending: false)
+                .limit(1)
+                .maybeSingle();
+            if (resetLog != null) {
+              final evAtStr = resetLog['event_at']?.toString();
+              final evAt = evAtStr != null ? DateTime.tryParse(evAtStr)?.toUtc() : null;
+              final decoded = jsonDecode(persisted) as Map<String, dynamic>? ?? {};
+              final savedAtStr = decoded['savedAt']?.toString();
+              final savedAt = savedAtStr != null ? DateTime.tryParse(savedAtStr)?.toUtc() : null;
+              if (evAt != null && (savedAt == null || evAt.isAfter(savedAt))) {
+                // The persisted vault is from BEFORE the instructor reset! Discard it!
+                await _clearVault();
+                return;
+              }
+            }
+          } catch (_) {}
+        }
         AppDataCache.instance.set<String>(vaultKey, persisted);
         if (mounted) {
           setState(() {
@@ -679,16 +718,19 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               .maybeSingle();
           if (resetLog != null) {
             final evAtStr = resetLog['event_at']?.toString();
-            final evAt = evAtStr != null ? DateTime.tryParse(evAtStr) : null;
-            if (evAt == null ||
-                evAt.toUtc().isAfter(
-                  _startTime!.toUtc().subtract(const Duration(seconds: 2)),
-                )) {
-              _handleTeacherReset(
-                resetLog['details']?.toString() ??
-                    'Instructor authorized fresh attempt.',
-              );
-              return;
+            final evAt =
+                evAtStr != null ? DateTime.tryParse(evAtStr)?.toUtc() : null;
+            if (evAt != null) {
+              final alreadyHandled = _lastHandledResetAt != null &&
+                  !evAt.isAfter(_lastHandledResetAt!);
+              if (!alreadyHandled) {
+                _lastHandledResetAt = evAt;
+                _handleTeacherReset(
+                  resetLog['details']?.toString() ??
+                      'Instructor authorized fresh attempt.',
+                );
+                return;
+              }
             }
           }
         } catch (_) {}
@@ -777,6 +819,15 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                 } else if (ev == 'entry_disallowed') {
                   _handleTeacherDisallowed();
                 } else if (ev == 'reset' || ev == 'retake_authorized') {
+                  final evAtStr = rec['event_at']?.toString();
+                  final evAt =
+                      evAtStr != null ? DateTime.tryParse(evAtStr)?.toUtc() : null;
+                  if (evAt != null &&
+                      _lastHandledResetAt != null &&
+                      !evAt.isAfter(_lastHandledResetAt!)) {
+                    return;
+                  }
+                  if (evAt != null) _lastHandledResetAt = evAt;
                   _handleTeacherReset(
                     details.isNotEmpty
                         ? details
@@ -931,10 +982,12 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     );
   }
 
+  DateTime? _lastHandledResetAt;
   bool _isResetDialogOpen = false;
 
   void _handleTeacherReset(String reason) {
     if (!mounted || _isResetDialogOpen) return;
+    _lastHandledResetAt = DateTime.now().toUtc();
     _isResetDialogOpen = true;
     _timer?.cancel();
     _heartbeatTimer?.cancel();
@@ -1030,6 +1083,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             ),
             onPressed: () {
               _isResetDialogOpen = false;
+              _lastHandledResetAt = DateTime.now().toUtc();
               Navigator.of(ctx).pop();
               if (mounted) {
                 final nowUtc = DateTime.now().toUtc().toIso8601String();

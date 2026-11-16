@@ -15,7 +15,6 @@ import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/setup/widgets/teacher_classroom_setup_templates.dart';
 import 'package:class_realm/core/theme/subject_palette.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 /// A section the teacher handles for a subject.
 class _ClassSection {
@@ -489,7 +488,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           _isLoadingSubjects
               ? LayoutBuilder(
                   builder: (context, constraints) {
-                    final crossAxisCount = constraints.maxWidth >= 950 ? 2 : 1;
+                    final crossAxisCount = constraints.maxWidth >= 560 ? 2 : 1;
                     return GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -608,8 +607,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount =
-            _subjects.length == 1 ? 1 : (constraints.maxWidth >= 950 ? 2 : 1);
+        final crossAxisCount = constraints.maxWidth >= 560 ? 2 : 1;
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -704,8 +702,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount =
-            _archivedSubjects.length == 1 ? 1 : (constraints.maxWidth >= 950 ? 2 : 1);
+        final crossAxisCount = constraints.maxWidth >= 560 ? 2 : 1;
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -828,28 +825,40 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           const SizedBox(height: 10),
 
           // â”€â”€ Stats Row: Total Sections & Total Students â”€â”€
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Icon(LucideIcons.layers, size: 13, color: muted),
-              const SizedBox(width: 4),
-              Text(
-                '$sectionCount ${sectionCount == 1 ? 'section' : 'sections'}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: muted,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(LucideIcons.layers, size: 13, color: muted),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$sectionCount ${sectionCount == 1 ? 'section' : 'sections'}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: muted,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Icon(LucideIcons.users, size: 13, color: muted),
-              const SizedBox(width: 4),
-              Text(
-                '${subject.studentCount} enrolled students',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: muted,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(LucideIcons.users, size: 13, color: muted),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${subject.studentCount} enrolled students',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: muted,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -2814,8 +2823,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount =
-            _archivedSectionsSubjects.length == 1 ? 1 : (constraints.maxWidth >= 950 ? 2 : 1);
+        final crossAxisCount = constraints.maxWidth >= 560 ? 2 : 1;
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -2896,28 +2904,40 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           const SizedBox(height: 10),
 
           // â”€â”€ Stats Row â”€â”€
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Icon(LucideIcons.layers, size: 13, color: muted),
-              const SizedBox(width: 4),
-              Text(
-                '$sectionCount ${sectionCount == 1 ? 'archived section' : 'archived sections'}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: muted,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(LucideIcons.layers, size: 13, color: muted),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$sectionCount ${sectionCount == 1 ? 'archived section' : 'archived sections'}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: muted,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Icon(LucideIcons.users, size: 13, color: muted),
-              const SizedBox(width: 4),
-              Text(
-                '${subject.studentCount} enrolled students',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: muted,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(LucideIcons.users, size: 13, color: muted),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${subject.studentCount} enrolled students',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: muted,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
