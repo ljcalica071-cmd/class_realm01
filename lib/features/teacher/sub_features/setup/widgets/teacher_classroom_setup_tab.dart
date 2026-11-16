@@ -1,4 +1,5 @@
 import 'package:class_realm/core/utils/search_utils.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -10,7 +11,6 @@ import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/class_management/widgets/unified_enroll_student_dialog.dart';
-import 'package:class_realm/shared/widgets/app_top_toast.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/setup/widgets/teacher_classroom_setup_templates.dart';
 import 'package:class_realm/core/theme/subject_palette.dart';
@@ -2055,16 +2055,13 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         if (mounted) {
           AppTopToast.warning(
             context,
-            message: 'Section "${row.nameCtrl.text}" archived.',
+            'Section "${row.nameCtrl.text}" archived.',
           );
         }
         await _loadSubjects();
       } catch (e) {
         if (mounted) {
-          AppTopToast.error(
-            context,
-            message: 'Failed to archive section: $e',
-          );
+          AppTopToast.error(context, 'Failed to archive section: $e');
         }
         return;
       }
@@ -2244,12 +2241,10 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       // If a subject still has active sections in activeGrouped, any archived sections under it
       // belong strictly under "Archived Sections", NOT under "Archived Subjects".
       final activeSubjectKeys = activeGrouped.keys.toSet();
-      final filteredArchivedSubjects = archivedGrouped.values
-          .where((archSub) {
-            final key = '${archSub.name}_${archSub.gradeLevel}';
-            return !activeSubjectKeys.contains(key);
-          })
-          .toList();
+      final filteredArchivedSubjects = archivedGrouped.values.where((archSub) {
+        final key = '${archSub.name}_${archSub.gradeLevel}';
+        return !activeSubjectKeys.contains(key);
+      }).toList();
 
       if (mounted) {
         setState(() {
@@ -2287,10 +2282,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null) {
-      AppTopToast.error(
-        context,
-        message: 'Error: No active user session.',
-      );
+      AppTopToast.error(context, 'Error: No active user session.');
       return;
     }
 
@@ -2351,7 +2343,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         _resetForm(close: true);
         AppTopToast.success(
           context,
-          message: isEdit
+          isEdit
               ? 'Subject and sections updated successfully!'
               : 'Subject and sections saved successfully!',
         );
@@ -2362,10 +2354,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
         final friendlyMsg = e is PostgrestException
             ? 'Unable to save subject changes: ${e.message}'
             : 'Failed to save subject: ${e.toString()}';
-        AppTopToast.error(
-          context,
-          message: friendlyMsg,
-        );
+        AppTopToast.error(context, friendlyMsg);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -2518,7 +2507,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     if (mounted) {
       AppTopToast.warning(
         context,
-        message: '${subject.name} moved to archived subjects.',
+        '${subject.name} moved to archived subjects.',
       );
     }
   }
@@ -2559,7 +2548,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     if (mounted) {
       AppTopToast.success(
         context,
-        message: '${subject.name} restored to active classroom.',
+        '${subject.name} restored to active classroom.',
       );
     }
   }
@@ -2629,10 +2618,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     await _loadSubjects();
 
     if (mounted) {
-      AppTopToast.warning(
-        context,
-        message: '${subject.name} permanently deleted.',
-      );
+      AppTopToast.warning(context, '${subject.name} permanently deleted.');
     }
   }
 
@@ -2655,7 +2641,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     if (mounted) {
       AppTopToast.success(
         context,
-        message: 'Section "${sec.name}" restored to active classroom.',
+        'Section "${sec.name}" restored to active classroom.',
       );
     }
   }
@@ -2719,7 +2705,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
     if (mounted) {
       AppTopToast.warning(
         context,
-        message: 'Section "${sec.name}" permanently deleted.',
+        'Section "${sec.name}" permanently deleted.',
       );
     }
   }
