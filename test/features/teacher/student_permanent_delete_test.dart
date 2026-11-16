@@ -153,6 +153,51 @@ void main() {
       expect(find.text('Cannot Delete Student'), findsNothing);
     });
 
+    testWidgets('AppModals.showErrorDialog prevents duplicate stacked dialogs when spammed', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () {
+                  // Rapidly trigger multiple calls
+                  AppModals.showErrorDialog(
+                    context: context,
+                    title: 'Cannot Delete Student',
+                    message: 'Spam test message',
+                  );
+                  AppModals.showErrorDialog(
+                    context: context,
+                    title: 'Cannot Delete Student',
+                    message: 'Spam test message',
+                  );
+                  AppModals.showErrorDialog(
+                    context: context,
+                    title: 'Cannot Delete Student',
+                    message: 'Spam test message',
+                  );
+                },
+                child: const Text('Spam Error'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Spam Error'));
+      await tester.pumpAndSettle();
+
+      // Only ONE dialog should be in the widget tree
+      expect(find.text('Cannot Delete Student'), findsOneWidget);
+      expect(find.text('Understood'), findsOneWidget);
+
+      await tester.tap(find.text('Understood'));
+      await tester.pumpAndSettle();
+
+      // Dialog is completely dismissed (no stacked dialogs underneath)
+      expect(find.text('Cannot Delete Student'), findsNothing);
+    });
+
     testWidgets('AppModals.showTypeToConfirmDeleteDialog auto-confirms upon exact phrase', (tester) async {
       bool? result;
 

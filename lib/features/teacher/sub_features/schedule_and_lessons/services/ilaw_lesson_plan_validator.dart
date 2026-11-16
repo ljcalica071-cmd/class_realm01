@@ -136,7 +136,7 @@ class IlawLessonPlanValidator {
 
   static const int minSectionLength = 20;
   static const int maxStandardSectionLength = 1500;
-  static const int maxProcedureSectionLength = 3000;
+  static const int maxProcedureSectionLength = 5000;
 
   static final RegExp _hasAlphaNumeric = RegExp(r'[A-Za-z0-9]');
   static final RegExp _hasLetter = RegExp(r'[A-Za-z]');

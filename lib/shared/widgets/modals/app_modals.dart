@@ -193,89 +193,97 @@ class AppModals {
         : 'An error occurred while processing your request. Please try again.';
   }
 
+  static bool _isErrorDialogOpen = false;
+
   static Future<void> showErrorDialog({
     required BuildContext context,
     required String title,
     required String message,
     VoidCallback? onConfirm,
-  }) {
-    final theme = Theme.of(context);
-    final userFriendlyMessage = sanitizeErrorMessage(message);
+  }) async {
+    if (_isErrorDialogOpen) return;
+    _isErrorDialogOpen = true;
+    try {
+      final theme = Theme.of(context);
+      final userFriendlyMessage = sanitizeErrorMessage(message);
 
-    return showDialog(
-      context: context,
-      builder: (ctx) => Theme(
-        data: theme,
-        child: Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 16,
-          backgroundColor: theme.colorScheme.surface,
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 380),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.catRed.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.error_outline_rounded,
-                        color: AppTheme.catRed,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
-                          letterSpacing: -0.2,
+      await showDialog(
+        context: context,
+        builder: (ctx) => Theme(
+          data: theme,
+          child: Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            elevation: 16,
+            backgroundColor: theme.colorScheme.surface,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 380),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.catRed.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.error_outline_rounded,
+                          color: AppTheme.catRed,
+                          size: 20,
                         ),
                       ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    userFriendlyMessage,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                      height: 1.45,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  userFriendlyMessage,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                    height: 1.45,
                   ),
-                ),
-                const SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: AppPrimaryButton(
-                    label: 'Understood',
-                    backgroundColor: theme.colorScheme.primary,
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                      if (onConfirm != null) onConfirm();
-                    },
-                    minWidth: 100,
-                    height: 38,
+                  const SizedBox(height: 20),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: AppPrimaryButton(
+                      label: 'Understood',
+                      backgroundColor: theme.colorScheme.primary,
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        if (onConfirm != null) onConfirm();
+                      },
+                      minWidth: 100,
+                      height: 38,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _isErrorDialogOpen = false;
+    }
   }
 
   static Future<void> showSuccessDialog({

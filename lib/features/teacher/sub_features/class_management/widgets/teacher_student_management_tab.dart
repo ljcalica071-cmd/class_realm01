@@ -18,7 +18,6 @@ import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 class TeacherStudentManagementTab extends StatefulWidget {
   const TeacherStudentManagementTab({super.key});
@@ -32,6 +31,7 @@ class _TeacherStudentManagementTabState
     extends State<TeacherStudentManagementTab> {
   bool _showArchivedStudents = false;
   bool _isLoading = true;
+  String? _deletingStudentId;
   String _studentSearchQuery = '';
   String _selectedSubjectFilter = '— All Subjects —';
   String _selectedSectionFilter = '— All Sections —';
@@ -310,6 +310,10 @@ class _TeacherStudentManagementTabState
   }
 
   Future<void> _handlePermanentlyDeleteStudent(UserModel s) async {
+    if (_deletingStudentId != null) return;
+    setState(() {
+      _deletingStudentId = s.id;
+    });
     try {
       final studentRepo = SupabaseStudentRepository();
 
@@ -412,6 +416,14 @@ class _TeacherStudentManagementTabState
           message:
               'An unexpected error occurred while attempting to delete the student. Please try again.',
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletingStudentId = null;
+        });
+      } else {
+        _deletingStudentId = null;
       }
     }
   }
@@ -1479,45 +1491,58 @@ class _TeacherStudentManagementTabState
                                                                                 size: 18,
                                                                               ),
                                                                               splashRadius: 18,
-                                                                              onPressed: () async {
-                                                                                final confirm = await AppModals.showConfirmDialog(
-                                                                                  context: context,
-                                                                                  title: 'Restore Student',
-                                                                                  message: 'Are you sure you want to restore ${s.fullName} to active status?',
-                                                                                  confirmLabel: 'Restore',
-                                                                                  confirmColor: Colors.green,
-                                                                                );
-                                                                                if (confirm == true) {
-                                                                                  setState(() {
-                                                                                    _archivedStudents.removeWhere((item) => item.id == s.id);
-                                                                                    final restoredStudent = s.copyWith(
-                                                                                      isArchived: false,
-                                                                                      status: AccountStatus.active,
-                                                                                    );
-                                                                                    _activeStudents.removeWhere((item) => item.id == s.id);
-                                                                                    _activeStudents.add(restoredStudent);
-                                                                                  });
-                                                                                  if (context.mounted) {
-                                                                                    AppTopToast.success(context, '${s.fullName} restored to active enrollment.');
-                                                                                  }
-                                                                                  try {
-                                                                                    await SupabaseStudentRepository().restoreStudent(s.id);
-                                                                                  } catch (e) {
-                                                                                    debugPrint('Error restoring student: $e');
-                                                                                  }
-                                                                                  await _loadData(forceRefresh: true);
-                                                                                }
-                                                                              },
+                                                                              onPressed: _deletingStudentId != null
+                                                                                  ? null
+                                                                                  : () async {
+                                                                                      final confirm = await AppModals.showConfirmDialog(
+                                                                                        context: context,
+                                                                                        title: 'Restore Student',
+                                                                                        message: 'Are you sure you want to restore ${s.fullName} to active status?',
+                                                                                        confirmLabel: 'Restore',
+                                                                                        confirmColor: Colors.green,
+                                                                                      );
+                                                                                      if (confirm == true) {
+                                                                                        setState(() {
+                                                                                          _archivedStudents.removeWhere((item) => item.id == s.id);
+                                                                                          final restoredStudent = s.copyWith(
+                                                                                            isArchived: false,
+                                                                                            status: AccountStatus.active,
+                                                                                          );
+                                                                                          _activeStudents.removeWhere((item) => item.id == s.id);
+                                                                                          _activeStudents.add(restoredStudent);
+                                                                                        });
+                                                                                        if (context.mounted) {
+                                                                                          AppTopToast.success(context, '${s.fullName} restored to active enrollment.');
+                                                                                        }
+                                                                                        try {
+                                                                                          await SupabaseStudentRepository().restoreStudent(s.id);
+                                                                                        } catch (e) {
+                                                                                          debugPrint('Error restoring student: $e');
+                                                                                        }
+                                                                                        await _loadData(forceRefresh: true);
+                                                                                      }
+                                                                                    },
                                                                             ),
                                                                             IconButton(
                                                                               tooltip: 'Permanently Delete',
-                                                                              icon: const Icon(
-                                                                                Icons.delete_outline,
-                                                                                color: Color(0xFFEF4444),
-                                                                                size: 18,
-                                                                              ),
+                                                                              icon: _deletingStudentId == s.id
+                                                                                  ? const SizedBox(
+                                                                                      width: 14,
+                                                                                      height: 14,
+                                                                                      child: CircularProgressIndicator(
+                                                                                        strokeWidth: 2,
+                                                                                        color: Color(0xFFEF4444),
+                                                                                      ),
+                                                                                    )
+                                                                                  : const Icon(
+                                                                                      Icons.delete_outline,
+                                                                                      color: Color(0xFFEF4444),
+                                                                                      size: 18,
+                                                                                    ),
                                                                               splashRadius: 18,
-                                                                              onPressed: () => _handlePermanentlyDeleteStudent(s),
+                                                                              onPressed: _deletingStudentId != null
+                                                                                  ? null
+                                                                                  : () => _handlePermanentlyDeleteStudent(s),
                                                                             ),
                                                                           ],
                                                                         ],

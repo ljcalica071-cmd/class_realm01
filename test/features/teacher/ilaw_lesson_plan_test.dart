@@ -102,11 +102,19 @@ void main() {
       );
       expect(
         IlawLessonPlanValidator.validateSectionContent(
-          'x' * 3001,
+          'x' * 5001,
           sectionName: 'Work / Learning Experiences',
-          maxLength: 3000,
+          maxLength: IlawLessonPlanValidator.maxProcedureSectionLength,
         ),
         isNotNull,
+      );
+      expect(
+        IlawLessonPlanValidator.validateSectionContent(
+          'x' * 4500,
+          sectionName: 'Work / Learning Experiences',
+          maxLength: IlawLessonPlanValidator.maxProcedureSectionLength,
+        ),
+        isNull,
       );
     });
 
@@ -615,6 +623,74 @@ void main() {
       expect(result.sections!.sessions[3].sessionTitle, contains('Synthesis & Application'));
       expect(result.sections!.sessions.first.parentGuide, contains('Ask child'));
       expect(result.sections!.rubricItems.isNotEmpty, isTrue);
+    });
+
+    test('parseIlawResponse prevents raw JSON bleeding and clamps long procedure text', () {
+      const malformedRawWithRubrics = '''
+{
+  "intended_outcomes": "At the end of the lesson, learners will differentiate functions.",
+  "learning_content": "Topic: Rational Functions",
+  "assessment": "Formative quiz and exit slip",
+  "work_experiences": "1. Introduction and recall\\n2. Modeling and board work\\n3. Group synthesis",
+  "sessions": [
+    {
+      "session_number": 1,
+      "session_title": "Session 1: Introduction",
+      "objectives": "Recall concepts",
+      "learning_experiences": "Review fractions",
+      "formative_assessment": "Exit slip",
+      "parent_guide": "Ask child",
+      "community_experience": "Market examples",
+      "teacher_reflections": "Good engagement"
+    }
+  ],
+  "rubric_items": [
+    {
+      "criterion": "Intentions & Objectives: Clearly aligned with DepEd SHS curriculum competencies and measurable.",
+      "is_met": true,
+      "notes": "Aligned with Personal Development and Life Skills standards for Grade 11."
+    }
+  ],
+}
+''';
+
+      final parsed = GeminiService.parseIlawResponse(
+        malformedRawWithRubrics,
+        subject: 'Personal Development',
+        topic: 'Self-Awareness',
+        gradeLevel: 'Grade 11',
+        quarter: 'Term 1',
+        durationMinutes: 60,
+      );
+
+      expect(parsed.workExperiences, isNot(contains('"criterion":')));
+      expect(parsed.workExperiences, isNot(contains('"is_met":')));
+      expect(parsed.workExperiences.length, lessThanOrEqualTo(IlawLessonPlanValidator.maxProcedureSectionLength));
+      expect(parsed.workExperiences, contains('1. Introduction and recall'));
+
+      final hugeRaw = '''
+{
+  "intended_outcomes": "Outcome",
+  "learning_content": "Content",
+  "assessment": "Assessment",
+  "work_experiences": "${'Step procedure description. ' * 300}"
+}
+''';
+      final parsedHuge = GeminiService.parseIlawResponse(
+        hugeRaw,
+        subject: 'General Mathematics',
+        topic: 'Rational Equations',
+        gradeLevel: 'Grade 11',
+        quarter: 'Term 1',
+        durationMinutes: 60,
+      );
+
+      expect(parsedHuge.workExperiences.length, lessThanOrEqualTo(IlawLessonPlanValidator.maxProcedureSectionLength));
+      expect(IlawLessonPlanValidator.validateSectionContent(
+        parsedHuge.workExperiences,
+        sectionName: 'Work / Learning Experiences',
+        maxLength: IlawLessonPlanValidator.maxProcedureSectionLength,
+      ), isNull);
     });
   });
 

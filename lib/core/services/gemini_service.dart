@@ -709,6 +709,17 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
     int numberOfSessions = 4,
     DepEdProficiencyLevel proficiencyLevel = DepEdProficiencyLevel.developing,
   }) {
+    final template = IlawLessonPlan.buildTemplateSections(
+      subject: subject,
+      topic: topic,
+      gradeLevel: gradeLevel,
+      quarter: quarter,
+      durationMinutes: durationMinutes,
+      numberOfSessions: numberOfSessions,
+      proficiencyLevel: proficiencyLevel,
+    );
+
+    // 1. Sanitize JSON formatting (strip fences, fix trailing commas)
     String cleaned = rawText.trim();
     final fenceMatch = RegExp(
       r'```(?:json)?\s*([\s\S]*?)```',
@@ -723,22 +734,31 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
         cleaned = cleaned.substring(firstBrace, lastBrace + 1);
       }
     }
+    // Remove trailing commas before } or ]
+    final sanitizedJson = cleaned.replaceAll(RegExp(r',\s*([\]\}])'), r'$1');
+
+    String? extractedI;
+    String? extractedL;
+    String? extractedA;
+    String? extractedW;
+    List<IlawSessionData> parsedSessions = [];
+    List<IlawRubricItem> parsedRubrics = [];
 
     try {
-      final decoded = jsonDecode(cleaned);
+      final decoded = jsonDecode(sanitizedJson);
       if (decoded is Map) {
-        final i = _cleanSectionText(
+        extractedI = _cleanSectionText(
           (decoded['intended_outcomes'] ?? decoded['intendedOutcomes'] ?? '')
               .toString(),
         );
-        final l = _cleanSectionText(
+        extractedL = _cleanSectionText(
           (decoded['learning_content'] ?? decoded['learningContent'] ?? '')
               .toString(),
         );
-        final a = _cleanSectionText(
+        extractedA = _cleanSectionText(
           (decoded['assessment'] ?? decoded['activities'] ?? '').toString(),
         );
-        final w = _cleanSectionText(
+        extractedW = _cleanSectionText(
           (decoded['work_experiences'] ??
                   decoded['workExperiences'] ??
                   decoded['procedure'] ??
@@ -747,7 +767,6 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
         );
 
         final rawSessions = decoded['sessions'];
-        final List<IlawSessionData> parsedSessions = [];
         if (rawSessions is List && rawSessions.isNotEmpty) {
           for (final s in rawSessions) {
             if (s is Map<String, dynamic>) {
@@ -761,7 +780,6 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
         }
 
         final rawRubrics = decoded['rubric_items'];
-        final List<IlawRubricItem> parsedRubrics = [];
         if (rawRubrics is List && rawRubrics.isNotEmpty) {
           for (final r in rawRubrics) {
             if (r is Map<String, dynamic>) {
@@ -773,60 +791,78 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
             }
           }
         }
-
-        final template = IlawLessonPlan.buildTemplateSections(
-          subject: subject,
-          topic: topic,
-          gradeLevel: gradeLevel,
-          quarter: quarter,
-          durationMinutes: durationMinutes,
-          numberOfSessions: numberOfSessions,
-          proficiencyLevel: proficiencyLevel,
-        );
-
-        if (i.isNotEmpty && l.isNotEmpty && a.isNotEmpty && w.isNotEmpty) {
-          return IlawGeneratedSections(
-            intendedOutcomes: i,
-            learningContent: l,
-            assessment: a,
-            workExperiences: w,
-            sessions: parsedSessions.isNotEmpty
-                ? parsedSessions
-                : template.sessions,
-            rubricItems: parsedRubrics.isNotEmpty
-                ? parsedRubrics
-                : IlawRubricItem.defaultRubrics(),
-          );
-        }
       }
     } catch (_) {
-      // Fall through to Markdown section parser
+      // Fallback 1: Targeted regex field extraction from JSON
+      extractedI = _extractJsonStringField(cleaned, [
+        'intended_outcomes',
+        'intendedOutcomes',
+      ]);
+      extractedL = _extractJsonStringField(cleaned, [
+        'learning_content',
+        'learningContent',
+      ]);
+      extractedA = _extractJsonStringField(cleaned, [
+        'assessment',
+        'activities',
+      ]);
+      extractedW = _extractJsonStringField(cleaned, [
+        'work_experiences',
+        'workExperiences',
+        'procedure',
+      ]);
     }
 
-    final fallback = IlawLessonPlan.buildTemplateSections(
-      subject: subject,
-      topic: topic,
-      gradeLevel: gradeLevel,
-      quarter: quarter,
-      durationMinutes: durationMinutes,
-      numberOfSessions: numberOfSessions,
-      proficiencyLevel: proficiencyLevel,
-    );
+    // Fallback 2: If sections are still empty, try markdown parser (only if not JSON)
+    if ((extractedI == null || extractedI.isEmpty) &&
+        (extractedW == null || extractedW.isEmpty)) {
+      final sections = _extractMarkdownSections(rawText);
+      extractedI ??= sections[0].isNotEmpty ? sections[0] : null;
+      extractedL ??= sections[1].isNotEmpty ? sections[1] : null;
+      extractedA ??= sections[2].isNotEmpty ? sections[2] : null;
+      extractedW ??= sections[3].isNotEmpty ? sections[3] : null;
+    }
 
-    final sections = _extractMarkdownSections(rawText);
+    // Resolve final text for each section, guarding against raw JSON bleeding
+    String iText = extractedI ?? '';
+    String lText = extractedL ?? '';
+    String aText = extractedA ?? '';
+    String wText = extractedW ?? '';
+
+    if (iText.isEmpty || _looksLikeRawJson(iText)) {
+      iText = template.intendedOutcomes;
+    }
+    if (lText.isEmpty || _looksLikeRawJson(lText)) {
+      lText = template.learningContent;
+    }
+    if (aText.isEmpty || _looksLikeRawJson(aText)) {
+      aText = template.assessment;
+    }
+    if (wText.isEmpty || _looksLikeRawJson(wText)) {
+      wText = template.workExperiences;
+    }
+
     return IlawGeneratedSections(
-      intendedOutcomes: sections[0].isNotEmpty
-          ? sections[0]
-          : fallback.intendedOutcomes,
-      learningContent: sections[1].isNotEmpty
-          ? sections[1]
-          : fallback.learningContent,
-      assessment: sections[2].isNotEmpty ? sections[2] : fallback.assessment,
-      workExperiences: sections[3].isNotEmpty
-          ? sections[3]
-          : fallback.workExperiences,
-      sessions: fallback.sessions,
-      rubricItems: fallback.rubricItems,
+      intendedOutcomes: _clampText(
+        iText,
+        IlawLessonPlanValidator.maxStandardSectionLength,
+      ),
+      learningContent: _clampText(
+        lText,
+        IlawLessonPlanValidator.maxStandardSectionLength,
+      ),
+      assessment: _clampText(
+        aText,
+        IlawLessonPlanValidator.maxStandardSectionLength,
+      ),
+      workExperiences: _clampText(
+        wText,
+        IlawLessonPlanValidator.maxProcedureSectionLength,
+      ),
+      sessions: parsedSessions.isNotEmpty ? parsedSessions : template.sessions,
+      rubricItems: parsedRubrics.isNotEmpty
+          ? parsedRubrics
+          : IlawRubricItem.defaultRubrics(),
     );
   }
 
@@ -838,15 +874,61 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
         .trim();
   }
 
+  static String _clampText(String input, int maxLength) {
+    final trimmed = input.trim();
+    if (trimmed.length <= maxLength) return trimmed;
+    final slice = trimmed.substring(0, maxLength);
+    final lastBreak = slice.lastIndexOf(RegExp(r'[\.\n]'));
+    if (lastBreak > maxLength ~/ 2) {
+      return slice.substring(0, lastBreak + 1).trim();
+    }
+    return slice.trim();
+  }
+
+  static bool _looksLikeRawJson(String text) {
+    final trimmed = text.trim();
+    return trimmed.startsWith('{') ||
+        trimmed.startsWith('[') ||
+        trimmed.contains('"criterion":') ||
+        trimmed.contains('"is_met":') ||
+        trimmed.contains('"session_title":') ||
+        trimmed.contains('"intended_outcomes":');
+  }
+
+  static String? _extractJsonStringField(String text, List<String> fieldKeys) {
+    for (final key in fieldKeys) {
+      final regExp = RegExp(
+        '"$key"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"',
+        caseSensitive: false,
+      );
+      final match = regExp.firstMatch(text);
+      if (match != null) {
+        final rawVal = match.group(1);
+        if (rawVal != null && rawVal.isNotEmpty) {
+          return rawVal
+              .replaceAll(r'\n', '\n')
+              .replaceAll(r'\"', '"')
+              .replaceAll(r'\\', r'\');
+        }
+      }
+    }
+    return null;
+  }
+
   static List<String> _extractMarkdownSections(String raw) {
     final text = raw.replaceAll('\r\n', '\n');
+    // If raw text is JSON, never treat as markdown
+    if (_looksLikeRawJson(text)) {
+      return ['', '', '', ''];
+    }
+
     final pattern = RegExp(
       r'(?:^|\n)\s*(?:#+|\*\*)?\s*(?:I\.|1\.|Intended Learning Outcomes|II\.|L\.|2\.|Learning Content|III\.|A\.|3\.|Assessment|IV\.|W\.|4\.|Work\s*/?\s*Learning Experiences)[^\n]*',
       caseSensitive: false,
     );
     final matches = pattern.allMatches(text).toList();
     if (matches.length < 4) {
-      return ['', '', '', _cleanSectionText(text)];
+      return ['', '', '', ''];
     }
     final results = <String>[];
     for (var idx = 0; idx < 4; idx++) {
