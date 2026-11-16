@@ -393,5 +393,32 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'renders WW slots from gradebook without Add WW button in Quiz mode',
+      (tester) async {
+        tester.view.physicalSize = const Size(1400, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: CreateAssessmentFlowDialog(
+                onAssessmentCreated: () {},
+                initialIsExam: false,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text('Written Work Slot (Gradebook) *'), findsOneWidget);
+        expect(find.text('WW 1'), findsOneWidget);
+        expect(find.textContaining('Add WW'), findsNothing);
+        expect(find.byIcon(Icons.add_circle_outline_rounded), findsNothing);
+      },
+    );
   });
 }

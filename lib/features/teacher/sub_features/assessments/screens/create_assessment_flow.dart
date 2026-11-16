@@ -717,11 +717,14 @@ class _CreateAssessmentFlowDialogState
 
     if (!_isExam &&
         (_quizSlotIndex < 1 || _occupiedWwSlots.contains(_quizSlotIndex))) {
+      final allOccupied =
+          _occupiedWwSlots.where((s) => s >= 1 && s <= _maxWwSlots).length >=
+              _maxWwSlots;
       AppModals.showWarningDialog(
         context: context,
         title: 'Select a Written Work Slot',
-        message: _maxWwSlots < 10
-            ? 'All visible WW slots are occupied. Click the "+" button next to the WW slots to add WW ${_maxWwSlots + 1}.'
+        message: allOccupied
+            ? 'All Written Work slots (WW 1–$_maxWwSlots) in the Gradebook are occupied. Please add new columns directly in the Gradebook or select an available slot.'
             : 'Please select an available Written Work (WW) slot before continuing.',
       );
       return;
@@ -3688,10 +3691,10 @@ class _CreateAssessmentFlowDialogState
   }
 
   Widget _buildQuizSlotSelector(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
     final allVisibleOccupied =
         _occupiedWwSlots.where((s) => s >= 1 && s <= _maxWwSlots).length >=
-            _maxWwSlots &&
-        _maxWwSlots < 10;
+            _maxWwSlots;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3773,100 +3776,23 @@ class _CreateAssessmentFlowDialogState
                 ),
               );
             }),
-            if (_maxWwSlots < 10)
-              Tooltip(
-                message: 'Add WW ${_maxWwSlots + 1} column (Max 10)',
-                child: InkWell(
-                  onTap: () {
-                    final nextSlot = _maxWwSlots + 1;
-                    setState(() {
-                      _maxWwSlots = nextSlot;
-                    });
-                    _setQuizSlot(nextSlot);
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.45),
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.add_circle_outline_rounded,
-                          size: 18,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Add WW ${_maxWwSlots + 1}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
-        if (allVisibleOccupied) ...[
+        if (_areAllSlotsFilled) ...[
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.08),
+              color: isDark ? AppTheme.catOrange.withValues(alpha: 0.12) : Colors.amber.shade50,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: theme.colorScheme.primary.withValues(alpha: 0.25),
-              ),
+              border: Border.all(color: isDark ? AppTheme.catOrange.withValues(alpha: 0.3) : Colors.amber.shade300),
             ),
             child: Row(
               children: [
                 Icon(
                   Icons.info_outline,
                   size: 16,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'WW 1–$_maxWwSlots are occupied. Click "+ Add WW ${_maxWwSlots + 1}" above to add a new column (up to 10 max).',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ] else if (_areAllSlotsFilled) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.amber.shade300),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  size: 16,
-                  color: Colors.amber.shade800,
+                  color: isDark ? AppTheme.catOrange : Colors.amber.shade800,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -3874,7 +3800,38 @@ class _CreateAssessmentFlowDialogState
                     'All 10 Written Work (WW) slots are already configured for this offering.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.amber.shade900,
+                      color: isDark ? AppTheme.catOrange : Colors.amber.shade900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else if (allVisibleOccupied) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.catOrange.withValues(alpha: 0.12) : Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isDark ? AppTheme.catOrange.withValues(alpha: 0.3) : Colors.amber.shade300,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: isDark ? AppTheme.catOrange : Colors.amber.shade800,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'All Gradebook Written Work slots (WW 1–$_maxWwSlots) for this term are occupied. Add new columns directly in the Gradebook if needed.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? AppTheme.catOrange : Colors.amber.shade900,
                     ),
                   ),
                 ),

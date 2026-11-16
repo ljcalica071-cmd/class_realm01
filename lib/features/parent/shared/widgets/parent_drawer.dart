@@ -283,21 +283,6 @@ class ParentDrawer extends StatelessWidget {
                       );
                     },
                   ),
-
-                  const SizedBox(height: 12),
-                  _buildDrawerSectionLabel(theme, 'COMMUNICATION'),
-                  _buildNavShortcutTile(
-                    context: context,
-                    theme: theme,
-                    icon: Icons.notifications_outlined,
-                    activeIcon: Icons.notifications_rounded,
-                    label: 'School Alerts',
-                    isSelected: currentBottomTabIndex == 3,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onSelectBottomTab?.call(3);
-                    },
-                  ),
                 ],
               ),
             ),
@@ -408,42 +393,6 @@ class ParentDrawer extends StatelessWidget {
         ),
         onTap: onTap,
       ),
-    );
-  }
-
-  Widget _buildNavShortcutTile({
-    required BuildContext context,
-    required ThemeData theme,
-    required IconData icon,
-    required IconData activeIcon,
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      dense: true,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      tileColor: isSelected
-          ? theme.colorScheme.primary.withValues(alpha: 0.1)
-          : null,
-      leading: Icon(
-        isSelected ? activeIcon : icon,
-        size: 20,
-        color: isSelected
-            ? theme.colorScheme.primary
-            : theme.colorScheme.onSurface.withValues(alpha: 0.7),
-      ),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13.5,
-          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-          color: isSelected
-              ? theme.colorScheme.primary
-              : theme.colorScheme.onSurface,
-        ),
-      ),
-      onTap: onTap,
     );
   }
 }

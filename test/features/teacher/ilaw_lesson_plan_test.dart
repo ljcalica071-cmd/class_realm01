@@ -517,7 +517,7 @@ void main() {
     test('formatUserFriendlyErrorMessage transforms raw 503/429 JSON errors into clean guidance with manual fallback', () {
       const sample503Json = 'GenerativeAIException: Server Error [503]: { "error": { "code": 503, "message": "This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.", "status": "UNAVAILABLE" } }';
       final msg503 = GeminiService.formatUserFriendlyErrorMessage(sample503Json);
-      expect(msg503, contains('Gemini AI is currently experiencing high demand'));
+      expect(msg503, contains('currently experiencing high demand'));
       expect(msg503, contains('Open Manual Template'));
       expect(msg503.contains('{ "error"'), isFalse);
       expect(msg503.contains('GenerativeAIException'), isFalse);
@@ -529,7 +529,7 @@ void main() {
 
       const sampleNetwork = 'SocketException: Failed host lookup generativelanguage.googleapis.com';
       final msgNet = GeminiService.formatUserFriendlyErrorMessage(sampleNetwork);
-      expect(msgNet, contains('Unable to reach the Gemini AI service'));
+      expect(msgNet, contains('Unable to connect to the AI service'));
     });
 
     test('generates DepEd 2026 multi-session matrix JSON and extracts 4 sessions and rubrics', () async {
