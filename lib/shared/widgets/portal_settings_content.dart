@@ -94,7 +94,7 @@ class _PortalSettingsContentState extends State<PortalSettingsContent> {
                   style: TextStyle(fontSize: 12),
                 ),
                 trailing: Text(
-                  '1.0.0 (SSHS Edition)',
+                  '2.0.0 (SSHS Edition)',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 12.5,
