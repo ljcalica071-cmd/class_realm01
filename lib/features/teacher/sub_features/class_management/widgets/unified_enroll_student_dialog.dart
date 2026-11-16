@@ -79,6 +79,8 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
   final _lastNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _studentIdCtrl = TextEditingController();
+  String? _emailInlineError;
+  String? _lrnInlineError;
 
   String? _gender;
   DateTime? _birthday;
@@ -209,6 +211,17 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
 
     _initCascadingSelections();
     _checkResumableBatch();
+
+    _emailCtrl.addListener(() {
+      if (_emailInlineError != null && mounted) {
+        setState(() => _emailInlineError = null);
+      }
+    });
+    _studentIdCtrl.addListener(() {
+      if (_lrnInlineError != null && mounted) {
+        setState(() => _lrnInlineError = null);
+      }
+    });
 
     if (kIsWeb) {
       registerWebDrop(
@@ -384,7 +397,12 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
     );
     if (!deliverability.isDeliverable) {
       if (mounted) {
-        setState(() => _isSubmitting = false);
+        setState(() {
+          _isSubmitting = false;
+          _emailInlineError = deliverability.error ??
+              'The email domain is invalid or cannot receive emails.';
+        });
+        _formKey.currentState?.validate();
         AppModals.showErrorDialog(
           context: context,
           title: 'Invalid Email Address',
@@ -480,11 +498,42 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
       }
     } catch (e) {
       if (mounted) {
-        AppModals.showErrorDialog(
-          context: context,
-          title: 'Enrollment Error',
-          message: e.toString(),
-        );
+        final errText = e.toString().replaceAll('Exception: ', '').trim();
+        final isEmailConflict = errText.contains('Email Already in Use') ||
+            errText.contains('Email Already Registered') ||
+            errText.contains('EMAIL_EXISTS') ||
+            errText.contains('Email Conflict');
+        final isLrnConflict = errText.contains('LRN Conflict');
+
+        if (isEmailConflict) {
+          setState(() {
+            _emailInlineError =
+                'This email address is already in use by an existing account.';
+          });
+          _formKey.currentState?.validate();
+          AppModals.showErrorDialog(
+            context: context,
+            title: 'Email Already Registered',
+            message:
+                'The email address "$emailToUse" is already registered to an existing account in the system.\n\nPlease enter a different, unique email address for this student.',
+          );
+        } else if (isLrnConflict) {
+          setState(() {
+            _lrnInlineError = 'LRN is already registered to another student.';
+          });
+          _formKey.currentState?.validate();
+          AppModals.showErrorDialog(
+            context: context,
+            title: 'LRN Conflict',
+            message: errText,
+          );
+        } else {
+          AppModals.showErrorDialog(
+            context: context,
+            title: 'Enrollment Error',
+            message: errText,
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -3669,6 +3718,7 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                       if (v.length != 12 || int.tryParse(v) == null) {
                         return 'Must be exactly 12 digits';
                       }
+                      if (_lrnInlineError != null) return _lrnInlineError;
                       return null;
                     },
                   ),
@@ -3682,7 +3732,12 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                     keyboardType: TextInputType.emailAddress,
                     inputFormatters: AppValidators.emailFormatters,
                     autovalidateMode: AutovalidateMode.onUserInteraction,
-                    validator: AppValidators.validateEmail,
+                    validator: (v) {
+                      final baseErr = AppValidators.validateEmail(v);
+                      if (baseErr != null) return baseErr;
+                      if (_emailInlineError != null) return _emailInlineError;
+                      return null;
+                    },
                   ),
                 ),
               ],

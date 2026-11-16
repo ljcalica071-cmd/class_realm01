@@ -44,9 +44,26 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
   final _lastNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _studentIdCtrl = TextEditingController();
+  String? _emailInlineError;
+  String? _lrnInlineError;
   String? _gender;
   DateTime? _birthday;
   String? _selectedSubjectId;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailCtrl.addListener(() {
+      if (_emailInlineError != null && mounted) {
+        setState(() => _emailInlineError = null);
+      }
+    });
+    _studentIdCtrl.addListener(() {
+      if (_lrnInlineError != null && mounted) {
+        setState(() => _lrnInlineError = null);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -91,13 +108,47 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
         subjectId: _selectedSubjectId!,
       );
     } catch (e) {
-      AppModals.showErrorDialog(
-        context: context,
-        title: 'Enrollment Error',
-        message: e.toString(),
-      );
+      if (!mounted) return;
+      final errText = e.toString().replaceAll('Exception: ', '').trim();
+      final isEmailConflict = errText.contains('Email Already in Use') ||
+          errText.contains('Email Already Registered') ||
+          errText.contains('EMAIL_EXISTS') ||
+          errText.contains('Email Conflict');
+      final isLrnConflict = errText.contains('LRN Conflict');
+
+      if (isEmailConflict) {
+        setState(() {
+          _emailInlineError =
+              'This email address is already in use by an existing account.';
+        });
+        _formKey.currentState?.validate();
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Email Already Registered',
+          message:
+              'The email address "${_emailCtrl.text.trim()}" is already registered to an existing account.\n\nPlease enter a different, unique email address for this student.',
+        );
+      } else if (isLrnConflict) {
+        setState(() {
+          _lrnInlineError = 'LRN is already registered to another student.';
+        });
+        _formKey.currentState?.validate();
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'LRN Conflict',
+          message: errText,
+        );
+      } else {
+        AppModals.showErrorDialog(
+          context: context,
+          title: 'Enrollment Error',
+          message: errText,
+        );
+      }
       return;
     }
+
+    if (!mounted) return;
 
     final fullName = [
       _firstNameCtrl.text.trim(),
@@ -308,6 +359,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                           if (v.length != 12 || int.tryParse(v) == null) {
                             return 'LRN must be exactly 12 digits';
                           }
+                          if (_lrnInlineError != null) return _lrnInlineError;
                           return null;
                         },
                       ),
@@ -338,7 +390,12 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                         controller: _emailCtrl,
                         keyboardType: TextInputType.emailAddress,
                         autovalidateMode: AutovalidateMode.onUserInteraction,
-                        validator: AppValidators.validateEmail,
+                        validator: (v) {
+                          final baseErr = AppValidators.validateEmail(v);
+                          if (baseErr != null) return baseErr;
+                          if (_emailInlineError != null) return _emailInlineError;
+                          return null;
+                        },
                       ),
                     ),
                   ],

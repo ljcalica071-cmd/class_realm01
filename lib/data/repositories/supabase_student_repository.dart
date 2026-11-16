@@ -657,28 +657,53 @@ class SupabaseStudentRepository implements StudentRepository {
       );
     }
 
-    // New student candidate
-    String? fbUid;
+    // Pre-check if email already exists in Supabase users table
     try {
-      fbUid = await FirebaseAuthAdminService.createUser(
-        email: cleanEmail,
-        password: tempPassword,
-        displayName: studentFullName,
-      );
+      final existingUser = await _client
+          .from('users')
+          .select('id, email, role')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+      if (existingUser != null) {
+        final existingRole =
+            (existingUser['role']?.toString().toUpperCase() ?? 'USER');
+        throw Exception(
+          'Email Already in Use: The email address "$cleanEmail" is already registered to an existing $existingRole account. Please use a different, unique email address for this student.',
+        );
+      }
     } catch (e) {
-      debugPrint('Firebase student creation error: $e');
+      if (e.toString().contains('Email Already in Use')) rethrow;
+      debugPrint('Supabase email pre-check notice: $e');
+    }
+
+    // New student candidate: provision authentication credentials via Firebase
+    final fbResult = await FirebaseAuthAdminService.createUserDetailed(
+      email: cleanEmail,
+      password: tempPassword,
+      displayName: studentFullName,
+    );
+
+    if (!fbResult.isSuccess || fbResult.uid == null || fbResult.uid!.isEmpty) {
+      if (fbResult.errorCode == 'EMAIL_EXISTS') {
+        throw Exception(
+          'Email Already in Use: The email address "$cleanEmail" is already registered to an existing account. Please enter a different, unique email address for this student.',
+        );
+      } else if (fbResult.errorCode == 'INVALID_EMAIL') {
+        throw Exception(
+          'Invalid Email Address: The email address "$cleanEmail" is invalid or formatted incorrectly. Please check the spelling.',
+        );
+      } else if (fbResult.errorCode == 'TOO_MANY_ATTEMPTS_TRY_LATER') {
+        throw Exception(
+          'Too Many Attempts: Authentication requests are temporarily throttled. Please wait a few moments and try again.',
+        );
+      }
       throw Exception(
-        'Failed to provision authentication credentials for student account ($cleanEmail): $e',
+        fbResult.errorMessage ??
+            'Failed to provision authentication credentials for student account ($cleanEmail). Please verify that the email address is valid and active.',
       );
     }
 
-    if (fbUid == null || fbUid.isEmpty) {
-      throw Exception(
-        'Failed to provision authentication credentials for student account ($cleanEmail). Please verify that the email address is valid and active.',
-      );
-    }
-
-    final studentId = fbUid;
+    final studentId = fbResult.uid!;
 
     try {
       // 1. Direct Pure Dart insert into Supabase users, profiles, settings, and enrollments

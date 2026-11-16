@@ -5,6 +5,29 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:class_realm/core/config/env_config.dart';
 
+class FirebaseAuthResult {
+  final String? uid;
+  final String? errorCode;
+  final String? errorMessage;
+
+  bool get isSuccess => uid != null && uid!.isNotEmpty;
+
+  const FirebaseAuthResult({
+    this.uid,
+    this.errorCode,
+    this.errorMessage,
+  });
+
+  factory FirebaseAuthResult.success(String uid) =>
+      FirebaseAuthResult(uid: uid);
+
+  factory FirebaseAuthResult.failure({
+    required String code,
+    required String message,
+  }) =>
+      FirebaseAuthResult(errorCode: code, errorMessage: message);
+}
+
 class FirebaseAuthAdminService {
   static String? _cachedAccessToken;
   static DateTime? _tokenExpiry;
@@ -102,14 +125,15 @@ class FirebaseAuthAdminService {
     return false;
   }
 
-  /// Creates a new user in Firebase Authentication via Service Account Admin API.
-  /// Returns the Firebase UID (`localId`) on success.
-  static Future<String?> createUser({
+  /// Creates a new user in Firebase Authentication and returns a detailed [FirebaseAuthResult].
+  static Future<FirebaseAuthResult> createUserDetailed({
     required String email,
     required String password,
     String? displayName,
   }) async {
     final cleanEmail = email.trim().toLowerCase();
+    String? lastDetectedCode;
+
     try {
       // 1. Primary: Use Google Service Account OAuth2 token (Admin API)
       final token = await _getAccessToken();
@@ -139,11 +163,12 @@ class FirebaseAuthAdminService {
             debugPrint(
               'FirebaseAuthAdminService: Successfully created user $uid ($cleanEmail) via Service Account.',
             );
-            return uid;
+            return FirebaseAuthResult.success(uid);
           }
         } else {
           final body = jsonDecode(res.body);
           final errMsg = body['error']?['message']?.toString();
+          lastDetectedCode = errMsg;
           if (errMsg == 'EMAIL_EXISTS') {
             // Retrieve existing user UID via lookup
             final lookupRes = await http.post(
@@ -180,7 +205,7 @@ class FirebaseAuthAdminService {
                         'displayName': displayName,
                     }),
                   );
-                  return existingUid;
+                  return FirebaseAuthResult.success(existingUid);
                 }
               }
             }
@@ -223,13 +248,14 @@ class FirebaseAuthAdminService {
               );
             } catch (_) {}
           }
-          return uid;
+          if (uid != null) {
+            return FirebaseAuthResult.success(uid);
+          }
         } else {
-          // If EMAIL_EXISTS (e.g. orphaned Firebase record from earlier test or delete),
-          // handle gracefully so teacher creation succeeds
           try {
             final fbErr = jsonDecode(fbRes.body);
             final errMsg = fbErr['error']?['message']?.toString();
+            lastDetectedCode = errMsg;
             if (errMsg == 'EMAIL_EXISTS') {
               // Sign in to retrieve UID and update password/profile
               final signRes = await http.post(
@@ -245,7 +271,10 @@ class FirebaseAuthAdminService {
               );
               if (signRes.statusCode == 200) {
                 final signData = jsonDecode(signRes.body);
-                return signData['localId']?.toString();
+                final uid = signData['localId']?.toString();
+                if (uid != null) {
+                  return FirebaseAuthResult.success(uid);
+                }
               }
             }
           } catch (_) {}
@@ -253,8 +282,59 @@ class FirebaseAuthAdminService {
       }
     } catch (e) {
       debugPrint('FirebaseAuthAdminService createUser error: $e');
+      return FirebaseAuthResult.failure(
+        code: 'NETWORK_ERROR',
+        message:
+            'Could not connect to authentication services ($e). Please check your internet connection.',
+      );
     }
-    return null;
+
+    if (lastDetectedCode == 'EMAIL_EXISTS') {
+      return FirebaseAuthResult.failure(
+        code: 'EMAIL_EXISTS',
+        message:
+            'The email address "$cleanEmail" is already registered to an existing account. Please use a different, unique email address for this student.',
+      );
+    } else if (lastDetectedCode == 'INVALID_EMAIL') {
+      return FirebaseAuthResult.failure(
+        code: 'INVALID_EMAIL',
+        message:
+            'The email address "$cleanEmail" is invalid or formatted incorrectly. Please double check the spelling.',
+      );
+    } else if (lastDetectedCode == 'TOO_MANY_ATTEMPTS_TRY_LATER') {
+      return FirebaseAuthResult.failure(
+        code: 'TOO_MANY_ATTEMPTS_TRY_LATER',
+        message:
+            'Too many account creation attempts. Please wait a few minutes before trying again.',
+      );
+    } else if (lastDetectedCode == 'OPERATION_NOT_ALLOWED') {
+      return FirebaseAuthResult.failure(
+        code: 'OPERATION_NOT_ALLOWED',
+        message:
+            'Student account creation is currently disabled in system authentication settings.',
+      );
+    }
+
+    return FirebaseAuthResult.failure(
+      code: lastDetectedCode ?? 'UNKNOWN_ERROR',
+      message:
+          'Failed to provision credentials for "$cleanEmail" (${lastDetectedCode ?? "Unknown authentication failure"}). Please verify the email and try again.',
+    );
+  }
+
+  /// Creates a new user in Firebase Authentication via Service Account Admin API.
+  /// Returns the Firebase UID (`localId`) on success, or null on failure.
+  static Future<String?> createUser({
+    required String email,
+    required String password,
+    String? displayName,
+  }) async {
+    final result = await createUserDetailed(
+      email: email,
+      password: password,
+      displayName: displayName,
+    );
+    return result.uid;
   }
 
   /// Sets user disabled status in Firebase Auth (for Archive / Unarchive)
