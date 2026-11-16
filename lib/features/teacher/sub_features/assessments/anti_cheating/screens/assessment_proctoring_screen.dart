@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
@@ -40,8 +41,7 @@ class AssessmentProctoringScreen extends StatefulWidget {
       _AssessmentProctoringScreenState();
 }
 
-class _AssessmentProctoringScreenState
-    extends State<AssessmentProctoringScreen>
+class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
     with SingleTickerProviderStateMixin {
   late final TeacherProctorChannelService _proctorService;
   StreamSubscription<List<StudentLiveProctorState>>? _proctorSub;
@@ -60,9 +60,9 @@ class _AssessmentProctoringScreenState
   bool _isSyncingLearners = false;
   DateTime? _overrideScheduleDate;
 
-  DateTime get _scheduleDate => _overrideScheduleDate ?? widget.assessment.scheduleDate;
-  DateTime get _lateCutoff =>
-      _scheduleDate.add(const Duration(minutes: 15));
+  DateTime get _scheduleDate =>
+      _overrideScheduleDate ?? widget.assessment.scheduleDate;
+  DateTime get _lateCutoff => _scheduleDate.add(const Duration(minutes: 15));
   DateTime get _examEndTime =>
       _scheduleDate.add(Duration(minutes: widget.assessment.durationMinutes));
 
@@ -75,8 +75,9 @@ class _AssessmentProctoringScreenState
     _resultsReleased = widget.assessment.resultsReleased;
 
     final initialPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
-    final isItemAnalysisUrl =
-        AppRoutes.isTeacherClassworkItemAnalysisRoute(initialPath);
+    final isItemAnalysisUrl = AppRoutes.isTeacherClassworkItemAnalysisRoute(
+      initialPath,
+    );
     final startOnItemAnalysis = isItemAnalysisUrl && _isTestingFinished;
     if (startOnItemAnalysis) {
       _activeTab = ProctorViewTab.itemAnalysis;
@@ -144,7 +145,9 @@ class _AssessmentProctoringScreenState
               lastActiveAt: live.lastActiveAt,
               kickedReason: live.kickedReason,
               score: live.score,
-              clearScore: live.score == null && live.status == ProctorSessionStatus.retakeRequested,
+              clearScore:
+                  live.score == null &&
+                  live.status == ProctorSessionStatus.retakeRequested,
               totalPoints: live.totalPoints ?? st.totalPoints,
               isEntryAllowed: live.isEntryAllowed,
               isMissing: live.isMissing,
@@ -158,7 +161,9 @@ class _AssessmentProctoringScreenState
     });
 
     TeacherGradebookTab.classworkSyncNotifier.addListener(_onGradebookSynced);
-    TeacherGradebookTab.gradebookRefreshNotifier.addListener(_onGradebookSynced);
+    TeacherGradebookTab.gradebookRefreshNotifier.addListener(
+      _onGradebookSynced,
+    );
 
     _loadLearners();
     if (widget.assessment.isExam) {
@@ -187,8 +192,12 @@ class _AssessmentProctoringScreenState
 
   @override
   void dispose() {
-    TeacherGradebookTab.classworkSyncNotifier.removeListener(_onGradebookSynced);
-    TeacherGradebookTab.gradebookRefreshNotifier.removeListener(_onGradebookSynced);
+    TeacherGradebookTab.classworkSyncNotifier.removeListener(
+      _onGradebookSynced,
+    );
+    TeacherGradebookTab.gradebookRefreshNotifier.removeListener(
+      _onGradebookSynced,
+    );
     _tabController.dispose();
     _lateCheckTimer?.cancel();
     _liveProctorAutoSyncTimer?.cancel();
@@ -228,7 +237,8 @@ class _AssessmentProctoringScreenState
         }
       }
 
-      String? offeringId = assessmentRow?['subject_offering_id']?.toString() ??
+      String? offeringId =
+          assessmentRow?['subject_offering_id']?.toString() ??
           widget.assessment.subjectOfferingId;
       final totalPoints = widget.assessment.totalPoints;
       _resultsReleased = assessmentRow?['results_released'] == true;
@@ -251,11 +261,10 @@ class _AssessmentProctoringScreenState
       // 1c. If offeringId is still null/empty, find offering by section name & subject
       if (offeringId == null || offeringId.isEmpty) {
         try {
-          final cleanSec =
-              widget.assessment.section.replaceAll('Section', '').trim();
-          final offRes = await client
-              .from('subject_offerings')
-              .select('''
+          final cleanSec = widget.assessment.section
+              .replaceAll('Section', '')
+              .trim();
+          final offRes = await client.from('subject_offerings').select('''
                 id,
                 sections!inner ( section_name ),
                 subjects!inner ( subject_name )
@@ -265,9 +274,13 @@ class _AssessmentProctoringScreenState
             final subMap = off['subjects'] as Map<String, dynamic>? ?? {};
             final sName = subMap['subject_name']?.toString() ?? '';
             final secName = secMap['section_name']?.toString() ?? '';
-            final matchesSec = secName.toLowerCase().contains(cleanSec.toLowerCase()) ||
-                secName.toLowerCase().contains(widget.assessment.section.toLowerCase());
-            final matchesSub = widget.assessment.subject.isEmpty ||
+            final matchesSec =
+                secName.toLowerCase().contains(cleanSec.toLowerCase()) ||
+                secName.toLowerCase().contains(
+                  widget.assessment.section.toLowerCase(),
+                );
+            final matchesSub =
+                widget.assessment.subject.isEmpty ||
                 sName.toLowerCase() == widget.assessment.subject.toLowerCase();
             if (matchesSec && matchesSub) {
               offeringId = off['id']?.toString();
@@ -324,12 +337,15 @@ class _AssessmentProctoringScreenState
       // Tier 2: Query student_enrollments for all offerings matching this section name
       if (enrollData.isEmpty && widget.assessment.section.isNotEmpty) {
         try {
-          final cleanSec =
-              widget.assessment.section.replaceAll('Section', '').trim();
+          final cleanSec = widget.assessment.section
+              .replaceAll('Section', '')
+              .trim();
           final secRows = await client
               .from('sections')
               .select('id, section_name')
-              .or('section_name.ilike.%${widget.assessment.section}%,section_name.ilike.%$cleanSec%');
+              .or(
+                'section_name.ilike.%${widget.assessment.section}%,section_name.ilike.%$cleanSec%',
+              );
           final secIds = (secRows as List? ?? [])
               .map((s) => s['id']?.toString())
               .whereType<String>()
@@ -386,8 +402,7 @@ class _AssessmentProctoringScreenState
                 .trim()
                 .toLowerCase();
             final matched = teacherStudents.where((st) {
-              final sSec =
-                  (st.departmentOrSection ?? '').trim().toLowerCase();
+              final sSec = (st.departmentOrSection ?? '').trim().toLowerCase();
               return sSec.isEmpty ||
                   sSec.contains(widget.assessment.section.toLowerCase()) ||
                   sSec.contains(cleanSec);
@@ -418,7 +433,9 @@ class _AssessmentProctoringScreenState
         try {
           final allProfiles = await client
               .from('student_profiles')
-              .select('student_id, lrn, first_name, middle_name, last_name, gender, users ( is_archived )')
+              .select(
+                'student_id, lrn, first_name, middle_name, last_name, gender, users ( is_archived )',
+              )
               .order('last_name', ascending: true);
           for (final p in (allProfiles as List? ?? [])) {
             enrollData.add({
@@ -441,13 +458,16 @@ class _AssessmentProctoringScreenState
           profile = profileRaw;
         } else if (profileRaw is Map) {
           profile = Map<String, dynamic>.from(profileRaw);
-        } else if (profileRaw is List && profileRaw.isNotEmpty && profileRaw.first is Map) {
+        } else if (profileRaw is List &&
+            profileRaw.isNotEmpty &&
+            profileRaw.first is Map) {
           profile = Map<String, dynamic>.from(profileRaw.first as Map);
         } else {
           profile = {};
         }
 
-        final sId = row['student_id']?.toString() ??
+        final sId =
+            row['student_id']?.toString() ??
             profile['student_id']?.toString() ??
             '';
         final enrollStatus = row['status']?.toString().toLowerCase() ?? '';
@@ -455,7 +475,9 @@ class _AssessmentProctoringScreenState
         bool isUserArchived = false;
         if (usersRaw is Map) {
           isUserArchived = usersRaw['is_archived'] == true;
-        } else if (usersRaw is List && usersRaw.isNotEmpty && usersRaw.first is Map) {
+        } else if (usersRaw is List &&
+            usersRaw.isNotEmpty &&
+            usersRaw.first is Map) {
           isUserArchived = (usersRaw.first as Map)['is_archived'] == true;
         }
         if (enrollStatus == 'archived' || isUserArchived) {
@@ -569,7 +591,8 @@ class _AssessmentProctoringScreenState
               final sVal = entry.value;
               if (sVal is Map && sVal[catKey] is Map) {
                 final catScores = sVal[catKey] as Map;
-                final rawScore = catScores[colKey] ?? catScores[colIdx.toString()];
+                final rawScore =
+                    catScores[colKey] ?? catScores[colIdx.toString()];
                 if (rawScore is num) {
                   gradebookScoresMap[sId] = rawScore.toDouble();
                 }
@@ -608,23 +631,26 @@ class _AssessmentProctoringScreenState
       final existingStateMap = <String, StudentLiveProctorState>{
         for (final s in _rosterStudents) s.studentId: s,
       };
-      if (existingStateMap.isEmpty && _proctorService.currentStates.isNotEmpty) {
+      if (existingStateMap.isEmpty &&
+          _proctorService.currentStates.isNotEmpty) {
         for (final s in _proctorService.currentStates) {
           existingStateMap[s.studentId] = s;
         }
       }
 
       for (final row in uniqueEnrollData) {
-        final profile =
-            row['student_profiles'] as Map<String, dynamic>? ?? {};
+        final profile = row['student_profiles'] as Map<String, dynamic>? ?? {};
         final sId = row['student_id']?.toString() ?? '';
         final firstName = profile['first_name']?.toString() ?? '';
         final middleName = profile['middle_name']?.toString() ?? '';
         final lastName = profile['last_name']?.toString() ?? '';
         final lrn = profile['lrn']?.toString() ?? '';
         final gender = profile['gender']?.toString() ?? '';
-        final fullName =
-            [firstName, middleName, lastName].where((s) => s.isNotEmpty).join(' ');
+        final fullName = [
+          firstName,
+          middleName,
+          lastName,
+        ].where((s) => s.isNotEmpty).join(' ');
 
         final attempt = attemptsMap[sId];
         final sub = submissionsMap[sId];
@@ -633,7 +659,8 @@ class _AssessmentProctoringScreenState
         final rawStatus = (attempt?['status']?.toString() ?? '').toLowerCase();
         final subStatus = (sub?['status']?.toString() ?? '').toLowerCase();
 
-        double? score = (attempt?['score_earned'] as num?)?.toDouble() ??
+        double? score =
+            (attempt?['score_earned'] as num?)?.toDouble() ??
             (sub?['score'] as num?)?.toDouble() ??
             gbScore;
         if (gbScore != null) {
@@ -641,7 +668,8 @@ class _AssessmentProctoringScreenState
           score = gbScore;
         }
 
-        final isCompletedInDb = rawStatus == 'submitted' ||
+        final isCompletedInDb =
+            rawStatus == 'submitted' ||
             rawStatus == 'auto_submitted' ||
             subStatus == 'submitted' ||
             subStatus == 'graded' ||
@@ -649,7 +677,8 @@ class _AssessmentProctoringScreenState
         final isInProgressInDb = rawStatus == 'in_progress' && !isCompletedInDb;
         final isDisqualifiedInDb = rawStatus == 'disqualified';
 
-        final hasStarted = isInProgressInDb || isCompletedInDb || isDisqualifiedInDb;
+        final hasStarted =
+            isInProgressInDb || isCompletedInDb || isDisqualifiedInDb;
         final isMissing = pastLateCutoff && !hasStarted;
 
         // Entry allowed check: default false if past 15m and never started, unless overridden
@@ -708,27 +737,34 @@ class _AssessmentProctoringScreenState
       });
 
       // Synchronize live proctor service roster first
-      _proctorService.initializeRoster(parsedList.map((s) => {
-        'id': s.studentId,
-        'name': s.studentName,
-        'lrn': s.lrn,
-        'section': s.section,
-        'status': s.status,
-        'violation_count': s.violationCount,
-        'violations': s.violations,
-        'gender': s.gender,
-        'last_name': s.lastName,
-        'first_name': s.firstName,
-        'middle_name': s.middleName,
-        'score': s.score,
-        'total_points': s.totalPoints,
-        'is_entry_allowed': s.isEntryAllowed,
-        'is_missing': s.isMissing,
-        'current_question_number': s.currentQuestionNumber,
-      }).toList());
+      _proctorService.initializeRoster(
+        parsedList
+            .map(
+              (s) => {
+                'id': s.studentId,
+                'name': s.studentName,
+                'lrn': s.lrn,
+                'section': s.section,
+                'status': s.status,
+                'violation_count': s.violationCount,
+                'violations': s.violations,
+                'gender': s.gender,
+                'last_name': s.lastName,
+                'first_name': s.firstName,
+                'middle_name': s.middleName,
+                'score': s.score,
+                'total_points': s.totalPoints,
+                'is_entry_allowed': s.isEntryAllowed,
+                'is_missing': s.isMissing,
+                'current_question_number': s.currentQuestionNumber,
+              },
+            )
+            .toList(),
+      );
 
       // Only query historical violations on initial load or if empty; Realtime pushes any active logs without polling
-      if (!silent || _proctorService.currentStates.every((s) => s.violationCount == 0)) {
+      if (!silent ||
+          _proctorService.currentStates.every((s) => s.violationCount == 0)) {
         await _proctorService.loadHistoricalViolations();
       }
 
@@ -748,8 +784,10 @@ class _AssessmentProctoringScreenState
               totalPoints: live.totalPoints ?? parsedList[i].totalPoints,
               isEntryAllowed: live.isEntryAllowed,
               currentQuestionNumber:
-                  live.currentQuestionNumber ?? parsedList[i].currentQuestionNumber,
-              isMissing: live.status == ProctorSessionStatus.notStarted &&
+                  live.currentQuestionNumber ??
+                  parsedList[i].currentQuestionNumber,
+              isMissing:
+                  live.status == ProctorSessionStatus.notStarted &&
                   pastLateCutoff &&
                   !live.isEntryAllowed,
             );
@@ -823,7 +861,9 @@ class _AssessmentProctoringScreenState
             .select('id, question_text, position, points')
             .eq('assessment_id', widget.assessment.id)
             .order('position', ascending: true);
-        questions = List<Map<String, dynamic>>.from(questionsRes as List? ?? []);
+        questions = List<Map<String, dynamic>>.from(
+          questionsRes as List? ?? [],
+        );
       } catch (qErr) {
         debugPrint('assessment_questions query notice: $qErr');
       }
@@ -861,7 +901,9 @@ class _AssessmentProctoringScreenState
               .from('assessment_responses')
               .select('question_id, is_correct, attempt_id')
               .inFilter('attempt_id', attemptIds);
-          responses = List<Map<String, dynamic>>.from(responsesRes as List? ?? []);
+          responses = List<Map<String, dynamic>>.from(
+            responsesRes as List? ?? [],
+          );
         } else if (questions.isNotEmpty) {
           final qIds = questions
               .map((q) => q['id']?.toString())
@@ -872,7 +914,9 @@ class _AssessmentProctoringScreenState
                 .from('assessment_responses')
                 .select('question_id, is_correct, attempt_id')
                 .inFilter('question_id', qIds);
-            responses = List<Map<String, dynamic>>.from(responsesRes as List? ?? []);
+            responses = List<Map<String, dynamic>>.from(
+              responsesRes as List? ?? [],
+            );
           }
         }
       } catch (rErr) {
@@ -883,11 +927,13 @@ class _AssessmentProctoringScreenState
       for (int i = 0; i < questions.length; i++) {
         final q = questions[i];
         final qId = q['id']?.toString();
-        final itemResponses =
-            responses.where((r) => r['question_id']?.toString() == qId).toList();
+        final itemResponses = responses
+            .where((r) => r['question_id']?.toString() == qId)
+            .toList();
         final total = itemResponses.length;
-        final correct =
-            itemResponses.where((r) => r['is_correct'] == true).length;
+        final correct = itemResponses
+            .where((r) => r['is_correct'] == true)
+            .length;
 
         statsList.add(
           ItemDifficultyStat(
@@ -976,7 +1022,9 @@ class _AssessmentProctoringScreenState
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: isDark
-                      ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                      ? theme.colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.3,
+                        )
                       : theme.colorScheme.primary.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
@@ -999,7 +1047,9 @@ class _AssessmentProctoringScreenState
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             style: TextButton.styleFrom(
-              foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              foregroundColor: theme.colorScheme.onSurface.withValues(
+                alpha: 0.7,
+              ),
             ),
             child: const Text('Cancel'),
           ),
@@ -1023,8 +1073,9 @@ class _AssessmentProctoringScreenState
     if (confirmed == true) {
       _proctorService.authorizeRetake(student.studentId);
       setState(() {
-        final idx =
-            _rosterStudents.indexWhere((s) => s.studentId == student.studentId);
+        final idx = _rosterStudents.indexWhere(
+          (s) => s.studentId == student.studentId,
+        );
         if (idx != -1) {
           _rosterStudents[idx] = _rosterStudents[idx].copyWith(
             status: ProctorSessionStatus.retakeRequested,
@@ -1051,8 +1102,9 @@ class _AssessmentProctoringScreenState
     _proctorService.toggleAllowStudent(student.studentId, newAllowed);
 
     setState(() {
-      final idx =
-          _rosterStudents.indexWhere((s) => s.studentId == student.studentId);
+      final idx = _rosterStudents.indexWhere(
+        (s) => s.studentId == student.studentId,
+      );
       if (idx != -1) {
         _rosterStudents[idx] = _rosterStudents[idx].copyWith(
           isEntryAllowed: newAllowed,
@@ -1108,15 +1160,26 @@ class _AssessmentProctoringScreenState
 
   String _formatDate(DateTime date) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   String _formatTime(DateTime date) {
-    final hour =
-        date.hour == 0 ? 12 : (date.hour > 12 ? date.hour - 12 : date.hour);
+    final hour = date.hour == 0
+        ? 12
+        : (date.hour > 12 ? date.hour - 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');
     return '$hour:$minute ${date.hour >= 12 ? 'PM' : 'AM'}';
   }
@@ -1151,13 +1214,17 @@ class _AssessmentProctoringScreenState
               selectedTime.hour,
               selectedTime.minute,
             );
-            final isPast = candidate.isBefore(now.subtract(const Duration(minutes: 1)));
-            final isUnchanged = selectedDate.year == initialSchedule.year &&
+            final isPast = candidate.isBefore(
+              now.subtract(const Duration(minutes: 1)),
+            );
+            final isUnchanged =
+                selectedDate.year == initialSchedule.year &&
                 selectedDate.month == initialSchedule.month &&
                 selectedDate.day == initialSchedule.day &&
                 selectedTime.hour == initialSchedule.hour &&
                 selectedTime.minute == initialSchedule.minute;
-            final isSelectedToday = selectedDate.year == today.year &&
+            final isSelectedToday =
+                selectedDate.year == today.year &&
                 selectedDate.month == today.month &&
                 selectedDate.day == today.day;
 
@@ -1217,7 +1284,8 @@ class _AssessmentProctoringScreenState
                         color: const Color(0xFF0F8A48).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: const Color(0xFF0F8A48).withValues(alpha: 0.25),
+                          color: const Color(0xFF0F8A48)
+                              .withValues(alpha: 0.25),
                         ),
                       ),
                       child: Row(
@@ -1406,8 +1474,11 @@ class _AssessmentProctoringScreenState
 
                           try {
                             final client = SupabaseService().client;
-                            final candidateUtc = candidate.toUtc().toIso8601String();
-                            final durationMinutes = widget.assessment.durationMinutes > 0
+                            final candidateUtc = candidate
+                                .toUtc()
+                                .toIso8601String();
+                            final durationMinutes =
+                                widget.assessment.durationMinutes > 0
                                 ? widget.assessment.durationMinutes
                                 : 60;
                             final deadlineUtc = candidate
@@ -1434,15 +1505,27 @@ class _AssessmentProctoringScreenState
                                   })
                                   .eq('id', widget.assessment.id);
                             } catch (cwErr) {
-                              debugPrint('classwork_items update non-fatal: $cwErr');
+                              debugPrint(
+                                'classwork_items update non-fatal: $cwErr',
+                              );
                             }
 
                             // 3. Invalidate caches across the app
-                            AppDataCache.instance.invalidatePrefix('teacher_assessments_');
-                            AppDataCache.instance.invalidatePrefix('teacher_activities_');
-                            AppDataCache.instance.invalidatePrefix('student_dashboard_');
-                            AppDataCache.instance.invalidatePrefix('gradebook_');
-                            TeacherGradebookTab.gradebookRefreshNotifier.value++;
+                            AppDataCache.instance.invalidatePrefix(
+                              'teacher_assessments_',
+                            );
+                            AppDataCache.instance.invalidatePrefix(
+                              'teacher_activities_',
+                            );
+                            AppDataCache.instance.invalidatePrefix(
+                              'student_dashboard_',
+                            );
+                            AppDataCache.instance.invalidatePrefix(
+                              'gradebook_',
+                            );
+                            TeacherGradebookTab
+                                .gradebookRefreshNotifier
+                                .value++;
 
                             if (mounted) {
                               setState(() {
@@ -1512,8 +1595,9 @@ class _AssessmentProctoringScreenState
     final completedCount = _rosterStudents
         .where((s) => s.status == ProctorSessionStatus.submitted)
         .length;
-    final violationsCount =
-        _rosterStudents.where((s) => s.violationCount > 0).length;
+    final violationsCount = _rosterStudents
+        .where((s) => s.violationCount > 0)
+        .length;
     final lockedLateCount = _rosterStudents
         .where((s) => !s.isEntryAllowed || s.isMissing)
         .length;
@@ -1590,7 +1674,9 @@ class _AssessmentProctoringScreenState
                       'Section: ${widget.assessment.section} • Real-time student roster & proctoring monitor',
                       style: TextStyle(
                         fontSize: 12.5,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                   ],
@@ -1924,21 +2010,33 @@ class _AssessmentProctoringScreenState
                     Expanded(
                       flex: 2,
                       child: Center(
-                        child: ShimmerBox(width: 76, height: 22, borderRadius: 6),
+                        child: ShimmerBox(
+                          width: 76,
+                          height: 22,
+                          borderRadius: 6,
+                        ),
                       ),
                     ),
                     SizedBox(width: 20),
                     Expanded(
                       flex: 2,
                       child: Center(
-                        child: ShimmerBox(width: 32, height: 18, borderRadius: 4),
+                        child: ShimmerBox(
+                          width: 32,
+                          height: 18,
+                          borderRadius: 4,
+                        ),
                       ),
                     ),
                     SizedBox(width: 20),
                     Expanded(
                       flex: 2,
                       child: Center(
-                        child: ShimmerBox(width: 64, height: 16, borderRadius: 4),
+                        child: ShimmerBox(
+                          width: 64,
+                          height: 16,
+                          borderRadius: 4,
+                        ),
                       ),
                     ),
                     SizedBox(width: 20),
@@ -1983,8 +2081,8 @@ class _AssessmentProctoringScreenState
     final cardBorder = isSelected
         ? theme.colorScheme.primary
         : (isDark
-            ? theme.colorScheme.outline.withValues(alpha: 0.2)
-            : const Color(0xFFE2E8F0));
+              ? theme.colorScheme.outline.withValues(alpha: 0.2)
+              : const Color(0xFFE2E8F0));
 
     return InkWell(
       onTap: onTap,
@@ -1994,10 +2092,7 @@ class _AssessmentProctoringScreenState
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: cardBorder,
-            width: isSelected ? 2 : 1,
-          ),
+          border: Border.all(color: cardBorder, width: isSelected ? 2 : 1),
           boxShadow: !isDark
               ? [
                   BoxShadow(
@@ -2038,11 +2133,7 @@ class _AssessmentProctoringScreenState
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Center(
-                    child: Icon(
-                      icon,
-                      size: 16,
-                      color: accentColor,
-                    ),
+                    child: Icon(icon, size: 16, color: accentColor),
                   ),
                 ),
               ],
@@ -2087,8 +2178,8 @@ class _AssessmentProctoringScreenState
     final totalItems = _itemStats.length;
     final avgP = totalItems > 0
         ? (_itemStats.fold<double>(0.0, (sum, s) => sum + s.pIndex) /
-                totalItems) *
-            100
+                  totalItems) *
+              100
         : 0.0;
 
     final headerBg = isDark
@@ -2118,26 +2209,42 @@ class _AssessmentProctoringScreenState
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                      color: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       'Total Items: $totalItems',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                      color: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       'Mean Accuracy: ${avgP.toStringAsFixed(1)}%',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                   const Spacer(),
@@ -2146,7 +2253,10 @@ class _AssessmentProctoringScreenState
                     children: [
                       const Text(
                         'Release Answer Key to Students',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Switch(
@@ -2162,7 +2272,9 @@ class _AssessmentProctoringScreenState
             LayoutBuilder(
               builder: (context, constraints) {
                 final availableWidth = constraints.maxWidth;
-                final tableWidth = availableWidth > 860 ? availableWidth : 860.0;
+                final tableWidth = availableWidth > 860
+                    ? availableWidth
+                    : 860.0;
 
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -2170,250 +2282,273 @@ class _AssessmentProctoringScreenState
                     width: tableWidth,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Permanent Header Row
-                    Container(
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: headerBg,
-                        border: Border(
-                          top: BorderSide(color: headerBorder),
-                          bottom: BorderSide(color: headerBorder),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          _buildAnalysisHeaderCell(
-                            theme: theme,
-                            width: 44,
-                            label: '#',
-                            alignment: Alignment.center,
-                          ),
-                          Expanded(
-                            child: _buildAnalysisHeaderCell(
-                              theme: theme,
-                              label: 'QUESTION STATEMENT',
+                      children: [
+                        // Permanent Header Row
+                        Container(
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: headerBg,
+                            border: Border(
+                              top: BorderSide(color: headerBorder),
+                              bottom: BorderSide(color: headerBorder),
                             ),
                           ),
-                          _buildAnalysisHeaderCell(
-                            theme: theme,
-                            width: 160,
-                            label: 'CORRECT / ATTEMPTS',
-                            alignment: Alignment.center,
-                          ),
-                          _buildAnalysisHeaderCell(
-                            theme: theme,
-                            width: 160,
-                            label: 'ACCURACY (P-INDEX)',
-                            alignment: Alignment.center,
-                          ),
-                          _buildAnalysisHeaderCell(
-                            theme: theme,
-                            width: 170,
-                            label: 'DEPED DIFFICULTY TIER',
-                            alignment: Alignment.center,
-                            hasRightBorder: false,
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Rows or Polished Full-Width Empty Row
-                    if (_itemStats.isEmpty)
-                      Container(
-                        width: tableWidth,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 48,
-                          horizontal: 24,
-                        ),
-                        alignment: Alignment.center,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 56,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary.withValues(
-                                  alpha: isDark ? 0.14 : 0.08,
-                                ),
-                                shape: BoxShape.circle,
+                          child: Row(
+                            children: [
+                              _buildAnalysisHeaderCell(
+                                theme: theme,
+                                width: 44,
+                                label: '#',
+                                alignment: Alignment.center,
                               ),
-                              child: Center(
-                                child: Icon(
-                                  LucideIcons.barChart3,
-                                  size: 26,
-                                  color: theme.colorScheme.primary,
+                              Expanded(
+                                child: _buildAnalysisHeaderCell(
+                                  theme: theme,
+                                  label: 'QUESTION STATEMENT',
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 14),
-                            Text(
-                              'No Item Analysis Responses Recorded Yet',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: theme.colorScheme.onSurface,
+                              _buildAnalysisHeaderCell(
+                                theme: theme,
+                                width: 160,
+                                label: 'CORRECT / ATTEMPTS',
+                                alignment: Alignment.center,
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 440),
-                              child: Text(
-                                'Individual question difficulty (P-Index) and DepEd tiers will populate automatically as learners submit their responses.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  height: 1.45,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.6,
-                                  ),
-                                ),
+                              _buildAnalysisHeaderCell(
+                                theme: theme,
+                                width: 160,
+                                label: 'ACCURACY (P-INDEX)',
+                                alignment: Alignment.center,
                               ),
-                            ),
-                          ],
+                              _buildAnalysisHeaderCell(
+                                theme: theme,
+                                width: 170,
+                                label: 'DEPED DIFFICULTY TIER',
+                                alignment: Alignment.center,
+                                hasRightBorder: false,
+                              ),
+                            ],
+                          ),
                         ),
-                      )
-                    else
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _itemStats.length,
-                        itemBuilder: (context, idx) {
-                          final stat = _itemStats[idx];
-                          final classification = stat.classification;
-                          Color badgeColor;
-                          switch (classification) {
-                            case 'Very Easy':
-                              badgeColor = Colors.blue;
-                            case 'Easy':
-                              badgeColor = const Color(0xFF0F8A48);
-                            case 'Moderate / Ideal':
-                              badgeColor = Colors.teal;
-                            case 'Difficult':
-                              badgeColor = Colors.orange;
-                            case 'Pending Submissions':
-                              badgeColor = AppTheme.catSlate;
-                            default:
-                              badgeColor = Colors.red;
-                          }
-
-                          final rowBg = idx.isOdd
-                              ? (isDark
-                                  ? theme.colorScheme.onSurface.withValues(alpha: 0.03)
-                                  : theme.colorScheme.primary.withValues(alpha: 0.025))
-                              : theme.colorScheme.surface;
-
-                          return Container(
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color: rowBg,
-                              border: Border(bottom: BorderSide(color: rowBorder)),
+                        // Rows or Polished Full-Width Empty Row
+                        if (_itemStats.isEmpty)
+                          Container(
+                            width: tableWidth,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 48,
+                              horizontal: 24,
                             ),
-                            child: Row(
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                SizedBox(
-                                  width: 44,
+                                Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary.withValues(
+                                      alpha: isDark ? 0.14 : 0.08,
+                                    ),
+                                    shape: BoxShape.circle,
+                                  ),
                                   child: Center(
-                                    child: Text(
-                                      '${stat.itemNumber}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: theme.colorScheme.primary,
-                                      ),
+                                    child: Icon(
+                                      LucideIcons.barChart3,
+                                      size: 26,
+                                      color: theme.colorScheme.primary,
                                     ),
                                   ),
                                 ),
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                                    child: Text(
-                                      stat.questionText,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: theme.colorScheme.onSurface,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                const SizedBox(height: 14),
+                                Text(
+                                  'No Item Analysis Responses Recorded Yet',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: theme.colorScheme.onSurface,
                                   ),
                                 ),
-                                SizedBox(
-                                  width: 160,
-                                  child: Center(
-                                    child: Text(
-                                      stat.totalAttempts > 0
-                                          ? '${stat.correctCount} / ${stat.totalAttempts} correct'
-                                          : '0 / 0 attempts',
-                                      style: TextStyle(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: theme.colorScheme.onSurface.withValues(
-                                          alpha: stat.totalAttempts > 0 ? 0.8 : 0.45,
-                                        ),
-                                      ),
-                                    ),
+                                const SizedBox(height: 6),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 440,
                                   ),
-                                ),
-                                SizedBox(
-                                  width: 160,
-                                  child: Center(
-                                    child: Text(
-                                      stat.totalAttempts > 0
-                                          ? '${(stat.pIndex * 100).toStringAsFixed(1)}% (P = ${stat.pIndex.toStringAsFixed(2)})'
-                                          : '—',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: stat.totalAttempts > 0
-                                            ? theme.colorScheme.onSurface
-                                            : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: 170,
-                                  child: Center(
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: badgeColor.withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: badgeColor.withValues(alpha: 0.35),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        classification,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: badgeColor,
-                                        ),
-                                      ),
+                                  child: Text(
+                                    'Individual question difficulty (P-Index) and DepEd tiers will populate automatically as learners submit their responses.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      height: 1.45,
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                          );
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
+                          )
+                        else
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _itemStats.length,
+                            itemBuilder: (context, idx) {
+                              final stat = _itemStats[idx];
+                              final classification = stat.classification;
+                              Color badgeColor;
+                              switch (classification) {
+                                case 'Very Easy':
+                                  badgeColor = Colors.blue;
+                                case 'Easy':
+                                  badgeColor = const Color(0xFF0F8A48);
+                                case 'Moderate / Ideal':
+                                  badgeColor = Colors.teal;
+                                case 'Difficult':
+                                  badgeColor = Colors.orange;
+                                case 'Pending Submissions':
+                                  badgeColor = AppTheme.catSlate;
+                                default:
+                                  badgeColor = Colors.red;
+                              }
+
+                              final rowBg = idx.isOdd
+                                  ? (isDark
+                                        ? theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.03)
+                                        : theme.colorScheme.primary.withValues(
+                                            alpha: 0.025,
+                                          ))
+                                  : theme.colorScheme.surface;
+
+                              return Container(
+                                constraints: const BoxConstraints(
+                                  minHeight: 52,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: rowBg,
+                                  border: Border(
+                                    bottom: BorderSide(color: rowBorder),
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 44,
+                                      child: Center(
+                                        child: Text(
+                                          '${stat.itemNumber}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: theme.colorScheme.primary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        child: Text(
+                                          stat.questionText,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: theme.colorScheme.onSurface,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 160,
+                                      child: Center(
+                                        child: Text(
+                                          stat.totalAttempts > 0
+                                              ? '${stat.correctCount} / ${stat.totalAttempts} correct'
+                                              : '0 / 0 attempts',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: theme.colorScheme.onSurface
+                                                .withValues(
+                                                  alpha: stat.totalAttempts > 0
+                                                      ? 0.8
+                                                      : 0.45,
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 160,
+                                      child: Center(
+                                        child: Text(
+                                          stat.totalAttempts > 0
+                                              ? '${(stat.pIndex * 100).toStringAsFixed(1)}% (P = ${stat.pIndex.toStringAsFixed(2)})'
+                                              : '—',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: stat.totalAttempts > 0
+                                                ? theme.colorScheme.onSurface
+                                                : theme.colorScheme.onSurface
+                                                      .withValues(alpha: 0.4),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 170,
+                                      child: Center(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: badgeColor.withValues(
+                                              alpha: 0.12,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                            border: Border.all(
+                                              color: badgeColor.withValues(
+                                                alpha: 0.35,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            classification,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: badgeColor,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
-      ],
-    ),
-  ),
-);
+      ),
+    );
   }
 
   Widget _buildAnalysisHeaderCell({

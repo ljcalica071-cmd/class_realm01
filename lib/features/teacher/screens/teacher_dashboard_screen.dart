@@ -997,11 +997,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                   alignment: Alignment.center,
                                   children: [
                                     Icon(
-                                      isLocked ? LucideIcons.lock : icon,
-                                      color: isSelected
-                                          ? theme.colorScheme.primary
-                                          : theme.colorScheme.onSurface
-                                                .withValues(alpha: 0.75),
+                                      icon,
+                                      color: isLocked
+                                          ? theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.4)
+                                          : (isSelected
+                                                ? theme.colorScheme.primary
+                                                : theme.colorScheme.onSurface
+                                                      .withValues(alpha: 0.75)),
                                       size: 20,
                                     ),
                                     Positioned(
@@ -1040,7 +1043,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                   ],
                                 )
                               : Icon(
-                                  isLocked ? LucideIcons.lock : icon,
+                                  icon,
                                   color: isLocked
                                       ? theme.colorScheme.onSurface.withValues(
                                           alpha: 0.4,

@@ -4,6 +4,9 @@
 **Primary Source Modules:**  
 - `lib/core/services/sync_coordinator.dart`  
 - `lib/data/datasources/local/app_database.dart`  
+- `lib/core/utils/deped_grading_engine.dart`  
+- `lib/features/teacher/sub_features/grading/utils/gradebook_analytics_calculator.dart`  
+- `lib/features/teacher/sub_features/grading/widgets/teacher_grades_tab.dart`  
 - `lib/features/teacher/sub_features/attendance/widgets/teacher_attendance_tab.dart`  
 - `lib/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart`  
 - `lib/core/widgets/auth_guard.dart`  
@@ -181,3 +184,104 @@ ClassRealm is an **Integrated Senior High School Management System** designed fo
   - When `maintenance_mode == true`, `AuthGuard` checks `user.role`. If the role is NOT `admin`, navigation redirects immediately to `MaintenanceScreen`.
   - As soon as Admin disables Maintenance Mode, active screens automatically reload to normal state via the Realtime listener.
 - **Edge Cases / Fallback:** Critical services like ESP32 gate attendance caching continue operating locally in Drift SQLite even during maintenance mode.
+
+---
+
+### Q9: How does the Performance Analytics engine compute, transmute, and visualize student academic performance, DO 15 achievement tiers, and learning trajectories?
+
+- **Direct Summary:** ClassRealm's Performance Analytics module (`teacher_grades_tab.dart`) integrates with the Electronic Gradebook and `DepEdGradingEngine` to provide real-time cohort analytics. It automatically aggregates raw scores, calculates Percentage Scores ($PS$), applies curriculum component weights ($WW\ 20\%$, $PT\ 50\%$, $EX\ 30\%$), computes Initial Grades ($IG$), applies DepEd Order No. 15, s. 2026 transmutation ($75$ passing), and classifies learners into diagnostic achievement tiers with trajectory delta tracking (`Improving`, `Stable`, `Declining`).
+
+- **Architecture & Calculation Pipeline:**
+
+```mermaid
+flowchart TD
+    subgraph DataSources["1. Raw Assessment Inputs"]
+        WW["Written Works (WW1..WWn)\nRaw Scores / Max HPS"]
+        PT["Performance Tasks (PT1..PTn)\nRaw Scores / Max HPS"]
+        EX["Quarterly Exams (EX1..EX3)\nST1 (30%), ST2 (30%), Term Exam (40%)"]
+    end
+
+    subgraph ComputationEngine["2. DepEdGradingEngine & GradebookAnalyticsCalculator"]
+        PS["Calculate Percentage Score (PS%)\nPS = (Total Raw / Total HPS) * 100"]
+        WS["Calculate Weighted Score (WS)\nWW: PS * 20% | PT: PS * 50% | EX: PS * 30%"]
+        IG["Compute Initial Grade (IG)\nIG = WW_WS + PT_WS + EX_WS"]
+        TR["DO 15, s. 2026 Transmutation\nLookup Table: 70.00 -> 75 Pass | 99.50 -> 100"]
+        FG["Multi-Term Final Grade\nFG = round(Sum(TermGrades * Units) / TotalUnits)"]
+        TRN["Trajectory Delta & Trend Analysis\nDelta = Term_Latest - Term_Earliest\n(Rising >= +1.0 | Declining <= -1.0 | Stable)"]
+    end
+
+    subgraph Visualization["3. Performance Analytics UI (teacher_grades_tab.dart)"]
+        KPI["Top KPI Summary Cards\n• Passing Rate (>= 75)\n• Advancing Tier (90-100)\n• Improving Learners (Rising)\n• Needs Support (< 75 or Declining)"]
+        CHART1["Term-over-Term Progression Chart\nStanding bars for Term 1, 2, 3 & Final Avg\nPassing Benchmark line at 75%"]
+        CHART2["Component Mastery & Distribution Donut\n• View A: WW (20%) vs PT (50%) vs EX (30%) PS%\n• View B: Advancing, Benchmarking, Connecting, Developing"]
+        TABLE["Ranked Gradebook Sheet Table\nRank, Student, LRN, Term Grades, Final Grade, Trend, Descriptor, Remarks"]
+    end
+
+    DataSources --> PS
+    PS --> WS
+    WS --> IG
+    IG --> TR
+    TR --> FG
+    TR --> TRN
+    ComputationEngine --> KPI
+    ComputationEngine --> CHART1
+    ComputationEngine --> CHART2
+    ComputationEngine --> TABLE
+```
+
+- **Detailed Mathematical Walkthrough:**
+
+  1. **Component Percentage Score ($PS$):**
+     * **Written Works ($WW$) and Performance Tasks ($PT$):**
+       $$PS = \text{round}_2\left( \frac{\sum \text{Raw Score}_i}{\sum HPS_i} \times 100 \right)$$
+     * **Examinations ($EX$):** DepEd Senior High modular assessments split the exam component across Sub-Tests (ST1: 30%, ST2: 30%, Terminal Exam: 40%):
+       $$\text{SubWeightedScore}_k = \text{round}_2\left( \frac{\text{Score}_k}{HPS_k} \times \text{Weight}_k \right)$$
+       $$PS_{EX} = \text{round}_2\left( \frac{\sum_{k=1}^3 \text{SubWeightedScore}_k}{\sum \text{ActiveSubWeights}} \times 100 \right)$$
+
+  2. **Weighted Score ($WS$):**
+     Based on DepEd Senior High School standard weights (e.g., General Mathematics: $WW\ 20\%$, $PT\ 50\%$, $EX\ 30\%$):
+     $$WS_{WW} = \text{round}_2\left( PS_{WW} \times 0.20 \right)$$
+     $$WS_{PT} = \text{round}_2\left( PS_{PT} \times 0.50 \right)$$
+     $$WS_{EX} = \text{round}_2\left( PS_{EX} \times 0.30 \right)$$
+
+  3. **Initial Grade ($IG$):**
+     $$\text{Initial Grade} = \text{round}_2\left( WS_{WW} + WS_{PT} + WS_{EX} \right)$$
+
+  4. **DO 15, s. 2026 Transmutation Table:**
+     Initial grades are mapped to official transmuted grades on a 60–100 scale:
+     * $99.50 - 100.00 \longrightarrow 100$
+     * $90.06 - 91.23 \longrightarrow 92$
+     * $70.00 - 71.17 \longrightarrow 75$ *(Minimum Passing Standard)*
+     * $65.34 - 69.99 \longrightarrow 74$
+     * $0.00 - 4.67 \longrightarrow 60$ *(Base Floor Grade)*
+
+  5. **Multi-Term Final Grade ($FG$):**
+     For multi-quarter/term academic years:
+     $$\text{Final Grade} = \text{round}\left( \frac{\sum_{t=1}^T \text{TermGrade}_t \times \text{Units}_t}{\text{TotalUnitsEarned}} \right)$$
+
+  6. **Academic Trajectory Delta ($\Delta$) & Trend:**
+     Evaluated in `GradebookAnalyticsCalculator._trendFromDelta()`:
+     * **Cross-Term View:** $\Delta = \text{Grade}_{\text{latest term}} - \text{Grade}_{\text{earliest term}}$
+     * **Single-Term View:** $\Delta = \text{Average}_{\text{latter tasks}} - \text{Average}_{\text{earlier tasks}}$
+     * **Classification:**
+       * $\Delta \ge +1.0$: `Improving` (Rising score trajectory)
+       * $\Delta \le -1.0$: `Declining` (Needs teacher intervention)
+       * $-1.0 < \Delta < +1.0$: `Stable` (Consistent performance)
+
+- **UI Components Explained:**
+
+  | UI Widget / Card | Mathematical Basis & Source | Purpose & Actionable Insight for Teachers |
+  | :--- | :--- | :--- |
+  | **Passing Rate Badge** | $(\text{Passed Count} \div \text{Encoded Count}) \times 100$ | Instantly alerts if the cohort meets DepEd's 75% benchmark threshold. |
+  | **Advancing Tier (90–100)** | $(\text{Learners with Grade} \ge 90 \div \text{Total}) \times 100$ | Identifies high-achieving candidates for academic honors and commendations. |
+  | **Improving Learners** | Count of students where $\text{Trend} == \text{GradeTrend.improving}$ | Highlights positive momentum and effective intervention response. |
+  | **Needs Support** | Students where $\text{Grade} < 75$ OR $\text{Trend} == \text{GradeTrend.declining}$ | Diagnostic early-warning filter for students requiring remedial tasks or parent consultation. |
+  | **Term Progression Chart** | Term averages plotted with benchmark line at $75$ | Visualizes long-term growth across quarters to identify seasonal learning dips. |
+  | **Component Mastery Donut** | Mean Percentage Score ($PS\%$) per category ($WW, PT, EX$) | Pinpoints specific curricular weaknesses (e.g., strong in tasks but failing exams). |
+  | **Performance Distribution Donut** | Cohort breakdown across Advancing, Benchmarking, Connecting, Developing | Provides institutional readiness metrics for accreditation and school administration. |
+  | **Student Ranking Table** | Descending rank by transmuted grade with LRN and descriptors | DepEd Form 137 / Form 138-ready grading summary with one-click export. |
+
+- **Edge Cases & Fault-Tolerance:**
+  * **Zero-Encoded Assessments:** If a teacher creates activities but has not encoded scores, metrics render as pending (`—`) with zero-division protection (`encodedCount > 0 ? ... : null`).
+  * **Dynamic Weight Normalization:** If a subject excludes examinations ($EX = 0$), the engine automatically recalculates weights across $WW$ and $PT$ without breaking the 100% total proportion.
+  * **Synced with Gradebook:** The analytics tab uses a real-time stream; as soon as a teacher updates a cell in the Gradebook sheet, the Analytics charts, donut slices, and KPI cards update instantaneously without a page reload.

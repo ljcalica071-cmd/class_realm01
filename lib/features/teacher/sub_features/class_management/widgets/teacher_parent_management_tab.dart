@@ -65,7 +65,8 @@ class _TeacherParentManagementTabState
   List<String> get _availableSections {
     final set = <String>{};
     for (final s in _teacherSubjectsData) {
-      final subMatches = _selectedSubjectFilter == null ||
+      final subMatches =
+          _selectedSubjectFilter == null ||
           _selectedSubjectFilter == '— All Subjects —' ||
           s['subject_name']?.toString().trim().toLowerCase() ==
               _selectedSubjectFilter!.trim().toLowerCase();
@@ -537,7 +538,9 @@ class _TeacherParentManagementTabState
                           label: 'Section',
                           icon: LucideIcons.users,
                           value: _selectedSectionFilter,
-                          items: ['— All Sections —', ..._availableSections],
+                          items: _availableSections.isEmpty
+                              ? const <String>[]
+                              : ['— All Sections —', ..._availableSections],
                           onChanged: (val) {
                             if (val != null) {
                               setState(() {
@@ -577,16 +580,14 @@ class _TeacherParentManagementTabState
                                   hintText: 'Search by name or student...',
                                   hintStyle: TextStyle(
                                     fontSize: 12.5,
-                                    color: theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.5,
-                                    ),
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.5),
                                   ),
                                   prefixIcon: Icon(
                                     LucideIcons.search,
                                     size: 16,
-                                    color: theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.5,
-                                    ),
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.5),
                                   ),
                                   filled: true,
                                   fillColor: theme.colorScheme.surface,
@@ -597,17 +598,19 @@ class _TeacherParentManagementTabState
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface.withValues(
-                                        alpha: isDark ? 0.18 : 0.16,
-                                      ),
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(
+                                            alpha: isDark ? 0.18 : 0.16,
+                                          ),
                                     ),
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface.withValues(
-                                        alpha: isDark ? 0.18 : 0.16,
-                                      ),
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(
+                                            alpha: isDark ? 0.18 : 0.16,
+                                          ),
                                     ),
                                   ),
                                 ),
@@ -1503,10 +1506,7 @@ class _TeacherParentManagementTabState
       });
 
       if (mounted) {
-        AppTopToast.success(
-          context,
-          '${parent.fullName} permanently deleted.',
-        );
+        AppTopToast.success(context, '${parent.fullName} permanently deleted.');
       }
 
       try {
@@ -1534,24 +1534,17 @@ class _TeacherParentManagementTabState
                 : theme.colorScheme.onSurface.withValues(alpha: 0.2),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         icon: Icon(
-          _showArchivedParents
-              ? Icons.people_outline
-              : Icons.archive_outlined,
+          _showArchivedParents ? Icons.people_outline : Icons.archive_outlined,
           size: 16,
         ),
         label: Text(
           _showArchivedParents
               ? 'View Active'
               : 'View Archive (${_archivedParents.length})',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 12.5,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
         ),
         onPressed: () => setState(() {
           _showArchivedParents = !_showArchivedParents;
@@ -1571,6 +1564,64 @@ class _TeacherParentManagementTabState
     required ThemeData theme,
     required bool isDark,
   }) {
+    if (items.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? theme.colorScheme.surface.withValues(alpha: 0.5)
+                  : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(
+                  alpha: isDark ? 0.12 : 0.1,
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 13.5,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12.5,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  LucideIcons.chevronDown,
+                  size: 14,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     final validValue = (value != null && items.contains(value))
         ? value
         : (items.isNotEmpty ? items.first : null);
@@ -1615,52 +1666,19 @@ class _TeacherParentManagementTabState
                 fontSize: 12.5,
               ),
               isDense: true,
-              items: items.isEmpty
-                  ? [
-                      DropdownMenuItem<String>(
-                        value: null,
-                        enabled: false,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              icon,
-                              size: 13.5,
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.5,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'No ${label.toLowerCase()}s',
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.5,
-                                ),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ]
-                  : items.map((item) {
-                      return DropdownMenuItem<String>(
-                        value: item,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              icon,
-                              size: 13.5,
-                              color: theme.colorScheme.primary,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(itemLabel(item)),
-                          ],
-                        ),
-                      );
-                    }).toList(),
+              items: items.map((item) {
+                return DropdownMenuItem<String>(
+                  value: item,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 13.5, color: theme.colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Text(itemLabel(item)),
+                    ],
+                  ),
+                );
+              }).toList(),
               onChanged: onChanged,
             ),
           ),
@@ -1794,8 +1812,7 @@ class _ParentAccessSlipDialogState extends State<_ParentAccessSlipDialog> {
       AppModals.showErrorDialog(
         context: context,
         title: 'Password Reset Failed',
-        message:
-            "We couldn't reset this parent's password right now. Please check your internet connection and try again.",
+        message: "We couldn't reset this parent's password right now. Please check your internet connection and try again.",
       );
     }
   }

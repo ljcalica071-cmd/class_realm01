@@ -1586,7 +1586,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
               dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
               borderRadius: BorderRadius.circular(10),
               hint: Text(
-                _isLoadingSubjects ? 'Loading subjects...' : 'No subject yet',
+                _isLoadingSubjects ? 'Loading subjects...' : 'Subject',
                 style: TextStyle(
                   fontSize: 13,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
@@ -1597,20 +1597,24 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                 fontWeight: FontWeight.w600,
                 color: theme.colorScheme.onSurface,
               ),
-              items: _teacherSubjects
-                  .map((s) => s['subject_name']?.toString() ?? '')
-                  .where((s) => s.isNotEmpty)
-                  .toSet()
-                  .toList()
-                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                  .toList(),
-              onChanged: (val) {
-                if (val == null) return;
-                final selectedRow = _teacherSubjects.firstWhere(
-                  (subject) => subject['subject_name'] == val,
-                );
-                unawaited(_selectOffering(selectedRow));
-              },
+              items: _teacherSubjects.isEmpty
+                  ? null
+                  : _teacherSubjects
+                      .map((s) => s['subject_name']?.toString() ?? '')
+                      .where((s) => s.isNotEmpty)
+                      .toSet()
+                      .toList()
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
+              onChanged: _teacherSubjects.isEmpty
+                  ? null
+                  : (val) {
+                      if (val == null) return;
+                      final selectedRow = _teacherSubjects.firstWhere(
+                        (subject) => subject['subject_name'] == val,
+                      );
+                      unawaited(_selectOffering(selectedRow));
+                    },
             ),
           ),
         ),
@@ -1634,7 +1638,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
               dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
               borderRadius: BorderRadius.circular(10),
               hint: Text(
-                'No section yet',
+                'Section',
                 style: TextStyle(
                   fontSize: 13,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
@@ -1656,17 +1660,29 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                                 .where((s) => s.isNotEmpty)
                                 .toSet()
                                 .toList())
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                      .toList(),
-              onChanged: (val) {
-                if (val == null) return;
-                final selectedRow = _teacherSubjects.firstWhere(
-                  (subject) =>
-                      subject['subject_name'] == _selectedSubject &&
-                      subject['section_name'] == val,
-                );
-                unawaited(_selectOffering(selectedRow));
-              },
+                      .isEmpty
+                      ? null
+                      : (_teacherSubjects
+                            .where(
+                              (s) => s['subject_name'] == _selectedSubject,
+                            )
+                            .map((s) => s['section_name']?.toString() ?? '')
+                            .where((s) => s.isNotEmpty)
+                            .toSet()
+                            .toList())
+                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
+              onChanged: (_selectedSubject == null || _teacherSubjects.isEmpty)
+                  ? null
+                  : (val) {
+                      if (val == null) return;
+                      final selectedRow = _teacherSubjects.firstWhere(
+                        (subject) =>
+                            subject['subject_name'] == _selectedSubject &&
+                            subject['section_name'] == val,
+                      );
+                      unawaited(_selectOffering(selectedRow));
+                    },
             ),
           ),
         ),

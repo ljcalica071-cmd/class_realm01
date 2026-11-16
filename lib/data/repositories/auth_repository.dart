@@ -421,7 +421,9 @@ class AuthRepository {
             await _supabaseClient
                 .from('user_session_logs')
                 .update({
-                  'blocked_attempt_at': DateTime.now().toUtc().toIso8601String(),
+                  'blocked_attempt_at': DateTime.now()
+                      .toUtc()
+                      .toIso8601String(),
                 })
                 .eq('id', activeOtherSession['id']);
           } catch (_) {}
@@ -3200,6 +3202,240 @@ class AuthRepository {
     } catch (e) {
       debugPrint('Error updating teacher profile: $e');
       throw Exception(e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  /// Updates complete teacher profile including identity, contact info, and settings.
+  Future<bool> updateTeacherCompleteProfile({
+    required String teacherId,
+    required String firstName,
+    String? middleName,
+    required String lastName,
+    required String gender,
+    required DateTime birthday,
+    String? newEmail,
+    String? subjectSpecialization,
+    String? consultationHours,
+    String? facebookLink,
+    bool isFacebookPublic = false,
+    String? contactNumber,
+    bool isPhonePublic = false,
+  }) async {
+    final cleanMiddleName = AppValidators.normalizeMiddleInitial(middleName);
+    try {
+      final cleanEmail = newEmail?.trim().toLowerCase();
+
+      if (cleanEmail != null && cleanEmail.isNotEmpty) {
+        final currentUserData = await _supabaseClient
+            .from('users')
+            .select('email')
+            .eq('id', teacherId)
+            .maybeSingle();
+        final currentEmail = currentUserData?['email']
+            ?.toString()
+            .toLowerCase();
+
+        if (currentEmail != cleanEmail) {
+          // Check if new email already exists in users
+          final exists = await _supabaseClient
+              .from('users')
+              .select('id')
+              .eq('email', cleanEmail)
+              .maybeSingle();
+          if (exists != null && exists['id'] != teacherId) {
+            throw Exception('This email is already in use by another account.');
+          }
+
+          // Try updating Firebase Auth Email via Admin SDK
+          try {
+            await FirebaseAuthAdminService.updateUserEmail(
+              uid: teacherId,
+              newEmail: cleanEmail,
+            );
+          } catch (_) {}
+
+          // Update Supabase Database Email
+          await _supabaseClient
+              .from('users')
+              .update({
+                'email': cleanEmail,
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', teacherId);
+        }
+      }
+
+      // Update basic profile details in teacher_profiles
+      final bdayStr =
+          '${birthday.year.toString().padLeft(4, '0')}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
+      await _supabaseClient.from('teacher_profiles').upsert({
+        'teacher_id': teacherId,
+        'first_name': firstName.trim(),
+        'middle_name': cleanMiddleName,
+        'last_name': lastName.trim(),
+        'gender': gender,
+        'birthday': bdayStr,
+      }, onConflict: 'teacher_id');
+
+      // Update teacher_settings
+      await _supabaseClient.from('teacher_settings').upsert({
+        'teacher_id': teacherId,
+        'subject_specialization': subjectSpecialization?.trim(),
+        'consultation_hours': consultationHours?.trim(),
+        'facebook_link': facebookLink?.trim(),
+        'is_facebook_public': isFacebookPublic,
+        'contact_number': contactNumber?.trim(),
+        'is_phone_public': isPhonePublic,
+      }, onConflict: 'teacher_id');
+
+      // Update current user cache in memory and local storage
+      if (currentUser != null && currentUser!.id == teacherId) {
+        final updatedUser = currentUser!.copyWith(
+          firstName: firstName.trim(),
+          middleName: cleanMiddleName,
+          lastName: lastName.trim(),
+          fullName: [
+            firstName.trim(),
+            cleanMiddleName,
+            lastName.trim(),
+          ].where((s) => s != null && s.isNotEmpty).join(' '),
+          gender: gender,
+          birthday: birthday,
+          email: (cleanEmail != null && cleanEmail.isNotEmpty)
+              ? cleanEmail
+              : currentUser!.email,
+          subjectSpecialization: subjectSpecialization?.trim(),
+          consultationHours: consultationHours?.trim(),
+          facebookLink: facebookLink?.trim(),
+          isFacebookPublic: isFacebookPublic,
+          contactNumber: contactNumber?.trim(),
+          isPhonePublic: isPhonePublic,
+        );
+        currentUser = updatedUser;
+        await LocalStorageService.saveUser(updatedUser);
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Error updating complete teacher profile: $e');
+      throw Exception(e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  /// Sends a 6-digit OTP verification code when a teacher modifies their email address.
+  Future<Map<String, dynamic>> sendTeacherEmailChangeOtp({
+    required String newEmail,
+    required String teacherName,
+  }) async {
+    final cleanEmail = newEmail.trim().toLowerCase();
+
+    // 1. Verify email deliverability
+    final deliverability = await AppValidators.checkDomainDeliverability(
+      cleanEmail,
+    );
+    if (!deliverability.isDeliverable) {
+      throw Exception(deliverability.error ?? 'Email domain is unreachable.');
+    }
+
+    // 2. Check if email already registered
+    final exists = await _supabaseClient
+        .from('users')
+        .select('id')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+    if (exists != null && exists['id'] != currentUser?.id) {
+      throw Exception('This email is already in use by another account.');
+    }
+
+    // 3. Generate 6-digit OTP
+    final random = Random.secure();
+    final code = (random.nextInt(900000) + 100000).toString();
+    final now = DateTime.now().toUtc();
+    final expiresAt = now.add(const Duration(minutes: 5));
+
+    // 4. Send via EmailService
+    try {
+      await EmailService.instance.sendTeacherVerificationCode(
+        recipientEmail: cleanEmail,
+        teacherName: teacherName,
+        code: code,
+      );
+    } catch (e) {
+      debugPrint('Email delivery error in sendTeacherEmailChangeOtp: $e');
+    }
+
+    // 5. Save challenge to Supabase admin_teacher_email_challenges
+    try {
+      await _supabaseClient.from('admin_teacher_email_challenges').upsert({
+        'email': cleanEmail,
+        'code_hash': code,
+        'first_name': teacherName,
+        'last_name': '',
+        'gender': '',
+        'birthday': now.toIso8601String().substring(0, 10),
+        'created_by': currentUser?.id ?? 'teacher',
+        'expires_at': expiresAt.toIso8601String(),
+        'last_sent_at': now.toIso8601String(),
+        'failed_attempts': 0,
+        'resend_count': 0,
+      });
+    } catch (_) {}
+
+    return {'sent': true, 'email': cleanEmail, 'code': code};
+  }
+
+  /// Verifies the 6-digit OTP code sent to a teacher's new email.
+  Future<FirstLoginOtpVerification> verifyTeacherEmailChangeOtp({
+    required String newEmail,
+    required String code,
+  }) async {
+    final cleanEmail = newEmail.trim().toLowerCase();
+    final cleanCode = code.trim();
+
+    try {
+      final challenge = await _supabaseClient
+          .from('admin_teacher_email_challenges')
+          .select()
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+      if (challenge == null) {
+        return const FirstLoginOtpVerification(
+          verified: false,
+          reason: 'No active verification code found for this email.',
+        );
+      }
+
+      final expiresAt = DateTime.parse(challenge['expires_at'].toString());
+      if (DateTime.now().toUtc().isAfter(expiresAt)) {
+        return const FirstLoginOtpVerification(
+          verified: false,
+          reason: 'Verification code has expired. Please request a new one.',
+        );
+      }
+
+      final storedCode = challenge['code_hash']?.toString();
+      if (storedCode != cleanCode) {
+        return const FirstLoginOtpVerification(
+          verified: false,
+          reason: 'Incorrect 6-digit verification code.',
+        );
+      }
+
+      // Cleanup
+      try {
+        await _supabaseClient
+            .from('admin_teacher_email_challenges')
+            .delete()
+            .eq('email', cleanEmail);
+      } catch (_) {}
+
+      return const FirstLoginOtpVerification(verified: true);
+    } catch (e) {
+      return FirstLoginOtpVerification(
+        verified: false,
+        reason: 'Verification failed: $e',
+      );
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:class_realm/core/utils/search_utils.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -64,7 +65,9 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
     final teacherId = AuthRepository.instance.currentUser?.id;
     if (teacherId == null) return;
 
-    final cached = SubjectRepository.instance.getCachedTeacherSubjects(teacherId);
+    final cached = SubjectRepository.instance.getCachedTeacherSubjects(
+      teacherId,
+    );
     if (cached.isNotEmpty && mounted) {
       setState(() {
         _teacherSubjects = cached;
@@ -72,7 +75,9 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
     }
 
     try {
-      final fetched = await SubjectRepository.instance.getTeacherSubjects(teacherId);
+      final fetched = await SubjectRepository.instance.getTeacherSubjects(
+        teacherId,
+      );
       if (mounted) {
         setState(() {
           _teacherSubjects = fetched;
@@ -114,21 +119,17 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
 
     try {
       final user = AuthRepository.instance.currentUser;
-      if (user != null) {
-        await SupabaseNotificationRepository.instance.getReadNotificationIds(user.id);
+      if (user == null) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
       }
 
-      final res = await Supabase.instance.client
-          .from('notifications')
-          .select()
-          .eq('is_archived', false)
-          .inFilter('target_audience', ['all', 'teachers'])
-          .order('created_at', ascending: false)
-          .limit(_fetchLimit);
-
-      final items = (res as List)
-          .map((r) => AppNotificationModel.fromJson(r as Map<String, dynamic>))
-          .toList();
+      final items = await SupabaseNotificationRepository.instance
+          .getUserNotifications(user, limit: _fetchLimit);
 
       if (mounted) {
         setState(() {
@@ -138,9 +139,7 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
           _isLoading = false;
         });
 
-        if (user != null) {
-          SupabaseNotificationRepository.instance.calculateUnreadCount(user);
-        }
+        SupabaseNotificationRepository.instance.calculateUnreadCount(user);
       }
     } catch (e) {
       debugPrint('Error loading teacher notifications: $e');
@@ -184,7 +183,9 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
       // Subject Filter Dropdown
       if (_selectedSubjectFilter != null && _selectedSubjectFilter != 'ALL') {
         final targetSubj = _selectedSubjectFilter!.toLowerCase();
-        final matchesSubject = '${n.title} ${n.message}'.toLowerCase().contains(targetSubj);
+        final matchesSubject = '${n.title} ${n.message}'.toLowerCase().contains(
+          targetSubj,
+        );
         if (!matchesSubject) return false;
       }
 
@@ -222,184 +223,221 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
               alignment: WrapAlignment.end,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-              // Search Input
-              ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 240, maxWidth: 360),
-                child: SizedBox(
-                  height: 40,
-                  child: TextField(
-                    controller: _searchCtrl,
-                    onChanged: (val) => setState(() {
-                      _searchQuery = val;
-                      _currentPage = 1;
-                    }),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Search notifications...',
-                      hintStyle: TextStyle(
+                // Search Input
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: 240,
+                    maxWidth: 360,
+                  ),
+                  child: SizedBox(
+                    height: 40,
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (val) => setState(() {
+                        _searchQuery = val;
+                        _currentPage = 1;
+                      }),
+                      style: TextStyle(
                         fontSize: 13,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface,
                       ),
-                      prefixIcon: Icon(
-                        LucideIcons.search,
-                        size: 16,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                      ),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(LucideIcons.x, size: 14),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                setState(() {
-                                  _searchQuery = '';
-                                  _currentPage = 1;
-                                });
-                              },
-                            )
-                          : null,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                      filled: true,
-                      fillColor: isDark
-                          ? theme.colorScheme.surface.withValues(alpha: 0.8)
-                          : Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.12)
-                              : const Color(0xFFE2E8F0),
+                      decoration: InputDecoration(
+                        hintText: 'Search notifications...',
+                        hintStyle: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
                         ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.12)
-                              : const Color(0xFFE2E8F0),
+                        prefixIcon: Icon(
+                          LucideIcons.search,
+                          size: 16,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.55,
+                          ),
                         ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: theme.colorScheme.primary,
-                          width: 1.5,
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(LucideIcons.x, size: 14),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() {
+                                    _searchQuery = '';
+                                    _currentPage = 1;
+                                  });
+                                },
+                              )
+                            : null,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 0,
+                        ),
+                        filled: true,
+                        fillColor: isDark
+                            ? theme.colorScheme.surface.withValues(alpha: 0.8)
+                            : Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: theme.colorScheme.primary,
+                            width: 1.5,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              // Subject Dropdown Filter
-              ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 200, maxWidth: 280),
-                child: SizedBox(
-                  height: 40,
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _selectedSubjectFilter ?? 'ALL',
-                    icon: const Icon(LucideIcons.chevronDown, size: 16),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                    dropdownColor: theme.colorScheme.surface,
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                      filled: true,
-                      fillColor: isDark
-                          ? theme.colorScheme.surface.withValues(alpha: 0.8)
-                          : Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.12)
-                              : const Color(0xFFE2E8F0),
+                // Subject Dropdown Filter
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: 200,
+                    maxWidth: 280,
+                  ),
+                  child: SizedBox(
+                    height: 40,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _selectedSubjectFilter ?? 'ALL',
+                      icon: const Icon(LucideIcons.chevronDown, size: 16),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      dropdownColor: theme.colorScheme.surface,
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 0,
+                        ),
+                        filled: true,
+                        fillColor: isDark
+                            ? theme.colorScheme.surface.withValues(alpha: 0.8)
+                            : Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: theme.colorScheme.primary,
+                            width: 1.5,
+                          ),
                         ),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.12)
-                              : const Color(0xFFE2E8F0),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: theme.colorScheme.primary,
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                    items: [
-                      const DropdownMenuItem<String>(
-                        value: 'ALL',
-                        child: Text(
-                          'All Handled Subjects',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      ..._distinctHandledSubjects.map(
-                        (sub) => DropdownMenuItem<String>(
-                          value: sub,
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: 'ALL',
                           child: Text(
-                            sub,
+                            'All Handled Subjects',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedSubjectFilter = val;
-                        _currentPage = 1;
-                      });
-                    },
+                        ..._distinctHandledSubjects.map(
+                          (sub) => DropdownMenuItem<String>(
+                            value: sub,
+                            child: Text(
+                              sub,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedSubjectFilter = val;
+                          _currentPage = 1;
+                        });
+                      },
+                    ),
                   ),
                 ),
-              ),
-              // Mark All As Read Button
-              Builder(builder: (btnCtx) {
-                final currentUserId = AuthRepository.instance.currentUser?.id ?? '';
-                final unreadInList = displayedNotifications
-                    .where((n) => !LocalStorageService.isNotificationRead(currentUserId, n.id))
-                    .map((n) => n.id)
-                    .toList();
-                if (unreadInList.isEmpty) return const SizedBox.shrink();
+                // Mark All As Read Button
+                Builder(
+                  builder: (btnCtx) {
+                    final currentUserId =
+                        AuthRepository.instance.currentUser?.id ?? '';
+                    final unreadInList = displayedNotifications
+                        .where(
+                          (n) => !LocalStorageService.isNotificationRead(
+                            currentUserId,
+                            n.id,
+                          ),
+                        )
+                        .map((n) => n.id)
+                        .toList();
+                    if (unreadInList.isEmpty) return const SizedBox.shrink();
 
-                return OutlinedButton.icon(
-                  icon: const Icon(LucideIcons.checkCheck, size: 15),
-                  label: Text(
-                    'Mark all as read (${unreadInList.length})',
-                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () async {
-                    final user = AuthRepository.instance.currentUser;
-                    if (user != null) {
-                      await SupabaseNotificationRepository.instance.markAllAsRead(user.id, unreadInList);
-                      await SupabaseNotificationRepository.instance.calculateUnreadCount(user);
-                      if (btnCtx.mounted) {
-                        AppTopToast.success(btnCtx, 'All notifications marked as read.');
-                      }
-                    }
+                    return OutlinedButton.icon(
+                      icon: const Icon(LucideIcons.checkCheck, size: 15),
+                      label: Text(
+                        'Mark all as read (${unreadInList.length})',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final user = AuthRepository.instance.currentUser;
+                        if (user != null) {
+                          await SupabaseNotificationRepository.instance
+                              .markAllAsRead(user.id, unreadInList);
+                          await SupabaseNotificationRepository.instance
+                              .calculateUnreadCount(user);
+                          if (btnCtx.mounted) {
+                            AppTopToast.success(
+                              btnCtx,
+                              'All notifications marked as read.',
+                            );
+                          }
+                        }
+                      },
+                    );
                   },
-                );
-              }),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
-      ),
 
         // List Area
         Expanded(
@@ -411,118 +449,130 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
                   itemBuilder: (_, _) => const ShimmerBroadcastItem(),
                 )
               : displayedNotifications.isEmpty
-                  ? Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 32),
-                        margin: const EdgeInsets.symmetric(horizontal: 24),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
-                            width: 1.5,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.02),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                LucideIcons.bellOff,
-                                size: 30,
-                                color: theme.colorScheme.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              _searchQuery.isNotEmpty || (_selectedSubjectFilter != null && _selectedSubjectFilter != 'ALL')
-                                  ? 'No matching notifications'
-                                  : 'You\'re all caught up!',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: theme.colorScheme.onSurface,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _searchQuery.isNotEmpty || (_selectedSubjectFilter != null && _selectedSubjectFilter != 'ALL')
-                                  ? 'Try adjusting your search terms or subject filter.'
-                                  : 'There are no new alerts or announcements at the moment.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 14,
-                                height: 1.5,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : Builder(
-                      builder: (context) {
-                        final totalPages =
-                            (displayedNotifications.length / _pageSize).ceil();
-                        final safePage = _currentPage.clamp(
-                          1,
-                          totalPages > 0 ? totalPages : 1,
-                        );
-                        final startIndex = (safePage - 1) * _pageSize;
-                        final endIndex =
-                            (startIndex + _pageSize >
-                                displayedNotifications.length)
-                            ? displayedNotifications.length
-                            : startIndex + _pageSize;
-                        final pagedItems = displayedNotifications.sublist(
-                          startIndex,
-                          endIndex,
-                        );
-
-                        return RefreshIndicator(
-                          onRefresh: () => _loadNotifications(initial: true),
-                          child: ListView(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                            children: [
-                              ...pagedItems.map(
-                                (notification) => ExpandableNotificationCard(
-                                  notification: notification,
-                                  maxCollapsedLines: 2,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              _buildPaginationBar(
-                                theme: theme,
-                                isDark: isDark,
-                                totalCount: displayedNotifications.length,
-                                startIndex: startIndex,
-                                endIndex: endIndex,
-                                safePage: safePage,
-                                totalPages: totalPages,
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+              ? Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 48,
+                      horizontal: 32,
                     ),
+                    margin: const EdgeInsets.symmetric(horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.08,
+                        ),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.1,
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            LucideIcons.bellOff,
+                            size: 30,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          _searchQuery.isNotEmpty ||
+                                  (_selectedSubjectFilter != null &&
+                                      _selectedSubjectFilter != 'ALL')
+                              ? 'No matching notifications'
+                              : 'You\'re all caught up!',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: theme.colorScheme.onSurface,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _searchQuery.isNotEmpty ||
+                                  (_selectedSubjectFilter != null &&
+                                      _selectedSubjectFilter != 'ALL')
+                              ? 'Try adjusting your search terms or subject filter.'
+                              : 'There are no new alerts or announcements at the moment.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            height: 1.5,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Builder(
+                  builder: (context) {
+                    final totalPages =
+                        (displayedNotifications.length / _pageSize).ceil();
+                    final safePage = _currentPage.clamp(
+                      1,
+                      totalPages > 0 ? totalPages : 1,
+                    );
+                    final startIndex = (safePage - 1) * _pageSize;
+                    final endIndex =
+                        (startIndex + _pageSize > displayedNotifications.length)
+                        ? displayedNotifications.length
+                        : startIndex + _pageSize;
+                    final pagedItems = displayedNotifications.sublist(
+                      startIndex,
+                      endIndex,
+                    );
+
+                    return RefreshIndicator(
+                      onRefresh: () => _loadNotifications(initial: true),
+                      child: ListView(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        children: [
+                          ...pagedItems.map(
+                            (notification) => ExpandableNotificationCard(
+                              notification: notification,
+                              maxCollapsedLines: 2,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPaginationBar(
+                            theme: theme,
+                            isDark: isDark,
+                            totalCount: displayedNotifications.length,
+                            startIndex: startIndex,
+                            endIndex: endIndex,
+                            safePage: safePage,
+                            totalPages: totalPages,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -625,8 +675,8 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
             color: isActive
                 ? theme.colorScheme.onPrimary
                 : enabled
-                    ? theme.colorScheme.onSurface
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ? theme.colorScheme.onSurface
+                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
           ),
         ),
       ),

@@ -736,6 +736,7 @@ class AdminRepository {
           'notification_type': 'announcement',
           'created_by': adminId,
           'is_archived': false,
+          'scope': 'school_wide',
         })
         .select()
         .single();

@@ -1,20 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/utils/formatters.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+import 'package:class_realm/features/teacher/sub_features/profile_and_reports/widgets/edit_teacher_profile_dialog.dart';
 import 'package:flutter/services.dart';
 
 class TeacherProfileTab extends StatefulWidget {
   final int initialTab;
 
-  const TeacherProfileTab({
-    super.key,
-    this.initialTab = 0,
-  });
+  const TeacherProfileTab({super.key, this.initialTab = 0});
 
   @override
   State<TeacherProfileTab> createState() => _TeacherProfileTabState();
@@ -25,6 +22,7 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
   late int _selectedTab = widget.initialTab;
   final bool _isEditing = false;
   final bool _isLoading = false;
+  bool _controllersInitialized = false;
 
   late TextEditingController _subjectSpecializationCtrl;
   late TextEditingController _facebookLinkCtrl;
@@ -61,14 +59,24 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
           role: UserRole.teacher,
         );
 
-    _subjectSpecializationCtrl = TextEditingController(
-      text: _teacher.subjectSpecialization ?? _teacher.departmentOrSection,
-    );
-    _facebookLinkCtrl = TextEditingController(text: _teacher.facebookLink);
-    _phoneCtrl = TextEditingController(text: _teacher.contactNumber);
-    _consultationHoursCtrl = TextEditingController(
-      text: _teacher.consultationHours,
-    );
+    final specText =
+        _teacher.subjectSpecialization ?? _teacher.departmentOrSection ?? '';
+    final fbText = _teacher.facebookLink ?? '';
+    final phoneText = _teacher.contactNumber ?? '';
+    final consultText = _teacher.consultationHours ?? '';
+
+    if (!_controllersInitialized) {
+      _subjectSpecializationCtrl = TextEditingController(text: specText);
+      _facebookLinkCtrl = TextEditingController(text: fbText);
+      _phoneCtrl = TextEditingController(text: phoneText);
+      _consultationHoursCtrl = TextEditingController(text: consultText);
+      _controllersInitialized = true;
+    } else {
+      _subjectSpecializationCtrl.text = specText;
+      _facebookLinkCtrl.text = fbText;
+      _phoneCtrl.text = phoneText;
+      _consultationHoursCtrl.text = consultText;
+    }
     _isFacebookPublic = _teacher.isFacebookPublic;
     _isPhonePublic = _teacher.isPhonePublic;
   }
@@ -106,132 +114,183 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
       child: SingleChildScrollView(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // --- HEADER (Cover & Profile Pic) ---
+            // --- HEADER (Avatar, Name, Edit Button) ---
             Container(
               color: theme.colorScheme.surface,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Cover Photo (Gradient Placeholder)
                   Container(
-                    height: 300,
                     width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          theme.colorScheme.primary,
-                          theme.colorScheme.tertiary,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 24,
                     ),
-                  ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isNarrow = constraints.maxWidth < 650;
 
-                  // Profile Content (Avatar, Name, Edit Button)
-                  Container(
-                    constraints: const BoxConstraints(maxWidth: 1000),
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // Avatar
-                        Positioned(
-                          top: -60,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: theme.colorScheme.surface,
-                                width: 4,
+                        final avatarWidget = Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.18,
                               ),
-                            ),
-                            child: CircleAvatar(
-                              radius: 80,
-                              backgroundColor: AppTheme.catPurple,
-                              backgroundImage: _teacher.profileImage != null
-                                  ? NetworkImage(_teacher.profileImage!)
-                                  : null,
-                              child: _teacher.profileImage == null
-                                  ? Text(
-                                      _teacher.fullName.isNotEmpty
-                                          ? _teacher.fullName[0].toUpperCase()
-                                          : 'T',
-                                      style: const TextStyle(
-                                        fontSize: 48,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    )
-                                  : null,
+                              width: 3,
                             ),
                           ),
-                        ),
-
-                        // Name and Edit Button
-                        Padding(
-                          padding: const EdgeInsets.only(top: 110, bottom: 24),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _teacher.fullName,
-                                    style: TextStyle(
-                                      fontSize: 32,
+                          child: CircleAvatar(
+                            radius: 46,
+                            backgroundColor: theme.colorScheme.primary,
+                            backgroundImage: _teacher.profileImage != null
+                                ? NetworkImage(_teacher.profileImage!)
+                                : null,
+                            child: _teacher.profileImage == null
+                                ? Text(
+                                    _teacher.fullName.isNotEmpty
+                                        ? _teacher.fullName[0].toUpperCase()
+                                        : 'T',
+                                    style: const TextStyle(
+                                      fontSize: 34,
+                                      color: Colors.white,
                                       fontWeight: FontWeight.bold,
-                                      color: theme.colorScheme.onSurface,
                                     ),
+                                  )
+                                : null,
+                          ),
+                        );
+
+                        final nameAndRoleWidget = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 10,
+                              runSpacing: 4,
+                              children: [
+                                Text(
+                                  _teacher.fullName,
+                                  style: TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.onSurface,
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _teacher.subjectSpecialization ??
-                                        'Educator',
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'FACULTY',
                                     style: TextStyle(
-                                      fontSize: 16,
-                                      color: theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.6),
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.8,
+                                      color: theme.colorScheme.primary,
                                     ),
                                   ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _teacher.subjectSpecialization != null &&
+                                      _teacher.subjectSpecialization!.isNotEmpty
+                                  ? _teacher.subjectSpecialization!
+                                  : 'Educator',
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.65,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+
+                        final editBtn = ElevatedButton.icon(
+                          onPressed: () {
+                            EditTeacherProfileDialog.show(
+                              context,
+                              teacher: _teacher,
+                              onProfileUpdated: (updatedTeacher) {
+                                if (mounted) {
+                                  setState(() {
+                                    _teacher = updatedTeacher;
+                                    _loadTeacherData();
+                                  });
+                                }
+                              },
+                            );
+                          },
+                          icon: const Icon(Icons.edit_outlined, size: 17),
+                          label: const Text('Edit Profile'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        );
+
+                        if (isNarrow) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  avatarWidget,
+                                  const SizedBox(width: 16),
+                                  Expanded(child: nameAndRoleWidget),
                                 ],
                               ),
-                              ElevatedButton.icon(
-                                onPressed: () {
-                                  AppModals.showUpcomingFeatureDialog(
-                                    context,
-                                    featureName: 'Teacher Profile Editing',
-                                  );
-                                },
-                                icon: const Icon(
-                                  Icons.edit,
-                                  size: 18,
-                                ),
-                                label: const Text(
-                                  'Edit Profile (Next Update)',
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: theme.colorScheme.primary,
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 12,
-                                  ),
-                                ),
-                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(width: double.infinity, child: editBtn),
                             ],
-                          ),
-                        ),
-                      ],
+                          );
+                        }
+
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  avatarWidget,
+                                  const SizedBox(width: 20),
+                                  Expanded(child: nameAndRoleWidget),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            editBtn,
+                          ],
+                        );
+                      },
                     ),
                   ),
                   const Divider(height: 1),
                   Container(
-                    constraints: const BoxConstraints(maxWidth: 1000),
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
                     alignment: Alignment.centerLeft,
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -266,15 +325,14 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
               transitionBuilder: (child, animation) {
                 final isSettings = child.key == const ValueKey<int>(1);
                 final offset = Tween<Offset>(
-                  begin: isSettings ? const Offset(0.04, 0) : const Offset(-0.04, 0),
+                  begin: isSettings
+                      ? const Offset(0.04, 0)
+                      : const Offset(-0.04, 0),
                   end: Offset.zero,
                 ).animate(animation);
                 return FadeTransition(
                   opacity: animation,
-                  child: SlideTransition(
-                    position: offset,
-                    child: child,
-                  ),
+                  child: SlideTransition(position: offset, child: child),
                 );
               },
               child: _selectedTab == 0
@@ -309,7 +367,9 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : Colors.transparent,
               width: 3,
             ),
           ),
@@ -344,11 +404,11 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
   Widget _buildAboutSection(ThemeData theme) {
     return Container(
       key: const ValueKey<int>(0),
-      constraints: const BoxConstraints(maxWidth: 1000),
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isStacked = constraints.maxWidth < 750;
+          final isStacked = constraints.maxWidth < 850;
 
           final basicInfoCard = Container(
             padding: const EdgeInsets.all(24),
@@ -390,9 +450,7 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
                     theme,
                     Icons.person_outline,
                     'Middle Initial',
-                    AppValidators.formatMiddleInitial(
-                      _teacher.middleName,
-                    ),
+                    AppValidators.formatMiddleInitial(_teacher.middleName),
                   ),
                 _buildInfoRow(
                   theme,
@@ -456,12 +514,7 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
                 const SizedBox(height: 24),
 
                 // Email is always visible and uneditable here
-                _buildInfoRow(
-                  theme,
-                  Icons.email,
-                  'Email',
-                  _teacher.email,
-                ),
+                _buildInfoRow(theme, Icons.email, 'Email', _teacher.email),
                 const Divider(height: 32),
 
                 // Optional Fields
@@ -489,9 +542,7 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
                     _facebookLinkCtrl,
                     'e.g. https://facebook.com/karen.gonzaga',
                     _isFacebookPublic,
-                    (val) => setState(
-                      () => _isFacebookPublic = val ?? false,
-                    ),
+                    (val) => setState(() => _isFacebookPublic = val ?? false),
                   ),
                   const SizedBox(height: 24),
                   _buildEditFieldWithToggle(
@@ -501,9 +552,7 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
                     _phoneCtrl,
                     'e.g. 09123456789',
                     _isPhonePublic,
-                    (val) => setState(
-                      () => _isPhonePublic = val ?? false,
-                    ),
+                    (val) => setState(() => _isPhonePublic = val ?? false),
                   ),
                 ] else ...[
                   _buildInfoRow(
@@ -582,75 +631,75 @@ class _TeacherProfileTabState extends State<TeacherProfileTab> {
   Widget _buildSettingsSection(ThemeData theme) {
     return Container(
       key: const ValueKey<int>(1),
-      constraints: const BoxConstraints(maxWidth: 1000),
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-      alignment: Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 680),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant.withValues(
+                  alpha: 0.3,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
               ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.settings_suggest_rounded,
-                      color: theme.colorScheme.primary,
-                      size: 26,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Settings & Privacy',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Manage your account security, passwords, and view official ClassRealm legal policies.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
-            const PortalSettingsContent(portalLabel: 'Teacher'),
-          ],
-        ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.settings_suggest_rounded,
+                    color: theme.colorScheme.primary,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Settings & Privacy',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Manage your account security, passwords, and view official ClassRealm legal policies.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.65,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          const PortalSettingsContent(portalLabel: 'Teacher'),
+        ],
       ),
     );
   }

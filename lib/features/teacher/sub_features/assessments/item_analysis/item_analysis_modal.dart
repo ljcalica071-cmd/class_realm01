@@ -154,7 +154,7 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
                       const SizedBox(width: 6),
                       Switch(
                         value: _resultsReleased,
-                        activeColor: const Color(0xFF0F8A48),
+                        activeThumbColor: const Color(0xFF0F8A48),
                         onChanged: (val) {
                           setState(() => _resultsReleased = val);
                           widget.onToggleRelease?.call(val);
@@ -218,9 +218,8 @@ class _ItemAnalysisModalState extends State<ItemAnalysisModal> {
                                       style: const TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
+                                        height: 1.4,
                                       ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
                                     ),
                                     const SizedBox(height: 2),
                                     Text(

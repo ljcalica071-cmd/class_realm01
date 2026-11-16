@@ -1224,6 +1224,10 @@ class AppNotificationModel {
   final String targetAudience; // 'all', 'teachers', 'students_parents'
   final bool isArchived;
   final String? createdBy;
+  final String? recipientId;
+  final String? subjectOfferingId;
+  final String? studentId;
+  final String? scope;
 
   AppNotificationModel({
     required this.id,
@@ -1235,6 +1239,10 @@ class AppNotificationModel {
     this.targetAudience = 'all',
     this.isArchived = false,
     this.createdBy,
+    this.recipientId,
+    this.subjectOfferingId,
+    this.studentId,
+    this.scope,
   });
 
   AppNotificationModel copyWith({
@@ -1247,6 +1255,10 @@ class AppNotificationModel {
     String? targetAudience,
     bool? isArchived,
     String? createdBy,
+    String? recipientId,
+    String? subjectOfferingId,
+    String? studentId,
+    String? scope,
   }) {
     return AppNotificationModel(
       id: id ?? this.id,
@@ -1258,6 +1270,10 @@ class AppNotificationModel {
       targetAudience: targetAudience ?? this.targetAudience,
       isArchived: isArchived ?? this.isArchived,
       createdBy: createdBy ?? this.createdBy,
+      recipientId: recipientId ?? this.recipientId,
+      subjectOfferingId: subjectOfferingId ?? this.subjectOfferingId,
+      studentId: studentId ?? this.studentId,
+      scope: scope ?? this.scope,
     );
   }
 
@@ -1277,6 +1293,10 @@ class AppNotificationModel {
       targetAudience: json['target_audience']?.toString() ?? 'all',
       isArchived: json['is_archived'] == true,
       createdBy: json['created_by']?.toString(),
+      recipientId: json['recipient_id']?.toString(),
+      subjectOfferingId: json['subject_offering_id']?.toString(),
+      studentId: json['student_id']?.toString(),
+      scope: json['scope']?.toString(),
     );
   }
 
@@ -1290,6 +1310,10 @@ class AppNotificationModel {
       'is_archived': isArchived,
       'created_by': createdBy,
       'created_at': timestamp.toIso8601String(),
+      'recipient_id': recipientId,
+      'subject_offering_id': subjectOfferingId,
+      'student_id': studentId,
+      'scope': scope,
     };
   }
 }

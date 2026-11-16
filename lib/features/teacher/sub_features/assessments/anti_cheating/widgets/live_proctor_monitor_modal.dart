@@ -1,5 +1,7 @@
 import 'package:class_realm/core/utils/search_utils.dart';
+
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
@@ -109,8 +111,18 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
   String _formatDateTime(DateTime dt) {
     final local = dt.toLocal();
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[local.month - 1]} ${local.day}, ${_formatTime(local)}';
   }
@@ -311,9 +323,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
         final qIds = questionRows.map((q) => q['id'].toString()).toList();
         final responsesData = totalAttempts > 0
             ? await client
-                .from('assessment_responses')
-                .select('question_id, is_correct')
-                .inFilter('question_id', qIds)
+                  .from('assessment_responses')
+                  .select('question_id, is_correct')
+                  .inFilter('question_id', qIds)
             : [];
         final responseList = List<Map<String, dynamic>>.from(
           responsesData as List? ?? [],
@@ -529,7 +541,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                             boxShadow: _selectedTab == 0
                                 ? [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.06),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.06,
+                                      ),
                                       blurRadius: 4,
                                     ),
                                   ]
@@ -584,7 +598,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                             boxShadow: _selectedTab == 1
                                 ? [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.06),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.06,
+                                      ),
                                       blurRadius: 4,
                                     ),
                                   ]
@@ -750,7 +766,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.15,
+                      ),
                     ),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
@@ -881,7 +899,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                     itemCount: filtered.length,
                     separatorBuilder: (context, index) => Divider(
                       height: 1,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.08,
+                      ),
                     ),
                     itemBuilder: (context, index) {
                       final student = filtered[index];
@@ -899,7 +919,8 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
     StudentLiveProctorState student,
   ) {
     final theme = Theme.of(context);
-    final isLateLock = _isEntranceClosed &&
+    final isLateLock =
+        _isEntranceClosed &&
         student.status == ProctorSessionStatus.notStarted &&
         !student.isEntryAllowed;
 
@@ -933,10 +954,7 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
           ),
 
           // Column 2: Status
-          Expanded(
-            flex: 2,
-            child: _buildStatusBadge(student, isLateLock),
-          ),
+          Expanded(flex: 2, child: _buildStatusBadge(student, isLateLock)),
 
           // Column 3: Violations
           Expanded(
@@ -976,7 +994,8 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
           // Column 4: Score
           Expanded(
             flex: 2,
-            child: student.status == ProctorSessionStatus.submitted &&
+            child:
+                student.status == ProctorSessionStatus.submitted &&
                     student.score != null
                 ? Text(
                     '${student.score!.toInt()} / ${student.totalPoints?.toInt() ?? 0} pts',
@@ -1054,15 +1073,16 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
     );
   }
 
-  Widget _buildStatusBadge(
-    StudentLiveProctorState student,
-    bool isLateLock,
-  ) {
+  Widget _buildStatusBadge(StudentLiveProctorState student, bool isLateLock) {
     if (student.isMissing) {
       return _statusChip('Missing', AppTheme.catRed, Icons.close);
     }
     if (!student.isEntryAllowed || isLateLock) {
-      return _statusChip('Not Allowed (Late)', AppTheme.catRed, Icons.lock_outline);
+      return _statusChip(
+        'Not Allowed (Late)',
+        AppTheme.catRed,
+        Icons.lock_outline,
+      );
     }
     if (student.status == ProctorSessionStatus.inProgress) {
       final qNum = student.currentQuestionNumber;
@@ -1070,7 +1090,11 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
       return _statusChip(label, AppTheme.catBlue, Icons.play_arrow_rounded);
     }
     if (student.status == ProctorSessionStatus.submitted) {
-      return _statusChip('Completed', AppTheme.catGreen, Icons.check_circle_outline);
+      return _statusChip(
+        'Completed',
+        AppTheme.catGreen,
+        Icons.check_circle_outline,
+      );
     }
     if (student.status == ProctorSessionStatus.kicked) {
       return _statusChip('Disqualified', AppTheme.catRed, Icons.gavel_rounded);
@@ -1160,7 +1184,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             style: TextButton.styleFrom(
-              foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              foregroundColor: theme.colorScheme.onSurface.withValues(
+                alpha: 0.7,
+              ),
             ),
             child: const Text('Cancel'),
           ),
@@ -1271,10 +1297,8 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
 
     final meanAccuracy = _itemStats.isEmpty
         ? 0.0
-        : _itemStats
-                .map((e) => e.pIndex)
-                .reduce((a, b) => a + b) /
-            _itemStats.length;
+        : _itemStats.map((e) => e.pIndex).reduce((a, b) => a + b) /
+              _itemStats.length;
 
     return Column(
       children: [
@@ -1377,9 +1401,8 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
+                              height: 1.4,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -1400,14 +1423,12 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: _badgeColor(item.classification).withValues(
-                          alpha: 0.1,
-                        ),
+                        color: _badgeColor(item.classification)
+                            .withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: _badgeColor(item.classification).withValues(
-                            alpha: 0.3,
-                          ),
+                          color: _badgeColor(item.classification)
+                              .withValues(alpha: 0.3),
                         ),
                       ),
                       child: Text(

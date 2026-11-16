@@ -1,4 +1,5 @@
 import 'package:class_realm/core/utils/search_utils.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -409,7 +410,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final isInitialLoading = _isLoadingSubjects ||
+    final isInitialLoading =
+        _isLoadingSubjects ||
         (_isLoadingSheets && _termSheets.values.every((s) => s == null));
     if (isInitialLoading) {
       return Scaffold(
@@ -605,15 +607,23 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1E293B) : Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: isDark ? Colors.white10 : crBorder),
+                    border: Border.all(
+                      color: isDark ? Colors.white10 : crBorder,
+                    ),
                   ),
                   child: Column(
                     children: [
                       Row(
                         children: const [
-                          Expanded(flex: 4, child: ShimmerBox(height: 38, borderRadius: 8)),
+                          Expanded(
+                            flex: 4,
+                            child: ShimmerBox(height: 38, borderRadius: 8),
+                          ),
                           SizedBox(width: 12),
-                          Expanded(flex: 3, child: ShimmerBox(height: 38, borderRadius: 8)),
+                          Expanded(
+                            flex: 3,
+                            child: ShimmerBox(height: 38, borderRadius: 8),
+                          ),
                         ],
                       ),
                       const Spacer(),
@@ -636,7 +646,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1E293B) : Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: isDark ? Colors.white10 : crBorder),
+                    border: Border.all(
+                      color: isDark ? Colors.white10 : crBorder,
+                    ),
                   ),
                   child: Column(
                     children: [
@@ -650,15 +662,25 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       const Spacer(),
                       Row(
                         children: const [
-                          Expanded(child: ShimmerBox(height: 42, borderRadius: 8)),
+                          Expanded(
+                            child: ShimmerBox(height: 42, borderRadius: 8),
+                          ),
                           SizedBox(width: 8),
-                          Expanded(child: ShimmerBox(height: 42, borderRadius: 8)),
+                          Expanded(
+                            child: ShimmerBox(height: 42, borderRadius: 8),
+                          ),
                           SizedBox(width: 8),
-                          Expanded(child: ShimmerBox(height: 42, borderRadius: 8)),
+                          Expanded(
+                            child: ShimmerBox(height: 42, borderRadius: 8),
+                          ),
                           SizedBox(width: 8),
-                          Expanded(child: ShimmerBox(height: 42, borderRadius: 8)),
+                          Expanded(
+                            child: ShimmerBox(height: 42, borderRadius: 8),
+                          ),
                           SizedBox(width: 8),
-                          Expanded(child: ShimmerBox(height: 42, borderRadius: 8)),
+                          Expanded(
+                            child: ShimmerBox(height: 42, borderRadius: 8),
+                          ),
                         ],
                       ),
                     ],
@@ -695,7 +717,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1E293B) : Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: isDark ? Colors.white10 : crBorder),
+                    border: Border.all(
+                      color: isDark ? Colors.white10 : crBorder,
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -760,7 +784,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1E293B) : Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: isDark ? Colors.white10 : crBorder),
+                    border: Border.all(
+                      color: isDark ? Colors.white10 : crBorder,
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -796,7 +822,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1E293B) : Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: isDark ? Colors.white10 : crBorder),
+                    border: Border.all(
+                      color: isDark ? Colors.white10 : crBorder,
+                    ),
                   ),
                   child: Column(
                     children: [
@@ -808,7 +836,13 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                         ],
                       ),
                       const Spacer(),
-                      const Center(child: ShimmerBox(width: 150, height: 150, borderRadius: 75)),
+                      const Center(
+                        child: ShimmerBox(
+                          width: 150,
+                          height: 150,
+                          borderRadius: 75,
+                        ),
+                      ),
                       const Spacer(),
                       const ShimmerBox(height: 28, borderRadius: 6),
                       const SizedBox(height: 6),
@@ -1080,13 +1114,15 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             ..sort())
         : <String>[];
 
-    final sectionItems = ['All Sections', ...availableSections];
+    final sectionItems = availableSections.isEmpty
+        ? <String>[]
+        : ['All Sections', ...availableSections];
 
     final safeSection = sectionItems.contains(_selectedSectionFilter)
         ? _selectedSectionFilter
-        : 'All Sections';
+        : (sectionItems.isNotEmpty ? sectionItems.first : null);
 
-    if (_selectedSectionFilter != safeSection) {
+    if (safeSection != null && _selectedSectionFilter != safeSection) {
       _selectedSectionFilter = safeSection;
     }
 
@@ -1127,7 +1163,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           : Colors.white,
                       decoration: _inputDecoration(isDark),
                       hint: const Text(
-                        'No subjects available',
+                        'Subject',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -1203,28 +1239,42 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           ? theme.colorScheme.surface
                           : Colors.white,
                       decoration: _inputDecoration(isDark),
-                      items: sectionItems.map((sec) {
-                        return DropdownMenuItem<String>(
-                          value: sec,
-                          child: Text(
-                            sec,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null && val != _selectedSectionFilter) {
-                          setState(() {
-                            _selectedSectionFilter = val;
-                            _currentPage = 1;
-                          });
-                          _loadSubjectData();
-                        }
-                      },
+                      hint: const Text(
+                        'Section',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: crSlateMuted,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      items: sectionItems.isEmpty
+                          ? null
+                          : sectionItems.map((sec) {
+                              return DropdownMenuItem<String>(
+                                value: sec,
+                                child: Text(
+                                  sec,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }).toList(),
+                      onChanged: sectionItems.isEmpty
+                          ? null
+                          : (val) {
+                              if (val != null &&
+                                  val != _selectedSectionFilter) {
+                                setState(() {
+                                  _selectedSectionFilter = val;
+                                  _currentPage = 1;
+                                });
+                                _loadSubjectData();
+                              }
+                            },
                     ),
                   ],
                 ),
@@ -3048,8 +3098,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       list.sort((a, b) {
         final ga = a.activeGrade;
         final gb = b.activeGrade;
-        if (ga == null && gb == null)
+        if (ga == null && gb == null) {
           return a.displayName.compareTo(b.displayName);
+        }
         if (ga == null) return 1;
         if (gb == null) return -1;
         return gb.compareTo(ga);
@@ -3058,8 +3109,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       list.sort((a, b) {
         final ga = a.activeGrade;
         final gb = b.activeGrade;
-        if (ga == null && gb == null)
+        if (ga == null && gb == null) {
           return a.displayName.compareTo(b.displayName);
+        }
         if (ga == null) return 1;
         if (gb == null) return -1;
         return ga.compareTo(gb);

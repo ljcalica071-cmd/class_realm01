@@ -192,23 +192,21 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
 
     try {
       final user = AuthRepository.instance.currentUser;
-      if (user != null) {
-        await SupabaseNotificationRepository.instance.getReadNotificationIds(
-          user.id,
-        );
+      if (user == null) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
       }
 
-      final res = await Supabase.instance.client
-          .from('notifications')
-          .select()
-          .eq('is_archived', false)
-          .inFilter('target_audience', ['all', 'students', 'students_parents'])
-          .order('created_at', ascending: !_newestFirst)
-          .limit(_fetchLimit);
+      final items = await SupabaseNotificationRepository.instance
+          .getUserNotifications(user, limit: _fetchLimit);
 
-      final items = (res as List)
-          .map((r) => AppNotificationModel.fromJson(r as Map<String, dynamic>))
-          .toList();
+      if (!_newestFirst) {
+        items.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      }
 
       if (mounted) {
         setState(() {
@@ -218,9 +216,7 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
           _isLoading = false;
         });
 
-        if (user != null) {
-          SupabaseNotificationRepository.instance.calculateUnreadCount(user);
-        }
+        SupabaseNotificationRepository.instance.calculateUnreadCount(user);
       }
     } catch (e) {
       debugPrint('Error loading student notifications: $e');
@@ -669,8 +665,8 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
             color: isActive
                 ? theme.colorScheme.onPrimary
                 : enabled
-                    ? theme.colorScheme.onSurface
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ? theme.colorScheme.onSurface
+                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
           ),
         ),
       ),

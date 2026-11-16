@@ -891,6 +891,64 @@ class _TeacherUnifiedAssessmentsTabState
     required ThemeData theme,
     required bool isDark,
   }) {
+    if (items.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? theme.colorScheme.surface.withValues(alpha: 0.5)
+                  : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(
+                  alpha: isDark ? 0.12 : 0.1,
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 13.5,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12.5,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  LucideIcons.chevronDown,
+                  size: 14,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     final validValue = (value != null && items.contains(value))
         ? value
         : (items.isNotEmpty ? items.first : null);
@@ -935,56 +993,20 @@ class _TeacherUnifiedAssessmentsTabState
                 fontSize: 12.5,
               ),
               isDense: true,
-              items: items.isEmpty
-                  ? [
-                      DropdownMenuItem<String>(
-                        value: null,
-                        enabled: false,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              icon,
-                              size: 13.5,
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.5,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'No ${label.toLowerCase()}s',
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.5,
-                                ),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ]
-                  : items.map((item) {
-                      return DropdownMenuItem<String>(
-                        value: item,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              icon,
-                              size: 13.5,
-                              color: theme.colorScheme.primary,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              itemLabel(item),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-              onChanged: items.isEmpty ? null : onChanged,
+              items: items.map((item) {
+                return DropdownMenuItem<String>(
+                  value: item,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 13.5, color: theme.colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Text(itemLabel(item), overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: onChanged,
             ),
           ),
         ),
@@ -2069,6 +2091,7 @@ class _TeacherUnifiedAssessmentsTabState
           widget.assessments.removeWhere((q) => q.id == item.id);
         });
         await widget.onRefresh?.call();
+        if (!mounted) return;
         setState(() => _isSyncing = false);
         AppTopToast.success(
           context,

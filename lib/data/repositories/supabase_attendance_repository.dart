@@ -908,9 +908,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             if (p['subject_offering_id']?.toString() != subjectOfferingId) {
               return true;
             }
-            final ts = DateTime.tryParse(
-              p['scan_timestamp']?.toString() ?? '',
-            );
+            final ts = DateTime.tryParse(p['scan_timestamp']?.toString() ?? '');
             if (ts == null) return true;
             final manila = ts.toUtc().add(const Duration(hours: 8));
             return _formatDate(manila) != dateStr;
@@ -998,16 +996,19 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     // Load subject and section information once
     String subjectName = 'Class';
     String section = 'General';
+    String? teacherId;
     try {
       final offeringRes = await _client
           .from('subject_offerings')
           .select('''
+            teacher_id,
             sections ( section_name ),
             subjects ( subject_name )
           ''')
           .eq('id', subjectOfferingId)
           .maybeSingle();
       if (offeringRes != null) {
+        teacherId = offeringRes['teacher_id']?.toString().trim();
         final secMap = offeringRes['sections'];
         if (secMap is Map && secMap['section_name'] != null) {
           section = secMap['section_name'].toString().trim();
@@ -1022,6 +1023,10 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         }
       }
     } catch (_) {}
+
+    if (teacherId == null || teacherId.isEmpty) {
+      teacherId = firebase_auth.FirebaseAuth.instance.currentUser?.uid.trim();
+    }
 
     for (final studentId in absentStudents) {
       try {
@@ -1059,8 +1064,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             .from('notifications')
             .select('id')
             .eq('notification_type', 'attendance')
-            .ilike('title', '$sName ($threshold Absences)%')
-            .ilike('message', '%$subjectName%')
+            .eq('student_id', studentId)
+            .eq('subject_offering_id', subjectOfferingId)
+            .ilike('title', '%$threshold Absences%')
             .limit(1);
         if ((existingCheck as List).isNotEmpty) {
           // Already notified this specific student for this threshold
@@ -1120,8 +1126,18 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
               'Your child $sName has missed 3 sessions in $subjectName ($section). Please assist in ensuring regular and punctual class attendance.';
         }
 
-        // Insert scoped notifications to database
-        await _client.from('notifications').insert([
+        // Query linked parents
+        final parentRes = await _client
+            .from('parent_student_links')
+            .select('parent_id')
+            .eq('student_id', studentId);
+        final parentIds = (parentRes as List)
+            .map((r) => r['parent_id']?.toString().trim() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet();
+
+        // Build strictly scoped notifications
+        final scopedRows = <Map<String, dynamic>>[
           {
             'title': teacherTitle,
             'message': teacherMsg,
@@ -1129,6 +1145,10 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             'target_audience': 'teachers',
             'is_archived': false,
             'created_at': nowIso,
+            'recipient_id': teacherId,
+            'subject_offering_id': subjectOfferingId,
+            'student_id': studentId,
+            'scope': 'individual',
           },
           {
             'title': studentTitle,
@@ -1137,19 +1157,49 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
             'target_audience': 'students',
             'is_archived': false,
             'created_at': nowIso,
+            'recipient_id': studentId,
+            'subject_offering_id': subjectOfferingId,
+            'student_id': studentId,
+            'scope': 'individual',
           },
-          {
+        ];
+
+        if (parentIds.isNotEmpty) {
+          for (final pid in parentIds) {
+            scopedRows.add({
+              'title': parentTitle,
+              'message': parentMsg,
+              'notification_type': 'attendance',
+              'target_audience': 'parents',
+              'is_archived': false,
+              'created_at': nowIso,
+              'recipient_id': pid,
+              'subject_offering_id': subjectOfferingId,
+              'student_id': studentId,
+              'scope': 'individual',
+            });
+          }
+        } else {
+          scopedRows.add({
             'title': parentTitle,
             'message': parentMsg,
             'notification_type': 'attendance',
             'target_audience': 'parents',
             'is_archived': false,
             'created_at': nowIso,
-          },
-        ]);
+            'recipient_id': null,
+            'subject_offering_id': subjectOfferingId,
+            'student_id': studentId,
+            'scope': 'individual',
+          });
+        }
+
+        // Insert scoped notifications to database
+        await _client.from('notifications').insert(scopedRows);
 
         // Pop up the top in-app push banner on active screen if notifications enabled
-        InAppNotificationSeverity bannerSeverity = InAppNotificationSeverity.warningLevel1;
+        InAppNotificationSeverity bannerSeverity =
+            InAppNotificationSeverity.warningLevel1;
         if (threshold == 10) {
           bannerSeverity = InAppNotificationSeverity.warningCritical;
         } else if (threshold == 6) {
@@ -2858,10 +2908,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
           'attendance_history_${filter.subjectOfferingId}_${startStr}_${endStr}_${filter.offset}_${filter.pageSize}';
 
       if (AppDataCache.instance.isFresh(cacheKey)) {
-        final cached =
-            AppDataCache.instance.get<AttendancePage<AttendanceWorkspaceRecord>>(
-          cacheKey,
-        );
+        final cached = AppDataCache.instance
+            .get<AttendancePage<AttendanceWorkspaceRecord>>(cacheKey);
         if (cached != null) return cached;
       }
 
@@ -2933,8 +2981,9 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
           'attendance_analytics_${subjectOfferingId}_${startStr}_$endStr';
 
       if (AppDataCache.instance.isFresh(cacheKey)) {
-        final cached =
-            AppDataCache.instance.get<AttendanceAnalyticsSummary>(cacheKey);
+        final cached = AppDataCache.instance.get<AttendanceAnalyticsSummary>(
+          cacheKey,
+        );
         if (cached != null) return cached;
       }
 

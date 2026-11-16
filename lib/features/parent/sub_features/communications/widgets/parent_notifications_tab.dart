@@ -110,23 +110,17 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
 
     try {
       final user = AuthRepository.instance.currentUser;
-      if (user != null) {
-        await SupabaseNotificationRepository.instance.getReadNotificationIds(
-          user.id,
-        );
+      if (user == null) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
       }
 
-      final res = await Supabase.instance.client
-          .from('notifications')
-          .select()
-          .eq('is_archived', false)
-          .inFilter('target_audience', ['all', 'parents', 'students_parents'])
-          .order('created_at', ascending: false)
-          .limit(_fetchLimit);
-
-      final fetched = (res as List)
-          .map((r) => AppNotificationModel.fromJson(r as Map<String, dynamic>))
-          .toList();
+      final fetched = await SupabaseNotificationRepository.instance
+          .getUserNotifications(user, limit: _fetchLimit);
 
       if (mounted) {
         setState(() {
@@ -136,9 +130,7 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
           _isLoading = false;
         });
 
-        if (user != null) {
-          SupabaseNotificationRepository.instance.calculateUnreadCount(user);
-        }
+        SupabaseNotificationRepository.instance.calculateUnreadCount(user);
       }
     } catch (e) {
       debugPrint('Error loading parent notifications: $e');
@@ -409,8 +401,8 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                       )
                     : Builder(
                         builder: (context) {
-                          final totalPages =
-                              (displayedItems.length / _pageSize).ceil();
+                          final totalPages = (displayedItems.length / _pageSize)
+                              .ceil();
                           final safePage = _currentPage.clamp(
                             1,
                             totalPages > 0 ? totalPages : 1,
@@ -558,8 +550,8 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
             color: isActive
                 ? theme.colorScheme.onPrimary
                 : enabled
-                    ? theme.colorScheme.onSurface
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ? theme.colorScheme.onSurface
+                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
           ),
         ),
       ),
