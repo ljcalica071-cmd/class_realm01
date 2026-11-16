@@ -56,14 +56,15 @@ class StudentAssessmentScreen extends StatefulWidget {
         final decoded = jsonDecode(rawPointer) as Map<String, dynamic>;
         final step = (decoded['currentStep'] as num?)?.toInt() ?? 0;
         final assessMap = decoded['assessmentJson'];
-        if (step == 1 && assessMap is Map) {
+        if ((step == 0 || step == 1) && assessMap is Map) {
           final model = QuizOrExamModel.fromJson(
             Map<String, dynamic>.from(assessMap),
           );
           if (model.id.isNotEmpty && model.questions.isNotEmpty) {
-            // Do not auto-resume if teacher explicitly disallowed access
+            // Do not auto-resume if teacher explicitly disallowed access or if already submitted/cancelled
             try {
-              final overrideLog = await SupabaseService().client
+              final client = SupabaseService().client;
+              final overrideLog = await client
                   .from('anti_cheating_logs')
                   .select('event_type')
                   .eq('assessment_id', model.id)
@@ -73,6 +74,21 @@ class StudentAssessmentScreen extends StatefulWidget {
                   .limit(1)
                   .maybeSingle();
               if (overrideLog?['event_type'] == 'entry_disallowed') {
+                return null;
+              }
+              final existingAtt = await client
+                  .from('assessment_attempts')
+                  .select('status')
+                  .eq('assessment_id', model.id)
+                  .eq('student_id', studentId)
+                  .maybeSingle();
+              final attSt = existingAtt?['status']?.toString().toLowerCase();
+              if (attSt == 'submitted' ||
+                  attSt == 'auto_submitted' ||
+                  attSt == 'cancelled' ||
+                  attSt == 'disqualified') {
+                prefs.remove(pointerKey);
+                AppDataCache.instance.invalidate(pointerKey);
                 return null;
               }
             } catch (_) {}
@@ -337,6 +353,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     if (cachedVault != null && cachedVault.isNotEmpty) {
       _applyDecodedVault(cachedVault, autoStartTimer: true);
     }
+    _saveVault();
     _restorePersistedVault(studentId);
     _verifyTeacherEntryAllowed(studentId);
 
@@ -544,13 +561,13 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         'savedAt': DateTime.now().toUtc().toIso8601String(),
       });
       AppDataCache.instance.set<String>(vaultKey, data);
-      if (_currentStep == 1) {
+      if (_currentStep == 0 || _currentStep == 1) {
         AppDataCache.instance.set<String>(pointerKey, data);
       }
       SharedPreferences.getInstance()
           .then((prefs) {
             prefs.setString(vaultKey, data);
-            if (_currentStep == 1) {
+            if (_currentStep == 0 || _currentStep == 1) {
               prefs.setString(pointerKey, data);
             }
           })
@@ -558,6 +575,16 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     } catch (e) {
       debugPrint('Notice saving exam vault: $e');
     }
+  }
+
+  Future<void> _clearPointerOnly() async {
+    try {
+      final studentId = AuthRepository.instance.currentUser?.id ?? 'student';
+      final pointerKey = StudentAssessmentScreen.activePointerKeyFor(studentId);
+      AppDataCache.instance.invalidate(pointerKey);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(pointerKey);
+    } catch (_) {}
   }
 
   Future<void> _clearVault() async {
@@ -633,7 +660,38 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         } else if (st == 'cancelled') {
           _handleAssessmentCancelled();
           return;
+        } else if (st == 'reset') {
+          _handleTeacherReset('Instructor authorized fresh attempt.');
+          return;
         }
+      } else if (_startTime != null &&
+          DateTime.now().difference(_startTime!).inSeconds > 3) {
+        // If the attempt row was deleted while answering, check if teacher triggered a reset
+        try {
+          final resetLog = await SupabaseService().client
+              .from('anti_cheating_logs')
+              .select('event_type, details, event_at')
+              .eq('assessment_id', widget.assessment.id)
+              .eq('student_id', studentId)
+              .inFilter('event_type', ['reset', 'retake_authorized'])
+              .order('event_at', ascending: false)
+              .limit(1)
+              .maybeSingle();
+          if (resetLog != null) {
+            final evAtStr = resetLog['event_at']?.toString();
+            final evAt = evAtStr != null ? DateTime.tryParse(evAtStr) : null;
+            if (evAt == null ||
+                evAt.toUtc().isAfter(
+                  _startTime!.toUtc().subtract(const Duration(seconds: 2)),
+                )) {
+              _handleTeacherReset(
+                resetLog['details']?.toString() ??
+                    'Instructor authorized fresh attempt.',
+              );
+              return;
+            }
+          }
+        } catch (_) {}
       }
 
       try {
@@ -873,8 +931,11 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
     );
   }
 
+  bool _isResetDialogOpen = false;
+
   void _handleTeacherReset(String reason) {
-    if (!mounted) return;
+    if (!mounted || _isResetDialogOpen) return;
+    _isResetDialogOpen = true;
     _timer?.cancel();
     _heartbeatTimer?.cancel();
     _offlineRetryTimer?.cancel();
@@ -892,8 +953,10 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       _lastViolationRecordedAt = null;
       _violationLog.clear();
       _isSubmitting = false;
+      _submittedResult = null;
       _isConnectionFrozen = false;
       _isReconnectTimedOut = false;
+      _startTime = DateTime.now();
       _secondsRemaining = widget.assessment.durationMinutes * 60;
     });
 
@@ -966,12 +1029,47 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
               ),
             ),
             onPressed: () {
+              _isResetDialogOpen = false;
               Navigator.of(ctx).pop();
               if (mounted) {
+                final nowUtc = DateTime.now().toUtc().toIso8601String();
+                final user = AuthRepository.instance.currentUser;
+                final studentId = user?.id ?? 'student';
                 setState(() {
                   _currentStep = 1;
+                  _startTime = DateTime.now();
+                  _secondsRemaining = widget.assessment.durationMinutes * 60;
                 });
                 _startTimer();
+                _startHeartbeat();
+                _saveVault();
+                if (_isSupabaseReady) {
+                  try {
+                    final client = SupabaseService().client;
+                    client
+                        .from('assessment_attempts')
+                        .upsert({
+                          'assessment_id': widget.assessment.id,
+                          'student_id': studentId,
+                          'attempt_number': 1,
+                          'status': 'in_progress',
+                          'score_earned': null,
+                          'started_at': nowUtc,
+                          'submitted_at': null,
+                        }, onConflict: 'assessment_id,student_id,attempt_number')
+                        .catchError((_) {});
+                    client
+                        .from('anti_cheating_logs')
+                        .insert({
+                          'event_type': 'session_started',
+                          'details': 'Started fresh assessment attempt after reset',
+                          'student_id': studentId,
+                          'assessment_id': widget.assessment.id,
+                          'event_at': nowUtc,
+                        })
+                        .catchError((_) {});
+                  } catch (_) {}
+                }
               }
             },
             child: const Text(
@@ -1536,6 +1634,9 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         canPop: _currentStep != 1,
         onPopInvokedWithResult: (didPop, _) {
           // Non-intrusive: prevent back navigation while answering without showing a blocking modal
+          if (didPop && _currentStep != 1) {
+            _clearPointerOnly();
+          }
         },
         child: Container(
           color: Theme.of(context).scaffoldBackgroundColor,
@@ -1762,9 +1863,11 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                 'student_id': studentId,
                                 'attempt_number': 1,
                                 'status': 'in_progress',
+                                'score_earned': null,
                                 'started_at': DateTime.now()
                                     .toUtc()
                                     .toIso8601String(),
+                                'submitted_at': null,
                               },
                               onConflict:
                                   'assessment_id,student_id,attempt_number',

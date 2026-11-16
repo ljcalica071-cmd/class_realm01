@@ -3,6 +3,7 @@ import 'package:class_realm/core/utils/search_utils.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/item_analysis/item_difficulty_stat.dart';
@@ -67,6 +68,7 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
   // Item Analysis state
   bool _isLoadingItemAnalysis = false;
   List<ItemDifficultyStat> _itemStats = [];
+  QuestionType? _selectedAnalysisCategory;
   bool _resultsReleased = false;
   Timer? _liveAutoSyncTimer;
 
@@ -299,7 +301,7 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
       final client = SupabaseService().client;
       final questionsResponse = await client
           .from('assessment_questions')
-          .select('id, question_text, position')
+          .select('id, question_text, position, question_type')
           .eq('assessment_id', widget.assessmentId)
           .order('position', ascending: true);
 
@@ -341,6 +343,9 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
               .where((r) => r['is_correct'] == true)
               .length;
 
+          final qType = ItemDifficultyStat.parseQuestionType(q['question_type']) ??
+              QuestionType.multipleChoice;
+
           stats.add(
             ItemDifficultyStat(
               itemNumber: (q['position'] as num?)?.toInt() ?? (i + 1),
@@ -348,6 +353,7 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
                   q['question_text']?.toString() ?? 'Question ${i + 1}',
               totalAttempts: totalAttempts,
               correctCount: correctCount,
+              questionType: qType,
             ),
           );
         }
@@ -1300,6 +1306,37 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
         : _itemStats.map((e) => e.pIndex).reduce((a, b) => a + b) /
               _itemStats.length;
 
+    const orderedCategories = [
+      QuestionType.multipleChoice,
+      QuestionType.trueFalse,
+      QuestionType.identification,
+      QuestionType.matching,
+    ];
+
+    final Map<QuestionType, List<ItemDifficultyStat>> groupedStats = {};
+    final List<ItemDifficultyStat> otherItems = [];
+
+    for (final s in _itemStats) {
+      if (s.questionType != null && orderedCategories.contains(s.questionType)) {
+        groupedStats.putIfAbsent(s.questionType!, () => []).add(s);
+      } else {
+        otherItems.add(s);
+      }
+    }
+
+    for (final list in groupedStats.values) {
+      list.sort((a, b) => a.itemNumber.compareTo(b.itemNumber));
+    }
+    otherItems.sort((a, b) => a.itemNumber.compareTo(b.itemNumber));
+
+    final categoriesInStats =
+        orderedCategories.where((c) => groupedStats.containsKey(c)).toList();
+    final hasOther = otherItems.isNotEmpty;
+
+    final categoriesToDisplay = _selectedAnalysisCategory != null
+        ? [_selectedAnalysisCategory!]
+        : categoriesInStats;
+
     return Column(
       children: [
         // Summary & Release Answer Key Bar
@@ -1312,142 +1349,295 @@ class _LiveProctorMonitorModalState extends State<LiveProctorMonitorModal> {
               color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildMetricPill('Total Items', '${_itemStats.length}'),
-                  const SizedBox(width: 8),
-                  _buildMetricPill(
-                    'Mean Accuracy',
-                    '${(meanAccuracy * 100).toStringAsFixed(1)}%',
+                  Row(
+                    children: [
+                      _buildMetricPill('Total Items', '${_itemStats.length}'),
+                      const SizedBox(width: 8),
+                      _buildMetricPill(
+                        'Mean Accuracy',
+                        '${(meanAccuracy * 100).toStringAsFixed(1)}%',
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        'Release Answer Key to Students',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Switch(
+                        value: _resultsReleased,
+                        activeThumbColor: AppTheme.catGreen,
+                        onChanged: (val) async {
+                          try {
+                            await SupabaseService().client
+                                .from('digital_assessments')
+                                .update({'results_released': val})
+                                .eq('id', widget.assessmentId);
+                            setState(() => _resultsReleased = val);
+                          } catch (_) {}
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
-              Row(
-                children: [
-                  Text(
-                    'Release Answer Key to Students',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
+              if (categoriesInStats.length > 1) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ChoiceChip(
+                      label: Text('All (${_itemStats.length})'),
+                      selected: _selectedAnalysisCategory == null,
+                      onSelected: (_) {
+                        setState(() => _selectedAnalysisCategory = null);
+                      },
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Switch(
-                    value: _resultsReleased,
-                    activeThumbColor: AppTheme.catGreen,
-                    onChanged: (val) async {
-                      try {
-                        await SupabaseService().client
-                            .from('digital_assessments')
-                            .update({'results_released': val})
-                            .eq('id', widget.assessmentId);
-                        setState(() => _resultsReleased = val);
-                      } catch (_) {}
-                    },
-                  ),
-                ],
-              ),
+                    ...categoriesInStats.map((cat) {
+                      final count = groupedStats[cat]?.length ?? 0;
+                      final label = switch (cat) {
+                        QuestionType.multipleChoice => 'Multiple Choice',
+                        QuestionType.trueFalse => 'True / False',
+                        QuestionType.identification => 'Identification',
+                        QuestionType.matching => 'Matching',
+                      };
+                      return ChoiceChip(
+                        label: Text('$label ($count)'),
+                        selected: _selectedAnalysisCategory == cat,
+                        onSelected: (_) {
+                          setState(() {
+                            _selectedAnalysisCategory =
+                                _selectedAnalysisCategory == cat ? null : cat;
+                          });
+                        },
+                      );
+                    }),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
         const SizedBox(height: 12),
 
-        // DepEd Tiers List
+        // DepEd Tiers List Grouped by Category
         Expanded(
-          child: ListView.separated(
-            itemCount: _itemStats.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final item = _itemStats[index];
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
+          child: ListView(
+            children: [
+              for (final cat in categoriesToDisplay) ...[
+                if (groupedStats[cat]?.isNotEmpty == true) ...[
+                  _buildModalCategoryHeader(
+                    theme: theme,
+                    category: cat,
+                    items: groupedStats[cat]!,
+                    partIndex: categoriesInStats.indexOf(cat) + 1,
+                  ),
+                  const SizedBox(height: 6),
+                  ...groupedStats[cat]!.map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _buildModalItemCard(theme, item),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ],
+              if (hasOther && (_selectedAnalysisCategory == null)) ...[
+                _buildModalCategoryHeader(
+                  theme: theme,
+                  category: null,
+                  items: otherItems,
+                  partIndex: categoriesInStats.length + 1,
                 ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                const SizedBox(height: 6),
+                ...otherItems.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _buildModalItemCard(theme, item),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 14,
-                      backgroundColor: theme.colorScheme.primary.withValues(
-                        alpha: 0.1,
-                      ),
-                      child: Text(
-                        'Q${item.itemNumber}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.questionText,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${item.correctCount} of ${item.totalAttempts} correct (${(item.pIndex * 100).toStringAsFixed(1)}% accuracy • P = ${item.pIndex.toStringAsFixed(2)})',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _badgeColor(item.classification)
-                            .withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: _badgeColor(item.classification)
-                              .withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Text(
-                        item.classification,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: _badgeColor(item.classification),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+              ],
+            ],
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildModalCategoryHeader({
+    required ThemeData theme,
+    required QuestionType? category,
+    required List<ItemDifficultyStat> items,
+    required int partIndex,
+  }) {
+    final title = switch (category) {
+      QuestionType.multipleChoice => 'PART ${_toRoman(partIndex)}: MULTIPLE CHOICE',
+      QuestionType.trueFalse => 'PART ${_toRoman(partIndex)}: TRUE OR FALSE',
+      QuestionType.identification => 'PART ${_toRoman(partIndex)}: IDENTIFICATION',
+      QuestionType.matching => 'PART ${_toRoman(partIndex)}: MATCHING TYPE',
+      null => 'PART ${_toRoman(partIndex)}: OTHER QUESTIONS',
+    };
+
+    final rangeText = items.isEmpty
+        ? ''
+        : (items.first.itemNumber == items.last.itemNumber
+            ? 'Item ${items.first.itemNumber}'
+            : 'Items ${items.first.itemNumber}–${items.last.itemNumber}');
+
+    final catAvg = items.isNotEmpty
+        ? (items.fold<double>(0.0, (sum, s) => sum + s.pIndex) / items.length) * 100
+        : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '(${items.length} ${items.length == 1 ? 'Item' : 'Items'} • $rangeText)',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+          Text(
+            'Avg: ${catAvg.toStringAsFixed(1)}%',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModalItemCard(ThemeData theme, ItemDifficultyStat item) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 10,
+      ),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: theme.colorScheme.primary.withValues(
+              alpha: 0.1,
+            ),
+            child: Text(
+              'Q${item.itemNumber}',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.questionText,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${item.correctCount} of ${item.totalAttempts} correct (${(item.pIndex * 100).toStringAsFixed(1)}% accuracy • P = ${item.pIndex.toStringAsFixed(2)})',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(
+                      alpha: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 4,
+            ),
+            decoration: BoxDecoration(
+              color: _badgeColor(item.classification)
+                  .withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _badgeColor(item.classification)
+                    .withValues(alpha: 0.3),
+              ),
+            ),
+            child: Text(
+              item.classification,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: _badgeColor(item.classification),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _toRoman(int number) {
+    return switch (number) {
+      1 => 'I',
+      2 => 'II',
+      3 => 'III',
+      4 => 'IV',
+      5 => 'V',
+      _ => '$number',
+    };
   }
 
   Color _badgeColor(String classification) {

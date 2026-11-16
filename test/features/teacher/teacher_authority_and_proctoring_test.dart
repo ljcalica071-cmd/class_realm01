@@ -4,11 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/services/gemini_service.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/models/academic_models.dart';
+import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/models/proctor_violation_log.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/models/student_live_proctor_state.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/services/teacher_proctor_channel_service.dart';
+import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/widgets/proctoring_roster_table.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/anti_cheating/widgets/student_proctor_card.dart';
+import 'package:class_realm/features/teacher/sub_features/assessments/item_analysis/item_difficulty_stat.dart';
 import 'package:class_realm/features/teacher/sub_features/assessments/screens/create_assessment_flow.dart';
 import 'package:class_realm/features/student/sub_features/academics/screens/student_assessment_screen.dart';
 
@@ -372,6 +376,233 @@ void main() {
       expect(msg.toLowerCase(), isNot(contains('api')));
       expect(msg, isNot(contains('429')));
       expect(msg.toLowerCase(), isNot(contains('.env')));
+    });
+  });
+
+  group('8. Retake Score Clearing & Sub-View Browser Refresh Persistence Test', () {
+    test('Retake immediately clears student score and prevents stale score resurrection during inProgress', () async {
+      final proctorService = TeacherProctorChannelService(assessmentId: 'quiz_3_live');
+      proctorService.initializeRoster([
+        {
+          'id': 'stu_ljay',
+          'name': 'Calica, Ljay M.',
+          'lrn': '999999999991',
+          'section': 'B2',
+          'status': ProctorSessionStatus.submitted,
+          'score': 5.0,
+          'total_points': 9.0,
+          'violation_count': 4,
+        },
+        {
+          'id': 'stu_rex',
+          'name': 'San Juan, Rex G.',
+          'lrn': '123412341111',
+          'section': 'B2',
+          'status': ProctorSessionStatus.submitted,
+          'score': 2.0,
+          'total_points': 9.0,
+          'violation_count': 5,
+        },
+      ]);
+
+      // Verify initial submitted scores
+      var ljay = proctorService.currentStates.firstWhere((s) => s.studentId == 'stu_ljay');
+      expect(ljay.status, equals(ProctorSessionStatus.submitted));
+      expect(ljay.score, equals(5.0));
+
+      // Teacher clicks Retake on Ljay
+      await proctorService.authorizeRetake('stu_ljay', writeToDb: false);
+      ljay = proctorService.currentStates.firstWhere((s) => s.studentId == 'stu_ljay');
+      expect(ljay.status, equals(ProctorSessionStatus.retakeRequested));
+      expect(ljay.score, isNull, reason: 'Retake must immediately clear previous score.');
+      expect(ljay.violationCount, equals(0), reason: 'Retake must clear previous violations.');
+
+      // Even if a background poll passes stale submitted status/score within the reset guard window, score stays null
+      proctorService.initializeRoster([
+        {
+          'id': 'stu_ljay',
+          'name': 'Calica, Ljay M.',
+          'lrn': '999999999991',
+          'section': 'B2',
+          'status': ProctorSessionStatus.submitted,
+          'score': 5.0,
+          'total_points': 9.0,
+          'violation_count': 4,
+        },
+      ]);
+      ljay = proctorService.currentStates.firstWhere((s) => s.studentId == 'stu_ljay');
+      expect(ljay.status, equals(ProctorSessionStatus.retakeRequested));
+      expect(ljay.score, isNull);
+
+      // Student starts retaking the quiz (inProgress)
+      proctorService.registerStudentStarted('stu_ljay', forceRestart: true);
+      ljay = proctorService.currentStates.firstWhere((s) => s.studentId == 'stu_ljay');
+      expect(ljay.status, equals(ProctorSessionStatus.inProgress));
+      expect(ljay.score, isNull, reason: 'Score must remain null while student is In Progress.');
+
+      proctorService.dispose();
+    });
+
+    testWidgets('ProctoringRosterTable hides score when student is In Progress or Retake', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final students = [
+        const StudentLiveProctorState(
+          studentId: 'stu_1',
+          studentName: 'Calica, Ljay M.',
+          lastName: 'Calica',
+          firstName: 'Ljay',
+          middleName: 'M',
+          lrn: '999999999991',
+          section: 'B2',
+          status: ProctorSessionStatus.inProgress,
+          violationCount: 0,
+          score: null,
+          totalPoints: 9.0,
+        ),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ProctoringRosterTable(
+              students: students,
+              searchQuery: '',
+              onSearchChanged: (_) {},
+              onReset: (_) {},
+              onToggleAllow: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('In Progress'), findsOneWidget);
+      expect(find.text('—'), findsOneWidget);
+      expect(find.textContaining('pts'), findsNothing);
+    });
+
+    test('All Quiz, Exam, and Activity sub-view routes are recognized and persist JSON state for F5 refresh', () async {
+      await LocalStorageService.init();
+
+      expect(AppRoutes.isTeacherClassworkSubViewRoute(AppRoutes.teacherClassworkWwProctoring), isTrue);
+      expect(AppRoutes.isTeacherClassworkSubViewRoute(AppRoutes.teacherClassworkExProctoring), isTrue);
+      expect(AppRoutes.isTeacherClassworkSubViewRoute(AppRoutes.teacherClassworkWwItemAnalysis), isTrue);
+      expect(AppRoutes.isTeacherClassworkSubViewRoute(AppRoutes.teacherClassworkExItemAnalysis), isTrue);
+      expect(AppRoutes.isTeacherClassworkSubViewRoute(AppRoutes.teacherClassworkWwSubmissions), isTrue);
+      expect(AppRoutes.isTeacherClassworkSubViewRoute(AppRoutes.teacherClassworkPtSubmissions), isTrue);
+
+      final sampleExam = createSampleExam();
+      await LocalStorageService.saveTeacherClassworkNavState(
+        categoryTabIndex: 2,
+        activeAssessmentId: sampleExam.id,
+        activeAssessmentJson: sampleExam.toJson(),
+      );
+
+      final navState = LocalStorageService.getTeacherClassworkNavState();
+      expect(navState['activeAssessmentId'], equals(sampleExam.id));
+      expect(navState['activeAssessmentJson'], isA<Map>());
+      final restored = QuizOrExamModel.fromJson(
+        Map<String, dynamic>.from(navState['activeAssessmentJson'] as Map),
+      );
+      expect(restored.id, equals(sampleExam.id));
+      expect(restored.title, equals(sampleExam.title));
+      expect(restored.isExam, isTrue);
+    });
+
+    test('ItemDifficultyStat categorizes questions and groups them by category in standard DepEd order', () {
+      // Create 6 sample items matching the user's exam
+      final items = [
+        ItemDifficultyStat(
+          itemNumber: 1,
+          questionText: "According to Erik Erikson's psychosocial theory...",
+          totalAttempts: 2,
+          correctCount: 0,
+          questionType: ItemDifficultyStat.parseQuestionType('multiple_choice'),
+        ),
+        ItemDifficultyStat(
+          itemNumber: 2,
+          questionText: 'Which theorist developed the Life-Span model...',
+          totalAttempts: 2,
+          correctCount: 0,
+          questionType: ItemDifficultyStat.parseQuestionType('multiple_choice'),
+        ),
+        ItemDifficultyStat(
+          itemNumber: 3,
+          questionText: 'Self-awareness means recognizing your own strengths...',
+          totalAttempts: 2,
+          correctCount: 2,
+          questionType: ItemDifficultyStat.parseQuestionType('true_false'),
+        ),
+        ItemDifficultyStat(
+          itemNumber: 4,
+          questionText: 'Career planning should only begin after graduating...',
+          totalAttempts: 2,
+          correctCount: 0,
+          questionType: ItemDifficultyStat.parseQuestionType('true_false'),
+        ),
+        ItemDifficultyStat(
+          itemNumber: 5,
+          questionText: 'The ability to resolve disagreements peacefully...',
+          totalAttempts: 2,
+          correctCount: 1,
+          questionType: ItemDifficultyStat.parseQuestionType('identification'),
+        ),
+        ItemDifficultyStat(
+          itemNumber: 6,
+          questionText: 'The core SHS subject designed to prepare Grade 11...',
+          totalAttempts: 2,
+          correctCount: 2,
+          questionType: ItemDifficultyStat.parseQuestionType('identification'),
+        ),
+      ];
+
+      // Verify category parsing
+      expect(items[0].questionType, equals(QuestionType.multipleChoice));
+      expect(items[0].categoryLabel, equals('Multiple Choice'));
+      expect(items[0].classification, equals('Very Difficult'));
+
+      expect(items[2].questionType, equals(QuestionType.trueFalse));
+      expect(items[2].categoryLabel, equals('True or False'));
+      expect(items[2].classification, equals('Very Easy'));
+
+      expect(items[4].questionType, equals(QuestionType.identification));
+      expect(items[4].categoryLabel, equals('Identification'));
+      expect(items[4].classification, equals('Moderate / Ideal'));
+
+      // Group by category in standard DepEd order
+      const orderedCategories = [
+        QuestionType.multipleChoice,
+        QuestionType.trueFalse,
+        QuestionType.identification,
+        QuestionType.matching,
+      ];
+
+      final Map<QuestionType, List<ItemDifficultyStat>> grouped = {};
+      for (final it in items) {
+        if (it.questionType != null) {
+          grouped.putIfAbsent(it.questionType!, () => []).add(it);
+        }
+      }
+
+      final activeCategories = orderedCategories.where((c) => grouped.containsKey(c)).toList();
+      expect(activeCategories, equals([
+        QuestionType.multipleChoice,
+        QuestionType.trueFalse,
+        QuestionType.identification,
+      ]));
+
+      // Verify item counts in each category
+      expect(grouped[QuestionType.multipleChoice]!.length, equals(2));
+      expect(grouped[QuestionType.trueFalse]!.length, equals(2));
+      expect(grouped[QuestionType.identification]!.length, equals(2));
+
+      // Verify item numbers in each category
+      expect(grouped[QuestionType.multipleChoice]!.map((e) => e.itemNumber).toList(), equals([1, 2]));
+      expect(grouped[QuestionType.trueFalse]!.map((e) => e.itemNumber).toList(), equals([3, 4]));
+      expect(grouped[QuestionType.identification]!.map((e) => e.itemNumber).toList(), equals([5, 6]));
     });
   });
 }

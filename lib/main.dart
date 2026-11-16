@@ -353,7 +353,13 @@ class _ClassRealmAppState extends State<ClassRealmApp> {
       removePreBootstrapLoader();
     });
 
-    final initialPath = _normalizeRoutePath(getBrowserUrlPath());
+    final rawInitialPath = _normalizeRoutePath(getBrowserUrlPath());
+    final savedLastRoute = LocalStorageService.getLastActiveRoute();
+    final initialPath = (rawInitialPath == '/' || rawInitialPath.isEmpty) &&
+            savedLastRoute != null &&
+            savedLastRoute.trim().isNotEmpty
+        ? _normalizeRoutePath(savedLastRoute)
+        : rawInitialPath;
     final tabIdxFromPath = AppRoutes.teacherClassworkTabIndexForRoute(
       initialPath,
     );

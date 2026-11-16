@@ -514,6 +514,8 @@ class _CreateAssessmentFlowDialogState
 
   @override
   void dispose() {
+    final service = widget.geminiService ?? GeminiService.instance;
+    service.cancelAssessmentGeneration();
     _aiCooldownTimer?.cancel();
     if (kIsWeb) {
       unregisterWebDrop();
@@ -1659,6 +1661,8 @@ class _CreateAssessmentFlowDialogState
   }
 
   void _handleClose() {
+    final service = widget.geminiService ?? GeminiService.instance;
+    service.cancelAssessmentGeneration();
     if (_hasUnsavedChanges()) {
       showDialog(
         context: context,
@@ -1808,6 +1812,9 @@ class _CreateAssessmentFlowDialogState
   }
 
   Future<void> _pickAiLectureFile() async {
+    if (_isGeneratingAiQuestions) {
+      _cancelAiGeneration();
+    }
     setState(() {
       _aiFileError = null;
       _aiGenerationError = null;
@@ -1850,11 +1857,25 @@ class _CreateAssessmentFlowDialogState
   }
 
   void _removeAiLectureFile() {
+    if (_isGeneratingAiQuestions) {
+      _cancelAiGeneration();
+    }
     setState(() {
       _uploadedLectureDoc = null;
       _aiFileError = null;
       _aiGenerationError = null;
     });
+  }
+
+  void _cancelAiGeneration() {
+    final service = widget.geminiService ?? GeminiService.instance;
+    service.cancelAssessmentGeneration();
+    if (mounted) {
+      setState(() {
+        _isGeneratingAiQuestions = false;
+        _aiGenerationError = null;
+      });
+    }
   }
 
   Future<void> _generateQuestionsWithAi() async {
@@ -3253,17 +3274,13 @@ class _CreateAssessmentFlowDialogState
                             ),
                             icon: const Icon(Icons.refresh, size: 14),
                             label: const Text('Change File'),
-                            onPressed: _isGeneratingAiQuestions
-                                ? null
-                                : _pickAiLectureFile,
+                            onPressed: _pickAiLectureFile,
                           ),
                           const SizedBox(width: 8),
                           IconButton(
                             tooltip: 'Remove lecture file',
                             icon: const Icon(Icons.close, size: 18),
-                            onPressed: _isGeneratingAiQuestions
-                                ? null
-                                : _removeAiLectureFile,
+                            onPressed: _removeAiLectureFile,
                           ),
                         ],
                       ),
@@ -3436,99 +3453,100 @@ class _CreateAssessmentFlowDialogState
 
           const SizedBox(height: 20),
 
-          // 4. Generate Questions Button (Compact & Disabled if total is 0 or >100)
-          Center(
-            child: FilledButton.icon(
-              icon: _isGeneratingAiQuestions
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Icon(
-                      isAiInCooldown
-                          ? Icons.hourglass_bottom_rounded
-                          : LucideIcons.sparkles,
-                      size: 16,
-                    ),
-              label: Text(
-                _isGeneratingAiQuestions
-                    ? 'Generating Questions from Document...'
-                    : (isAiInCooldown
-                          ? 'Wait ${aiCooldownSec}s to Regenerate with AI'
-                          : (_isExam
-                                ? 'Generate Exam Questions with AI'
-                                : 'Generate Quiz Questions with AI')),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              onPressed: canGenerateAi ? _generateQuestionsWithAi : null,
+          // 4. Generate Questions Button or Animated AI Loading Card
+          if (_isGeneratingAiQuestions) ...[
+            _AiGenerationLoadingCard(
+              totalPlanned: totalPlanned,
+              mcCount: mc,
+              tfCount: tf,
+              idCount: id,
+              difficultyLabel: _selectedDifficulty.label,
+              focusLabel: _selectedFocus.label,
+              fileName: _uploadedLectureDoc?.fileName ?? 'Lecture File',
+              onCancel: _cancelAiGeneration,
             ),
-          ),
-
-          if (totalPlanned == 0) ...[
-            const SizedBox(height: 6),
+          ] else ...[
             Center(
-              child: Text(
-                'Set question counts (1 to 100 items) above and upload a lecture file to enable AI generation.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              child: FilledButton.icon(
+                icon: Icon(
+                  isAiInCooldown
+                      ? Icons.hourglass_bottom_rounded
+                      : LucideIcons.sparkles,
+                  size: 16,
                 ),
+                label: Text(
+                  isAiInCooldown
+                      ? 'Wait ${aiCooldownSec}s to Regenerate with AI'
+                      : (_isExam
+                            ? 'Generate Exam Questions with AI'
+                            : 'Generate Quiz Questions with AI'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: canGenerateAi ? _generateQuestionsWithAi : null,
               ),
             ),
-          ] else if (totalPlanned > 100) ...[
-            const SizedBox(height: 6),
-            Center(
-              child: Text(
-                'Total questions cannot exceed 100 items ($totalPlanned / 100). Please reduce question count.',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFFDC2626),
-                  fontWeight: FontWeight.w500,
+            if (totalPlanned == 0) ...[
+              const SizedBox(height: 6),
+              Center(
+                child: Text(
+                  'Set question counts (1 to 100 items) above and upload a lecture file to enable AI generation.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  ),
                 ),
               ),
-            ),
-          ] else if (_uploadedLectureDoc == null) ...[
-            const SizedBox(height: 6),
-            Center(
-              child: Text(
-                'Upload a lecture file above to enable AI question generation.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            ] else if (totalPlanned > 100) ...[
+              const SizedBox(height: 6),
+              Center(
+                child: Text(
+                  'Total questions cannot exceed 100 items ($totalPlanned / 100). Please reduce question count.',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFFDC2626),
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-            ),
-          ] else if (isAiInCooldown) ...[
-            const SizedBox(height: 6),
-            Center(
-              child: Text(
-                '1-minute AI cooldown active (${aiCooldownSec}s remaining) to prevent duplicate requests.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                  fontWeight: FontWeight.w500,
+            ] else if (_uploadedLectureDoc == null) ...[
+              const SizedBox(height: 6),
+              Center(
+                child: Text(
+                  'Upload a lecture file above to enable AI question generation.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  ),
                 ),
               ),
-            ),
+            ] else if (isAiInCooldown) ...[
+              const SizedBox(height: 6),
+              Center(
+                child: Text(
+                  '1-minute AI cooldown active (${aiCooldownSec}s remaining) to prevent duplicate requests.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
           ],
 
           if (hasGenErr) ...[
@@ -5109,3 +5127,397 @@ class _MarchingAntsPainter extends CustomPainter {
         oldDelegate.strokeWidth != strokeWidth;
   }
 }
+
+
+/// Beautiful, animated loading card for AI Question Generation with live step rotation,
+/// glowing animated borders, and an indeterminate gradient shimmer beam.
+class _AiGenerationLoadingCard extends StatefulWidget {
+  final int totalPlanned;
+  final int mcCount;
+  final int tfCount;
+  final int idCount;
+  final String difficultyLabel;
+  final String focusLabel;
+  final String fileName;
+  final VoidCallback? onCancel;
+
+  const _AiGenerationLoadingCard({
+    required this.totalPlanned,
+    required this.mcCount,
+    required this.tfCount,
+    required this.idCount,
+    required this.difficultyLabel,
+    required this.focusLabel,
+    required this.fileName,
+    this.onCancel,
+  });
+
+  @override
+  State<_AiGenerationLoadingCard> createState() => _AiGenerationLoadingCardState();
+}
+
+class _AiGenerationLoadingCardState extends State<_AiGenerationLoadingCard>
+    with TickerProviderStateMixin {
+  late final AnimationController _pulseController;
+  late final AnimationController _shimmerController;
+  late final AnimationController _spinController;
+  Timer? _stepTimer;
+  int _currentStepIndex = 0;
+
+  List<String> get _steps => [
+    'Reading and indexing lecture document content...',
+    'Extracting core concepts for ${widget.totalPlanned} question${widget.totalPlanned > 1 ? 's' : ''}...',
+    'Synthesizing ${widget.difficultyLabel} items strictly from text facts...',
+    'Formulating distractors and validating answer keys...',
+    'Finalizing questions for the Interactive Question Builder...',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat();
+
+    _spinController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3200),
+    )..repeat();
+
+    _stepTimer = Timer.periodic(const Duration(milliseconds: 1800), (timer) {
+      if (!mounted) return;
+      setState(() {
+        _currentStepIndex = (_currentStepIndex + 1) % _steps.length;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _stepTimer?.cancel();
+    _pulseController.dispose();
+    _shimmerController.dispose();
+    _spinController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([_pulseController, _shimmerController, _spinController]),
+      builder: (context, _) {
+        final pulseVal = _pulseController.value;
+        final shimmerVal = _shimmerController.value;
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [
+                      const Color(0xFF1E1B4B).withValues(alpha: 0.7),
+                      const Color(0xFF0F172A).withValues(alpha: 0.9),
+                      const Color(0xFF1E293B).withValues(alpha: 0.75),
+                    ]
+                  : [
+                      const Color(0xFFEEF2FF),
+                      const Color(0xFFF5F3FF),
+                      const Color(0xFFF0FDF4),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Color.lerp(
+                theme.colorScheme.primary.withValues(alpha: 0.45),
+                Colors.indigoAccent.withValues(alpha: 0.8),
+                pulseVal,
+              )!,
+              width: 1.6,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.primary.withValues(alpha: 0.08 + (0.08 * pulseVal)),
+                blurRadius: 16,
+                spreadRadius: 1,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header: Animated Rotating Sparkle + Title + Live Step Message
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          theme.colorScheme.primary,
+                          Colors.indigoAccent,
+                          Colors.purpleAccent,
+                        ],
+                        transform: GradientRotation(_spinController.value * 2 * 3.14159),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.35),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Transform.scale(
+                        scale: 0.88 + (0.24 * pulseVal),
+                        child: const Icon(
+                          LucideIcons.sparkles,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'AI Question Generator in Progress',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'Grounded Mode',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          transitionBuilder: (child, anim) => FadeTransition(
+                            opacity: anim,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, 0.25),
+                                end: Offset.zero,
+                              ).animate(anim),
+                              child: child,
+                            ),
+                          ),
+                          child: Text(
+                            _steps[_currentStepIndex],
+                            key: ValueKey<int>(_currentStepIndex),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Animated Shimmer Gradient Progress Bar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
+                  height: 6,
+                  child: Stack(
+                    children: [
+                      Container(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      ),
+                      Positioned.fill(
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: 1.0,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment(-1.5 + (shimmerVal * 2.5), 0),
+                                end: Alignment(0.5 + (shimmerVal * 2.5), 0),
+                                colors: [
+                                  theme.colorScheme.primary.withValues(alpha: 0.35),
+                                  theme.colorScheme.primary,
+                                  Colors.indigoAccent,
+                                  Colors.purpleAccent,
+                                  theme.colorScheme.primary.withValues(alpha: 0.35),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Bottom Configuration Badges & Document Pill
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _buildBadge(
+                    context,
+                    icon: Icons.layers_outlined,
+                    label: '${widget.totalPlanned} Questions (${widget.mcCount} MCQ, ${widget.tfCount} T/F, ${widget.idCount} ID)',
+                    theme: theme,
+                    isDark: isDark,
+                  ),
+                  _buildBadge(
+                    context,
+                    icon: Icons.speed_rounded,
+                    label: widget.difficultyLabel,
+                    theme: theme,
+                    isDark: isDark,
+                  ),
+                  _buildBadge(
+                    context,
+                    icon: Icons.center_focus_strong_rounded,
+                    label: widget.focusLabel,
+                    theme: theme,
+                    isDark: isDark,
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color.lerp(Colors.green, Colors.tealAccent, pulseVal),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 180),
+                        child: Text(
+                          widget.fileName,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (widget.onCancel != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: widget.onCancel,
+                      icon: const Icon(Icons.close_rounded, size: 13),
+                      label: const Text('Cancel & Change Settings'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: isDark ? const Color(0xFFFCA5A5) : const Color(0xFFDC2626),
+                        side: BorderSide(
+                          color: (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626))
+                              .withValues(alpha: 0.35),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBadge(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required ThemeData theme,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: theme.colorScheme.primary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

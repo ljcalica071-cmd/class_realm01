@@ -207,16 +207,33 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ? widget.initialSelectedIndex
         : (savedTab > 0 ? savedTab : 0);
     _loadedTabIndices.add(_selectedIndex);
-    final initialBrowserPath = AppRoutes.normalizeRoutePath(
+    final rawBrowserPath = AppRoutes.normalizeRoutePath(
       getBrowserUrlPath(),
     );
+    final savedRoute = AppRoutes.normalizeRoutePath(
+      LocalStorageService.getLastActiveRoute() ?? '',
+    );
+    final initialBrowserPath =
+        (rawBrowserPath == '/' || rawBrowserPath == AppRoutes.teacherClasswork) &&
+                AppRoutes.isTeacherClassworkSubViewRoute(savedRoute)
+            ? savedRoute
+            : rawBrowserPath;
     final currentRoute = _routeForIndex(_selectedIndex);
     if (_selectedIndex == 1) {
-      if (initialBrowserPath == AppRoutes.teacherClassworkSubmissions ||
-          initialBrowserPath == AppRoutes.teacherClassworkProctoring ||
-          initialBrowserPath == AppRoutes.teacherClassworkItemAnalysis) {
+      if (AppRoutes.isTeacherClassworkSubViewRoute(initialBrowserPath)) {
         LocalStorageService.saveLastActiveRoute(initialBrowserPath);
         updateBrowserUrl(initialBrowserPath);
+        if (AppRoutes.isTeacherClassworkSubmissionsRoute(initialBrowserPath)) {
+          final nav = LocalStorageService.getTeacherClassworkNavState();
+          final actJson = nav['activeActivityJson'];
+          if (actJson is Map) {
+            try {
+              _viewingSubmissionsFor = ActivityModel.fromJson(
+                Map<String, dynamic>.from(actJson),
+              );
+            } catch (_) {}
+          }
+        }
       } else {
         LocalStorageService.clearTeacherClassworkSubView();
         final nav = LocalStorageService.getTeacherClassworkNavState();
@@ -251,7 +268,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         LocalStorageService.saveLastActiveRoute(path);
       } else if (targetIndex == 1 && _selectedIndex == 1) {
         final cleanPath = AppRoutes.normalizeRoutePath(path);
-        if (cleanPath != AppRoutes.teacherClassworkSubmissions &&
+        if (!AppRoutes.isTeacherClassworkSubmissionsRoute(cleanPath) &&
             _viewingSubmissionsFor != null) {
           setState(() {
             _viewingSubmissionsFor = null;
@@ -1168,6 +1185,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   LocalStorageService.saveTeacherClassworkNavState(
                     categoryTabIndex: catIdx,
                     activeActivityId: act.id,
+                    activeActivityJson: act.toJson(),
                   );
                   final submissionRoute = act.isRequirement
                       ? AppRoutes.teacherClassworkPtSubmissions

@@ -38,7 +38,6 @@ import 'package:class_realm/shared/widgets/modals/rfid_assignment_modal.dart';
 
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 
@@ -4896,12 +4895,21 @@ class _SuspendClassDialogState extends State<_SuspendClassDialog> {
   }
 
   void _submit() {
-    final text = _reasonCtrl.text.trim();
-    if (text.isEmpty) {
-      setState(() => _inlineError = 'Please enter a reason for the suspension.');
+    final raw = _reasonCtrl.text;
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      setState(() => _inlineError = 'Reason cannot be empty or spaces only.');
       return;
     }
-    Navigator.of(context).pop(text);
+    if (trimmed.length < 2) {
+      setState(() => _inlineError = 'Reason must be at least 2 characters.');
+      return;
+    }
+    if (trimmed.length > 100) {
+      setState(() => _inlineError = 'Reason cannot exceed 100 characters.');
+      return;
+    }
+    Navigator.of(context).pop(trimmed);
   }
 
   @override
@@ -5032,23 +5040,41 @@ class _SuspendClassDialogState extends State<_SuspendClassDialog> {
                 }).toList(),
               ),
               const SizedBox(height: 14),
-              Text(
-                'Reason / Announcement Title',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.onSurface,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Reason / Announcement Title',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  Text(
+                    '${_reasonCtrl.text.length}/100',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: _reasonCtrl.text.length >= 100
+                          ? AppTheme.catOrange
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 6),
               TextField(
                 controller: _reasonCtrl,
+                inputFormatters: [
+                  LengthLimitingTextInputFormatter(100),
+                ],
                 onChanged: (_) {
-                  if (_inlineError != null) {
-                    setState(() => _inlineError = null);
-                  } else {
-                    setState(() {});
-                  }
+                  setState(() {
+                    if (_inlineError != null) {
+                      _inlineError = null;
+                    }
+                  });
                 },
                 style: TextStyle(
                   fontSize: 13,
@@ -5071,6 +5097,7 @@ class _SuspendClassDialogState extends State<_SuspendClassDialog> {
                       color: _inlineError != null
                           ? AppTheme.catRed
                           : theme.colorScheme.onSurface.withValues(alpha: 0.16),
+                      width: _inlineError != null ? 1.5 : 1.0,
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
@@ -5079,19 +5106,45 @@ class _SuspendClassDialogState extends State<_SuspendClassDialog> {
                       color: _inlineError != null
                           ? AppTheme.catRed
                           : theme.colorScheme.onSurface.withValues(alpha: 0.16),
+                      width: _inlineError != null ? 1.5 : 1.0,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(9),
+                    borderSide: BorderSide(
+                      color: _inlineError != null
+                          ? AppTheme.catRed
+                          : theme.colorScheme.primary,
+                      width: _inlineError != null ? 1.5 : 1.6,
                     ),
                   ),
                 ),
               ),
               if (_inlineError != null) ...[
                 const SizedBox(height: 5),
-                Text(
-                  _inlineError!,
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    color: AppTheme.catRed,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 1),
+                      child: Icon(
+                        Icons.error_outline_rounded,
+                        size: 14,
+                        color: AppTheme.catRed,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _inlineError!,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: AppTheme.catRed,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
               const SizedBox(height: 18),

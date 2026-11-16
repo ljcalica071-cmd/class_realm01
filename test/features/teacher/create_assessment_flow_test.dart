@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
@@ -9,12 +10,24 @@ import 'package:class_realm/features/teacher/sub_features/assessments/screens/cr
 import 'package:class_realm/features/teacher/sub_features/assessments/services/lecture_document_extractor.dart';
 
 class _FakeGeminiService implements GeminiService {
+  Completer<GeminiAssessmentGenerationResult>? completer;
   int? lastMcqCount;
   int? lastTfCount;
   int? lastIdentificationCount;
   AssessmentDifficulty? lastDifficulty;
   AssessmentFocus? lastFocus;
   String? lastDocumentFileName;
+  bool wasCancelled = false;
+
+  @override
+  void cancelAssessmentGeneration() {
+    wasCancelled = true;
+    if (completer != null && !completer!.isCompleted) {
+      completer!.complete(
+        GeminiAssessmentGenerationResult.failure('Generation was cancelled.'),
+      );
+    }
+  }
 
   @override
   Future<GeminiAssessmentGenerationResult> generateAssessmentQuestions({
@@ -38,6 +51,10 @@ class _FakeGeminiService implements GeminiService {
     lastDifficulty = difficulty;
     lastFocus = focus;
     lastDocumentFileName = documentFileName;
+
+    if (completer != null) {
+      return completer!.future;
+    }
 
     return GeminiAssessmentGenerationResult.success(
       usedKeySlot: 1,
@@ -259,6 +276,16 @@ void main() {
   });
 
   group('CreateAssessmentFlowDialog In-Person & AI Question Generator', () {
+    setUp(() {
+      CreateAssessmentFlowDialog.creationCooldown.reset();
+      CreateAssessmentFlowDialog.aiGenerationCooldown.reset();
+    });
+
+    tearDown(() {
+      CreateAssessmentFlowDialog.creationCooldown.reset();
+      CreateAssessmentFlowDialog.aiGenerationCooldown.reset();
+    });
+
     testWidgets('shows Set Date * when switching to In-Person mode', (
       tester,
     ) async {
@@ -418,6 +445,86 @@ void main() {
         expect(find.text('WW 1'), findsOneWidget);
         expect(find.textContaining('Add WW'), findsNothing);
         expect(find.byIcon(Icons.add_circle_outline_rounded), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'displays animated AI loading card during question generation',
+      (tester) async {
+        tester.view.physicalSize = const Size(1400, 1200);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final completer = Completer<GeminiAssessmentGenerationResult>();
+        final fakeGemini = _FakeGeminiService()..completer = completer;
+        final sampleDoc = LectureDocumentExtractor.extract(
+          fileName: 'cell_biology.pptx',
+          bytes: _buildSamplePptxBytes(),
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: CreateAssessmentFlowDialog(
+                onAssessmentCreated: () {},
+                initialIsExam: false,
+                geminiService: fakeGemini,
+                initialLectureDocument: sampleDoc,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        // Enter 2 identification items
+        final idRow = find.ancestor(
+          of: find.text('Identification'),
+          matching: find.byType(Row),
+        );
+        final idTextField = find.descendant(
+          of: idRow.first,
+          matching: find.byType(TextField),
+        );
+        await tester.ensureVisible(idTextField);
+        await tester.enterText(idTextField, '2');
+        await tester.pump();
+
+        // Find and tap generate button
+        final generateBtn = find.text('Generate Quiz Questions with AI');
+        await tester.ensureVisible(generateBtn);
+        await tester.tap(generateBtn);
+        await tester.pump(); // Pump one frame while async generation is in-flight
+
+        // Verify animated AI loading card is displayed
+        expect(find.text('AI Question Generator in Progress'), findsOneWidget);
+        expect(find.text('Grounded Mode'), findsOneWidget);
+        expect(find.textContaining('cell_biology.pptx'), findsWidgets);
+
+        // Complete the asynchronous generation result
+        completer.complete(
+          GeminiAssessmentGenerationResult.success(
+            usedKeySlot: 1,
+            multipleChoice: [],
+            trueFalse: [],
+            identification: [
+              GeneratedIdentificationItem(
+                statement: 'Question 1',
+                correctAnswer: 'Answer 1',
+                sourceExcerpt: 'Excerpt 1',
+              ),
+              GeneratedIdentificationItem(
+                statement: 'Question 2',
+                correctAnswer: 'Answer 2',
+                sourceExcerpt: 'Excerpt 2',
+              ),
+            ],
+          ),
+        );
+
+        // Now settle to finish generation
+        await tester.pumpAndSettle();
+        expect(find.text('Question 1 of 2'), findsOneWidget);
       },
     );
   });

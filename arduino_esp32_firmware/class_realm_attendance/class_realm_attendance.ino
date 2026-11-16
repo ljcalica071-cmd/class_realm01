@@ -394,6 +394,38 @@ void syncRegisteredStudentsCache() {
     Serial.println("[WHITELIST] Cached " + String(cachedCount) + " students in Flash!");
   }
   http.end();
+
+  // Also cache enrollment for the current active offering so offline mode can check wrong section!
+  if (activeSubjectOfferingId.length() > 20) {
+    HTTPClient eHttp;
+    String eUrl = String(SUPABASE_URL) + "/rest/v1/student_enrollments?subject_offering_id=eq." + activeSubjectOfferingId + "&status=eq.enrolled&select=student_profiles(rfid_uid)";
+    eHttp.begin(eUrl);
+    eHttp.addHeader("apikey", SUPABASE_ANON_KEY);
+    eHttp.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+    eHttp.setTimeout(3000);
+    int eCode = eHttp.GET();
+    if (eCode == 200) {
+      String ePayload = eHttp.getString();
+      prefs.begin("enroll_cache", false);
+      int eCursor = 0;
+      int enrolledCount = 0;
+      while ((eCursor = ePayload.indexOf("{\"rfid_uid\":\"", eCursor)) != -1) {
+        eCursor += 13;
+        int eUidEnd = ePayload.indexOf("\"", eCursor);
+        if (eUidEnd == -1) break;
+        String eUid = ePayload.substring(eCursor, eUidEnd);
+        eUid.toUpperCase();
+        prefs.putString(("en_" + eUid).c_str(), activeSubjectOfferingId);
+        enrolledCount++;
+        eCursor = eUidEnd;
+      }
+      prefs.putString("current_offering", activeSubjectOfferingId);
+      prefs.putInt("enrolled_count", enrolledCount);
+      prefs.end();
+      Serial.println("[ENROLLMENT] Cached " + String(enrolledCount) + " enrolled students for offering " + activeSubjectOfferingId);
+    }
+    eHttp.end();
+  }
 }
 
 // Parse HH:MM:SS or HH:MM into minutes since midnight
@@ -419,6 +451,28 @@ void fetchActiveSchedule() {
   char dateBuf[16];
   strftime(dateBuf, sizeof(dateBuf), "%Y-%m-%d", &timeinfo);
   String todayStr = String(dateBuf);
+
+  // 0. Sync claimed offering for this device from rfid_devices table (claimed when teacher opens attendance in web portal)
+  {
+    HTTPClient devHttp;
+    String devUrl = String(SUPABASE_URL) + "/rest/v1/rfid_devices?device_uid=eq.HARDWARE_ESP32&is_active=eq.true&select=subject_offering_id&limit=1";
+    devHttp.begin(devUrl);
+    devHttp.addHeader("apikey", SUPABASE_ANON_KEY);
+    devHttp.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+    devHttp.setTimeout(2500);
+    int devCode = devHttp.GET();
+    if (devCode == 200) {
+      String devPayload = devHttp.getString();
+      String claimedOffering = extractJsonField(devPayload, "subject_offering_id");
+      if (claimedOffering.length() > 20) {
+        if (claimedOffering != activeSubjectOfferingId) {
+          activeSubjectOfferingId = claimedOffering;
+          Serial.println("[DEVICE] Switched active offering from web portal: " + activeSubjectOfferingId);
+        }
+      }
+    }
+    devHttp.end();
+  }
 
   // 1. Check active holiday today
   {
@@ -590,6 +644,21 @@ void handleOfflineValidatedScan(String uid) {
     showFeedbackScreen("[ CARD SCAN ]", "UNREGISTERED", "Ready to Link!");
     return;
   }
+
+  // Row 14: Cross-section tap check in offline mode (kung may cached enrollment data)
+  prefs.begin("enroll_cache", true);
+  String cachedOffering = prefs.getString("current_offering", "");
+  int enrolledCount = prefs.getInt("enrolled_count", 0);
+  if (cachedOffering.length() > 0 && enrolledCount > 0 && cachedOffering == activeSubjectOfferingId) {
+    String studentEnrolledOffering = prefs.getString(("en_" + uid).c_str(), "");
+    if (studentEnrolledOffering != activeSubjectOfferingId) {
+      prefs.end();
+      buzzDenied();
+      showFeedbackScreen("[ ENROLLMENT ]", "WRONG SECTION", "Not in this Class");
+      return;
+    }
+  }
+  prefs.end();
 
   // Row 8: Re-Tap (Na-record na kanina sa Offline Queue)
   if (isUidAlreadyQueuedToday(uid)) {
@@ -919,8 +988,7 @@ void setup() {
   // Load saved offering, schedule & cutoff cache, and queue count from flash
   prefs.begin("class_config", true);
   String savedOffering = prefs.getString("active_offering", "");
-  // Reset if active offering was corrupted to another section
-  if (savedOffering.length() > 0 && savedOffering == String(DEFAULT_SUBJECT_OFFERING_ID)) {
+  if (savedOffering.length() > 20) {
     activeSubjectOfferingId = savedOffering;
   } else {
     activeSubjectOfferingId = String(DEFAULT_SUBJECT_OFFERING_ID);
@@ -1120,8 +1188,8 @@ void loop() {
     syncOfflineQueue();
   }
 
-  // Periodically refresh active schedule & registered cards cache every 90 seconds when online
-  if (wifiConnected && hasInternetAccess && (now - lastScheduleRefreshMillis >= 90000)) {
+  // Periodically refresh active schedule & registered cards cache every 25 seconds when online
+  if (wifiConnected && hasInternetAccess && (now - lastScheduleRefreshMillis >= 25000)) {
     lastScheduleRefreshMillis = now;
     fetchActiveSchedule();
     syncRegisteredStudentsCache();

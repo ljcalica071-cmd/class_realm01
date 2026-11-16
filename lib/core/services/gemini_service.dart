@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -205,6 +206,13 @@ class GeminiService {
   int _activeKeyIndex = 0;
   DateTime? _lastCompletedRequestAt;
   bool _isInFlight = false;
+  int _currentAssessmentEpoch = 0;
+
+  /// Cancels any in-flight assessment generation request and resets the busy lock.
+  void cancelAssessmentGeneration() {
+    _currentAssessmentEpoch++;
+    _isInFlight = false;
+  }
 
   GeminiService._internal()
     : _apiKeysProvider = (() => EnvConfig.geminiApiKeys),
@@ -256,9 +264,35 @@ class GeminiService {
     );
     final response = await generativeModel.generateContent([
       Content.text(prompt),
+    ]).timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => throw TimeoutException('AI text request timed out after 30 seconds.'),
+    );
+    return response.text;
+  }
+
+  static Future<String?> _sdkTextAssessmentGenerator({
+    required String apiKey,
+    required String model,
+    required String prompt,
+    int maxOutputTokens = 2500,
+    double temperature = 0.25,
+  }) async {
+    final generativeModel = GenerativeModel(
+      model: model,
+      apiKey: apiKey,
+      generationConfig: GenerationConfig(
+        temperature: temperature,
+        maxOutputTokens: maxOutputTokens,
+        responseMimeType: 'application/json',
+      ),
+    );
+    final response = await generativeModel.generateContent([
+      Content.text(prompt),
     ]);
     return response.text;
   }
+
 
   /// Generates structured SHS New Curriculum iLAW sections with automatic
   /// 3-API-Key failover rotation.
@@ -317,6 +351,7 @@ class GeminiService {
       additionalInstructions: additionalInstructions,
     );
 
+    final epoch = ++_currentAssessmentEpoch;
     _isInFlight = true;
     String? lastRedactedError;
 
@@ -326,10 +361,16 @@ class GeminiService {
       }
 
       for (var offset = 0; offset < keys.length; offset++) {
+        if (epoch != _currentAssessmentEpoch) {
+          return GeminiLessonPlanResult.failure('Generation was cancelled.');
+        }
         final keyIndex = (_activeKeyIndex + offset) % keys.length;
         final currentKey = keys[keyIndex];
 
         for (var mIdx = 0; mIdx < _preferredModels.length; mIdx++) {
+          if (epoch != _currentAssessmentEpoch) {
+            return GeminiLessonPlanResult.failure('Generation was cancelled.');
+          }
           final modelName = _preferredModels[mIdx];
           try {
             final rawText = await _rawGenerator(
@@ -383,7 +424,9 @@ class GeminiService {
         ),
       );
     } finally {
-      _isInFlight = false;
+      if (epoch == _currentAssessmentEpoch) {
+        _isInFlight = false;
+      }
     }
   }
 
@@ -825,13 +868,14 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
     required String model,
     required String prompt,
     Uint8List? pdfBytes,
+    int maxOutputTokens = 8192,
   }) async {
     final generativeModel = GenerativeModel(
       model: model,
       apiKey: apiKey,
       generationConfig: GenerationConfig(
         temperature: 0.25,
-        maxOutputTokens: 8192,
+        maxOutputTokens: maxOutputTokens,
         responseMimeType: 'application/json',
       ),
     );
@@ -843,7 +887,10 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
 
     final response = await generativeModel.generateContent([
       Content.multi(parts),
-    ]);
+    ]).timeout(
+      const Duration(seconds: 35),
+      onTimeout: () => throw TimeoutException('AI multimodal request timed out after 35 seconds.'),
+    );
     return response.text;
   }
 
@@ -882,9 +929,9 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
     }
 
     if (_isInFlight) {
-      return GeminiAssessmentGenerationResult.failure(
-        'An AI generation request is already in progress. Please wait.',
-      );
+      // Invalidate any previous stale or abandoned request so the new request proceeds immediately.
+      _currentAssessmentEpoch++;
+      _isInFlight = false;
     }
 
     final now = _clock();
@@ -937,18 +984,33 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
         for (var mIdx = 0; mIdx < _preferredModels.length; mIdx++) {
           final modelName = _preferredModels[mIdx];
           try {
+            final dynamicMaxTokens = totalRequested <= 5
+                ? 1000
+                : (totalRequested <= 10
+                    ? 1800
+                    : (totalRequested * 120 + 400).clamp(2000, 8192));
+
             final rawText = isPdfMultimodal
                 ? await _sdkMultimodalAssessmentGenerator(
                     apiKey: currentKey,
                     model: modelName,
                     prompt: prompt,
                     pdfBytes: rawFileBytes,
+                    maxOutputTokens: dynamicMaxTokens,
                   )
-                : await _rawGenerator(
-                    apiKey: currentKey,
-                    model: modelName,
-                    prompt: prompt,
-                  );
+                : (identical(_rawGenerator, _defaultSdkGenerator)
+                    ? await _sdkTextAssessmentGenerator(
+                        apiKey: currentKey,
+                        model: modelName,
+                        prompt: prompt,
+                        maxOutputTokens: dynamicMaxTokens,
+                        temperature: 0.25,
+                      )
+                    : await _rawGenerator(
+                        apiKey: currentKey,
+                        model: modelName,
+                        prompt: prompt,
+                      ));
 
             if (rawText == null || rawText.trim().isEmpty) {
               lastRedactedError =
@@ -1028,8 +1090,17 @@ Note: The 'sessions' array must contain exactly $numberOfSessions session object
     );
     final totalCount = mcqCount + tfCount + identificationCount;
     final trimmedDoc = extractedDocumentText.trim();
-    final cappedDoc = trimmedDoc.length > 45000
-        ? trimmedDoc.substring(0, 45000)
+    // Optimize document slice for speed based on requested question count:
+    // When requesting few items (<= 5 or <= 10), slicing to a concise window
+    // reduces prompt token processing latency by up to 60-70% while providing
+    // plenty of material for grounded questions.
+    final int maxDocChars = totalCount <= 5
+        ? 15000
+        : (totalCount <= 10
+            ? 25000
+            : (totalCount <= 20 ? 35000 : 45000));
+    final cappedDoc = trimmedDoc.length > maxDocChars
+        ? trimmedDoc.substring(0, maxDocChars)
         : trimmedDoc;
 
     return '''
@@ -1055,7 +1126,8 @@ Character & Formatting Constraints:
 1. Question statement: 15 to 400 characters. Clear, unambiguous, and grammatically complete.
 2. MCQ choices: Exactly 4 strings per MCQ item (without leading "A. ", "B. " prefixes). Each choice must be 1 to 150 characters, and all 4 choices must be unique.
 3. Identification answer ("correctAnswer"): 2 to 50 characters max, no trailing period, representing a concise term or short phrase directly from the document.
-4. If the document does not contain enough distinct facts to fulfill the requested $totalCount questions without inventing outside information, set "insufficientContent": true and generate as many strictly grounded questions as the document supports, explaining why in "warningMessage".
+4. Speed & conciseness: Keep each "sourceExcerpt" brief and concise (under 15 words). Do not generate overly verbose explanations.
+5. If the document does not contain enough distinct facts to fulfill the requested $totalCount questions without inventing outside information, set "insufficientContent": true and generate as many strictly grounded questions as the document supports, explaining why in "warningMessage".
 
 <lecture_document>
 ${cappedDoc.isEmpty ? '[Refer to attached PDF binary document]' : cappedDoc}

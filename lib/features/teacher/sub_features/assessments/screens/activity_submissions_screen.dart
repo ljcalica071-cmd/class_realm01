@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
+import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/core/services/supabase_service.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
@@ -67,6 +70,9 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
   final Map<String, TextEditingController> _scoreControllers = {};
   final Map<String, bool> _isSavingStudent = {};
   final Map<String, String?> _scoreErrors = {};
+  RealtimeChannel? _submissionsRealtimeChannel;
+  Timer? _autoSyncTimer;
+  bool _isSyncingData = false;
 
   SupabaseClient get _client =>
       widget.supabaseClient ?? Supabase.instance.client;
@@ -78,11 +84,60 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     super.initState();
     _activity = widget.activity;
     _currentDeadline = widget.activity.deadline;
+    if (widget.embedded) {
+      final catIdx = _activity.isRequirement
+          ? 1
+          : (_activity.gradingCategory == 'ex' ? 2 : 0);
+      LocalStorageService.saveTeacherClassworkNavState(
+        categoryTabIndex: catIdx,
+        activeActivityId: _activity.id,
+        activeActivityJson: _activity.toJson(),
+      );
+    }
     _loadData();
+    _startRealtimeSubscription();
+    _autoSyncTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) {
+        _loadData(silent: true);
+      }
+    });
+  }
+
+  void _startRealtimeSubscription() {
+    if (widget.supabaseClient != null) return;
+    try {
+      _submissionsRealtimeChannel = _client
+          .channel('activity_submissions_${_activity.id}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'student_classwork_submissions',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'classwork_id',
+              value: _activity.id,
+            ),
+            callback: (_) {
+              if (mounted) {
+                _loadData(silent: true);
+              }
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('Notice starting activity submissions realtime listener: $e');
+    }
   }
 
   @override
   void dispose() {
+    _autoSyncTimer?.cancel();
+    if (_submissionsRealtimeChannel != null) {
+      try {
+        _client.removeChannel(_submissionsRealtimeChannel!);
+      } catch (_) {}
+      _submissionsRealtimeChannel = null;
+    }
     _instructionsScrollController.dispose();
     for (final ctrl in _scoreControllers.values) {
       ctrl.dispose();
@@ -112,10 +167,15 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     return full;
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData({bool silent = false}) async {
+    if (_isSyncingData) return;
+    _isSyncingData = true;
+    if (!silent && _enrolledStudents.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     final teacher = AuthRepository.instance.currentUser;
     if (teacher == null) {
+      _isSyncingData = false;
       if (mounted) setState(() => _isLoading = false);
       return;
     }
@@ -343,7 +403,7 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
         }
       }
 
-      // Initialize score text controllers
+      // Initialize score text controllers without clobbering active edits during silent sync
       for (final s in filtered) {
         final sub = subMap[s.id];
         final score = sub?['score'];
@@ -352,10 +412,16 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                   ? score.toInt().toString()
                   : score.toString())
             : '';
-        _scoreControllers
-                .putIfAbsent(s.id, () => TextEditingController())
-                .text =
-            scoreText;
+        final existingCtrl = _scoreControllers[s.id];
+        if (existingCtrl == null) {
+          _scoreControllers[s.id] = TextEditingController(text: scoreText);
+        } else if (!silent || _isSavingStudent[s.id] != true) {
+          if (existingCtrl.text.isEmpty && scoreText.isNotEmpty) {
+            existingCtrl.text = scoreText;
+          } else if (!silent) {
+            existingCtrl.text = scoreText;
+          }
+        }
       }
 
       if (mounted) {
@@ -368,6 +434,8 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
     } catch (e) {
       debugPrint('Error loading submissions: $e');
       if (mounted) setState(() => _isLoading = false);
+    } finally {
+      _isSyncingData = false;
     }
   }
 

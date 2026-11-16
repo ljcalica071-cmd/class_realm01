@@ -693,7 +693,9 @@ class LocalStorageService {
     String? subjectName,
     String? sectionName,
     String? activeAssessmentId,
+    Map<String, dynamic>? activeAssessmentJson,
     String? activeActivityId,
+    Map<String, dynamic>? activeActivityJson,
     bool clearActiveAssessment = false,
     bool clearActiveActivity = false,
   }) async {
@@ -713,15 +715,29 @@ class LocalStorageService {
       }
       if (clearActiveAssessment) {
         current.remove('activeAssessmentId');
-      } else if (activeAssessmentId != null) {
-        current['activeAssessmentId'] = activeAssessmentId;
-        current.remove('activeActivityId');
+        current.remove('activeAssessmentJson');
+      } else {
+        if (activeAssessmentId != null) {
+          current['activeAssessmentId'] = activeAssessmentId;
+          current.remove('activeActivityId');
+          current.remove('activeActivityJson');
+        }
+        if (activeAssessmentJson != null) {
+          current['activeAssessmentJson'] = activeAssessmentJson;
+        }
       }
       if (clearActiveActivity) {
         current.remove('activeActivityId');
-      } else if (activeActivityId != null) {
-        current['activeActivityId'] = activeActivityId;
-        current.remove('activeAssessmentId');
+        current.remove('activeActivityJson');
+      } else {
+        if (activeActivityId != null) {
+          current['activeActivityId'] = activeActivityId;
+          current.remove('activeAssessmentId');
+          current.remove('activeAssessmentJson');
+        }
+        if (activeActivityJson != null) {
+          current['activeActivityJson'] = activeActivityJson;
+        }
       }
       await saveJson('teacher_classwork_nav_state', current);
     } catch (_) {}

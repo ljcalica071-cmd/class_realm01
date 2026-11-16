@@ -2048,27 +2048,12 @@ class _TeacherLearningMaterialsTabState
     final availableSections = _availableSections;
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-        ),
-      ),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.end,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.end,
-            children: [
-              // 1. Grade Level Dropdown
+    final filterDropdowns = Wrap(
+      spacing: 12,
+      runSpacing: 10,
+      crossAxisAlignment: WrapCrossAlignment.end,
+      children: [
+        // 1. Grade Level Dropdown
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -2392,67 +2377,100 @@ class _TeacherLearningMaterialsTabState
                 ],
               ),
             ],
-          ),
+          );
 
-          // Action Buttons
-          Wrap(
-            spacing: 10,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                icon: Icon(
-                  _isViewingArchived ? Icons.arrow_back : Icons.archive_outlined,
-                  size: 16,
-                ),
-                label: Text(
-                  _isViewingArchived
-                      ? 'Active Materials'
-                      : 'Archived Items ($_archivedCount)',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  foregroundColor: _isViewingArchived
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurface,
-                  side: BorderSide(
-                    color: _isViewingArchived
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.outline.withValues(alpha: 0.3),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _isViewingArchived = !_isViewingArchived;
-                  });
-                  _loadFolderContents();
-                },
-              ),
-              if (!_isViewingArchived)
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.upload_file, size: 18),
-                  label: const Text(
-                    'Upload Document',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: _showUploadFileDialog,
-                ),
-            ],
+    // Action Buttons
+    final actionButtons = Wrap(
+      spacing: 10,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        OutlinedButton.icon(
+          icon: Icon(
+            _isViewingArchived ? Icons.arrow_back : Icons.archive_outlined,
+            size: 16,
           ),
-        ],
+          label: Text(
+            _isViewingArchived
+                ? 'Active Materials'
+                : 'Archived Items ($_archivedCount)',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            foregroundColor: _isViewingArchived
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface,
+            side: BorderSide(
+              color: _isViewingArchived
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.outline.withValues(alpha: 0.3),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          onPressed: () {
+            setState(() {
+              _isViewingArchived = !_isViewingArchived;
+            });
+            _loadFolderContents();
+          },
+        ),
+        if (!_isViewingArchived)
+          ElevatedButton.icon(
+            icon: const Icon(Icons.upload_file, size: 18),
+            label: const Text(
+              'Upload Document',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: _showUploadFileDialog,
+          ),
+      ],
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 850) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                filterDropdowns,
+                const SizedBox(height: 12),
+                actionButtons,
+              ],
+            );
+          }
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Flexible(child: filterDropdowns),
+              const SizedBox(width: 16),
+              actionButtons,
+            ],
+          );
+        },
       ),
     );
   }

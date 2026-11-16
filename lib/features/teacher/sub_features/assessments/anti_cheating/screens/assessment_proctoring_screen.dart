@@ -54,10 +54,18 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
 
   List<StudentLiveProctorState> _rosterStudents = [];
   List<ItemDifficultyStat> _itemStats = [];
+  QuestionType? _selectedAnalysisCategory;
 
   Timer? _lateCheckTimer;
   Timer? _liveProctorAutoSyncTimer;
   bool _isSyncingLearners = false;
+  bool _queuedSilentSync = false;
+  int _silentPollCounter = 0;
+  List<Map<String, dynamic>>? _cachedUniqueEnrollData;
+  Map<String, dynamic>? _cachedAssessmentRow;
+  Map<String, dynamic>? _cachedCwRow;
+  String? _cachedOfferingId;
+  final Map<String, DateTime> _localResetTimestamps = {};
   DateTime? _overrideScheduleDate;
 
   DateTime get _scheduleDate =>
@@ -82,6 +90,21 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
     if (startOnItemAnalysis) {
       _activeTab = ProctorViewTab.itemAnalysis;
     }
+
+    LocalStorageService.saveTeacherClassworkNavState(
+      categoryTabIndex: widget.assessment.isExam ? 2 : 0,
+      activeAssessmentId: widget.assessment.id,
+      activeAssessmentJson: widget.assessment.toJson(),
+    );
+    final initialTargetRoute = startOnItemAnalysis
+        ? (widget.assessment.isExam
+              ? AppRoutes.teacherClassworkExItemAnalysis
+              : AppRoutes.teacherClassworkWwItemAnalysis)
+        : (widget.assessment.isExam
+              ? AppRoutes.teacherClassworkExProctoring
+              : AppRoutes.teacherClassworkWwProctoring);
+    updateBrowserUrl(initialTargetRoute);
+    LocalStorageService.saveLastActiveRoute(initialTargetRoute);
 
     _tabController = TabController(
       length: 2,
@@ -127,6 +150,11 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
 
     _proctorService = TeacherProctorChannelService(
       assessmentId: widget.assessment.id,
+      onRealtimeEvent: () {
+        if (mounted) {
+          _loadLearners(silent: true);
+        }
+      },
     );
 
     _proctorService.startListening();
@@ -138,16 +166,18 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         _rosterStudents = _rosterStudents.map((st) {
           final live = map[st.studentId];
           if (live != null) {
+            final shouldKeepScore =
+                live.status == ProctorSessionStatus.submitted &&
+                live.score != null;
             return st.copyWith(
               status: live.status,
               violationCount: live.violationCount,
               violations: live.violations,
               lastActiveAt: live.lastActiveAt,
               kickedReason: live.kickedReason,
-              score: live.score,
-              clearScore:
-                  live.score == null &&
-                  live.status == ProctorSessionStatus.retakeRequested,
+              clearKickedReason: live.kickedReason == null,
+              score: shouldKeepScore ? live.score : null,
+              clearScore: !shouldKeepScore,
               totalPoints: live.totalPoints ?? st.totalPoints,
               isEntryAllowed: live.isEntryAllowed,
               isMissing: live.isMissing,
@@ -174,17 +204,20 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
       if (mounted) _evaluateLateWindowStatus();
     });
 
-    // Auto-sync live learners, active violations & attempts every 4 seconds in the background
-    _liveProctorAutoSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (mounted) {
-        _loadLearners(silent: true);
-      }
-    });
+    // Fast 1.5-second auto-sync for real-time proctoring responsiveness without manual refresh
+    _liveProctorAutoSyncTimer = Timer.periodic(
+      const Duration(milliseconds: 1500),
+      (_) {
+        if (mounted) {
+          _loadLearners(silent: true);
+        }
+      },
+    );
   }
 
   void _onGradebookSynced() {
     if (!mounted) return;
-    _loadLearners(silent: true);
+    _loadLearners(silent: true, forceFullRefresh: true);
     if (widget.assessment.isExam) {
       _loadItemAnalysis();
     }
@@ -206,353 +239,429 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
     super.dispose();
   }
 
-  Future<void> _loadLearners({bool silent = false}) async {
-    if (_isSyncingLearners) return;
+  Future<void> _loadLearners({
+    bool silent = false,
+    bool forceFullRefresh = false,
+  }) async {
+    if (_isSyncingLearners) {
+      if (silent) _queuedSilentSync = true;
+      return;
+    }
     _isSyncingLearners = true;
     if (!silent && _rosterStudents.isEmpty) {
       setState(() => _isLoading = true);
     }
     try {
       final client = SupabaseService().client;
-
-      // 1. Fetch digital assessment metadata safely (omitting total_points which does not exist on digital_assessments)
-      Map<String, dynamic>? assessmentRow;
-      try {
-        assessmentRow = await client
-            .from('digital_assessments')
-            .select(
-              'subject_offering_id, results_released, available_from, assessment_type, grading_category',
-            )
-            .eq('id', widget.assessment.id)
-            .maybeSingle();
-      } catch (e) {
-        debugPrint('digital_assessments metadata notice: $e');
-      }
-
-      final availStr = assessmentRow?['available_from']?.toString();
-      if (availStr != null) {
-        final parsed = DateTime.tryParse(availStr);
-        if (parsed != null && _overrideScheduleDate == null) {
-          _overrideScheduleDate = parsed.toLocal();
-        }
-      }
-
-      String? offeringId =
-          assessmentRow?['subject_offering_id']?.toString() ??
-          widget.assessment.subjectOfferingId;
       final totalPoints = widget.assessment.totalPoints;
-      _resultsReleased = assessmentRow?['results_released'] == true;
+      _silentPollCounter++;
+      final shouldFetchFullMetadata =
+          !silent ||
+          forceFullRefresh ||
+          _cachedUniqueEnrollData == null ||
+          _cachedUniqueEnrollData!.isEmpty ||
+          _silentPollCounter % 10 == 0;
 
-      // 1b. Fetch classwork_items metadata for gradebook column & term sync
-      Map<String, dynamic>? cwRow;
-      try {
-        cwRow = await client
-            .from('classwork_items')
-            .select(
-              'subject_offering_id, term_number, gradebook_column_index, grading_category',
-            )
-            .eq('id', widget.assessment.id)
-            .maybeSingle();
-        offeringId ??= cwRow?['subject_offering_id']?.toString();
-      } catch (e) {
-        debugPrint('classwork_items metadata notice: $e');
-      }
+      Map<String, dynamic>? assessmentRow = _cachedAssessmentRow;
+      Map<String, dynamic>? cwRow = _cachedCwRow;
+      String? offeringId = _cachedOfferingId ?? widget.assessment.subjectOfferingId;
+      List<Map<String, dynamic>> uniqueEnrollData =
+          _cachedUniqueEnrollData ?? <Map<String, dynamic>>[];
 
-      // 1c. If offeringId is still null/empty, find offering by section name & subject
-      if (offeringId == null || offeringId.isEmpty) {
+      if (shouldFetchFullMetadata) {
+        // 1. Fetch digital assessment metadata safely (omitting total_points which does not exist on digital_assessments)
         try {
-          final cleanSec = widget.assessment.section
-              .replaceAll('Section', '')
-              .trim();
-          final offRes = await client.from('subject_offerings').select('''
-                id,
-                sections!inner ( section_name ),
-                subjects!inner ( subject_name )
-              ''');
-          for (final off in (offRes as List? ?? [])) {
-            final secMap = off['sections'] as Map<String, dynamic>? ?? {};
-            final subMap = off['subjects'] as Map<String, dynamic>? ?? {};
-            final sName = subMap['subject_name']?.toString() ?? '';
-            final secName = secMap['section_name']?.toString() ?? '';
-            final matchesSec =
-                secName.toLowerCase().contains(cleanSec.toLowerCase()) ||
-                secName.toLowerCase().contains(
-                  widget.assessment.section.toLowerCase(),
-                );
-            final matchesSub =
-                widget.assessment.subject.isEmpty ||
-                sName.toLowerCase() == widget.assessment.subject.toLowerCase();
-            if (matchesSec && matchesSub) {
-              offeringId = off['id']?.toString();
-              break;
-            }
+          assessmentRow = await client
+              .from('digital_assessments')
+              .select(
+                'subject_offering_id, results_released, available_from, assessment_type, grading_category',
+              )
+              .eq('id', widget.assessment.id)
+              .maybeSingle();
+          _cachedAssessmentRow = assessmentRow;
+        } catch (e) {
+          debugPrint('digital_assessments metadata notice: $e');
+        }
+
+        final availStr = assessmentRow?['available_from']?.toString();
+        if (availStr != null) {
+          final parsed = DateTime.tryParse(availStr);
+          if (parsed != null && _overrideScheduleDate == null) {
+            _overrideScheduleDate = parsed.toLocal();
           }
-          if (offeringId == null && (offRes as List? ?? []).isNotEmpty) {
-            for (final off in (offRes as List)) {
+        }
+
+        offeringId =
+            assessmentRow?['subject_offering_id']?.toString() ??
+            widget.assessment.subjectOfferingId;
+        _resultsReleased = assessmentRow?['results_released'] == true;
+
+        // 1b. Fetch classwork_items metadata for gradebook column & term sync
+        try {
+          cwRow = await client
+              .from('classwork_items')
+              .select(
+                'subject_offering_id, term_number, gradebook_column_index, grading_category',
+              )
+              .eq('id', widget.assessment.id)
+              .maybeSingle();
+          _cachedCwRow = cwRow;
+          offeringId ??= cwRow?['subject_offering_id']?.toString();
+        } catch (e) {
+          debugPrint('classwork_items metadata notice: $e');
+        }
+
+        // 1c. If offeringId is still null/empty, find offering by section name & subject
+        if (offeringId == null || offeringId.isEmpty) {
+          try {
+            final cleanSec = widget.assessment.section
+                .replaceAll('Section', '')
+                .trim();
+            final offRes = await client.from('subject_offerings').select('''
+                  id,
+                  sections!inner ( section_name ),
+                  subjects!inner ( subject_name )
+                ''');
+            for (final off in (offRes as List? ?? [])) {
               final secMap = off['sections'] as Map<String, dynamic>? ?? {};
+              final subMap = off['subjects'] as Map<String, dynamic>? ?? {};
+              final sName = subMap['subject_name']?.toString() ?? '';
               final secName = secMap['section_name']?.toString() ?? '';
-              if (secName.toLowerCase().contains(cleanSec.toLowerCase())) {
+              final matchesSec =
+                  secName.toLowerCase().contains(cleanSec.toLowerCase()) ||
+                  secName.toLowerCase().contains(
+                    widget.assessment.section.toLowerCase(),
+                  );
+              final matchesSub =
+                  widget.assessment.subject.isEmpty ||
+                  sName.toLowerCase() == widget.assessment.subject.toLowerCase();
+              if (matchesSec && matchesSub) {
                 offeringId = off['id']?.toString();
                 break;
               }
             }
+            if (offeringId == null && (offRes as List? ?? []).isNotEmpty) {
+              for (final off in (offRes as List)) {
+                final secMap = off['sections'] as Map<String, dynamic>? ?? {};
+                final secName = secMap['section_name']?.toString() ?? '';
+                if (secName.toLowerCase().contains(cleanSec.toLowerCase())) {
+                  offeringId = off['id']?.toString();
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('Notice finding offering by section: $e');
           }
-        } catch (e) {
-          debugPrint('Notice finding offering by section: $e');
         }
-      }
+        _cachedOfferingId = offeringId;
 
-      // 2. Fetch enrollment with multi-tier fallback so all students in this section appear
-      List<dynamic> enrollData = [];
+        // 2. Fetch enrollment with multi-tier fallback so all students in this section appear
+        List<dynamic> enrollData = [];
 
-      // Tier 1: Query student_enrollments by offeringId
-      if (offeringId != null && offeringId.isNotEmpty) {
-        try {
-          final res = await client
-              .from('student_enrollments')
-              .select('''
-                id,
-                student_id,
-                status,
-                student_profiles (
+        // Tier 1: Query student_enrollments by offeringId
+        if (offeringId != null && offeringId.isNotEmpty) {
+          try {
+            final res = await client
+                .from('student_enrollments')
+                .select('''
+                  id,
                   student_id,
-                  lrn,
-                  first_name,
-                  middle_name,
-                  last_name,
-                  gender,
-                  users (
-                    is_archived
+                  status,
+                  student_profiles (
+                    student_id,
+                    lrn,
+                    first_name,
+                    middle_name,
+                    last_name,
+                    gender,
+                    users (
+                      is_archived
+                    )
                   )
-                )
-              ''')
-              .eq('subject_offering_id', offeringId)
-              .neq('status', 'archived');
-          enrollData = res as List<dynamic>? ?? [];
-        } catch (e) {
-          debugPrint('Tier 1 enrollment query notice: $e');
+                ''')
+                .eq('subject_offering_id', offeringId)
+                .neq('status', 'archived');
+            enrollData = res as List<dynamic>? ?? [];
+          } catch (e) {
+            debugPrint('Tier 1 enrollment query notice: $e');
+          }
         }
-      }
 
-      // Tier 2: Query student_enrollments for all offerings matching this section name
-      if (enrollData.isEmpty && widget.assessment.section.isNotEmpty) {
-        try {
-          final cleanSec = widget.assessment.section
-              .replaceAll('Section', '')
-              .trim();
-          final secRows = await client
-              .from('sections')
-              .select('id, section_name')
-              .or(
-                'section_name.ilike.%${widget.assessment.section}%,section_name.ilike.%$cleanSec%',
-              );
-          final secIds = (secRows as List? ?? [])
-              .map((s) => s['id']?.toString())
-              .whereType<String>()
-              .toList();
-
-          if (secIds.isNotEmpty) {
-            final offRes = await client
-                .from('subject_offerings')
-                .select('id')
-                .inFilter('section_id', secIds);
-            final offIds = (offRes as List? ?? [])
-                .map((o) => o['id']?.toString())
+        // Tier 2: Query student_enrollments for all offerings matching this section name
+        if (enrollData.isEmpty && widget.assessment.section.isNotEmpty) {
+          try {
+            final cleanSec = widget.assessment.section
+                .replaceAll('Section', '')
+                .trim();
+            final secRows = await client
+                .from('sections')
+                .select('id, section_name')
+                .or(
+                  'section_name.ilike.%${widget.assessment.section}%,section_name.ilike.%$cleanSec%',
+                );
+            final secIds = (secRows as List? ?? [])
+                .map((s) => s['id']?.toString())
                 .whereType<String>()
                 .toList();
 
-            if (offIds.isNotEmpty) {
-              final secEnroll = await client
-                  .from('student_enrollments')
-                  .select('''
-                    id,
-                    student_id,
-                    status,
-                    student_profiles (
+            if (secIds.isNotEmpty) {
+              final offRes = await client
+                  .from('subject_offerings')
+                  .select('id')
+                  .inFilter('section_id', secIds);
+              final offIds = (offRes as List? ?? [])
+                  .map((o) => o['id']?.toString())
+                  .whereType<String>()
+                  .toList();
+
+              if (offIds.isNotEmpty) {
+                final secEnroll = await client
+                    .from('student_enrollments')
+                    .select('''
+                      id,
                       student_id,
-                      lrn,
-                      first_name,
-                      middle_name,
-                      last_name,
-                      gender,
-                      users (
-                        is_archived
+                      status,
+                      student_profiles (
+                        student_id,
+                        lrn,
+                        first_name,
+                        middle_name,
+                        last_name,
+                        gender,
+                        users (
+                          is_archived
+                        )
                       )
-                    )
-                  ''')
-                  .inFilter('subject_offering_id', offIds)
-                  .neq('status', 'archived');
-              enrollData = secEnroll as List<dynamic>? ?? [];
+                    ''')
+                    .inFilter('subject_offering_id', offIds)
+                    .neq('status', 'archived');
+                enrollData = secEnroll as List<dynamic>? ?? [];
+              }
             }
+          } catch (e) {
+            debugPrint('Tier 2 section enrollment query notice: $e');
           }
-        } catch (e) {
-          debugPrint('Tier 2 section enrollment query notice: $e');
         }
-      }
 
-      // Tier 3: Query teacher's enrolled students matching this section
-      if (enrollData.isEmpty) {
-        try {
-          final teacherId = AuthRepository.instance.currentUser?.id;
-          if (teacherId != null) {
-            final teacherStudents = await SupabaseStudentRepository()
-                .getStudentsForTeacher(teacherId);
-            final cleanSec = widget.assessment.section
-                .replaceAll('Section', '')
-                .trim()
-                .toLowerCase();
-            final matched = teacherStudents.where((st) {
-              final sSec = (st.departmentOrSection ?? '').trim().toLowerCase();
-              return sSec.isEmpty ||
-                  sSec.contains(widget.assessment.section.toLowerCase()) ||
-                  sSec.contains(cleanSec);
-            }).toList();
+        // Tier 3: Query teacher's enrolled students matching this section
+        if (enrollData.isEmpty) {
+          try {
+            final teacherId = AuthRepository.instance.currentUser?.id;
+            if (teacherId != null) {
+              final teacherStudents = await SupabaseStudentRepository()
+                  .getStudentsForTeacher(teacherId);
+              final cleanSec = widget.assessment.section
+                  .replaceAll('Section', '')
+                  .trim()
+                  .toLowerCase();
+              final matched = teacherStudents.where((st) {
+                final sSec = (st.departmentOrSection ?? '').trim().toLowerCase();
+                return sSec.isEmpty ||
+                    sSec.contains(widget.assessment.section.toLowerCase()) ||
+                    sSec.contains(cleanSec);
+              }).toList();
 
-            final targetList = matched.isNotEmpty ? matched : teacherStudents;
-            for (final st in targetList) {
-              enrollData.add({
-                'student_id': st.id,
-                'student_profiles': {
+              final targetList = matched.isNotEmpty ? matched : teacherStudents;
+              for (final st in targetList) {
+                enrollData.add({
                   'student_id': st.id,
-                  'first_name': st.firstName,
-                  'middle_name': st.middleName,
-                  'last_name': st.lastName,
-                  'lrn': st.lrn,
-                  'gender': st.gender,
-                },
+                  'student_profiles': {
+                    'student_id': st.id,
+                    'first_name': st.firstName,
+                    'middle_name': st.middleName,
+                    'last_name': st.lastName,
+                    'lrn': st.lrn,
+                    'gender': st.gender,
+                  },
+                });
+              }
+            }
+          } catch (e) {
+            debugPrint('Tier 3 teacher students fallback notice: $e');
+          }
+        }
+
+        // Tier 4: Universal fallback - query student_profiles directly
+        if (enrollData.isEmpty) {
+          try {
+            final allProfiles = await client
+                .from('student_profiles')
+                .select(
+                  'student_id, lrn, first_name, middle_name, last_name, gender, users ( is_archived )',
+                )
+                .order('last_name', ascending: true);
+            for (final p in (allProfiles as List? ?? [])) {
+              enrollData.add({
+                'student_id': p['student_id'],
+                'student_profiles': p,
               });
             }
+          } catch (e) {
+            debugPrint('Tier 4 profiles fallback notice: $e');
           }
-        } catch (e) {
-          debugPrint('Tier 3 teacher students fallback notice: $e');
         }
-      }
 
-      // Tier 4: Universal fallback - query student_profiles directly
-      if (enrollData.isEmpty) {
-        try {
-          final allProfiles = await client
-              .from('student_profiles')
-              .select(
-                'student_id, lrn, first_name, middle_name, last_name, gender, users ( is_archived )',
-              )
-              .order('last_name', ascending: true);
-          for (final p in (allProfiles as List? ?? [])) {
-            enrollData.add({
-              'student_id': p['student_id'],
-              'student_profiles': p,
+        // Deduplicate enrollData by student_id
+        final seenStudentIds = <String>{};
+        uniqueEnrollData = <Map<String, dynamic>>[];
+        for (final row in enrollData) {
+          final profileRaw = row['student_profiles'];
+          final Map<String, dynamic> profile;
+          if (profileRaw is Map<String, dynamic>) {
+            profile = profileRaw;
+          } else if (profileRaw is Map) {
+            profile = Map<String, dynamic>.from(profileRaw);
+          } else if (profileRaw is List &&
+              profileRaw.isNotEmpty &&
+              profileRaw.first is Map) {
+            profile = Map<String, dynamic>.from(profileRaw.first as Map);
+          } else {
+            profile = {};
+          }
+
+          final sId =
+              row['student_id']?.toString() ??
+              profile['student_id']?.toString() ??
+              '';
+          final enrollStatus = row['status']?.toString().toLowerCase() ?? '';
+          final usersRaw = profile['users'];
+          bool isUserArchived = false;
+          if (usersRaw is Map) {
+            isUserArchived = usersRaw['is_archived'] == true;
+          } else if (usersRaw is List &&
+              usersRaw.isNotEmpty &&
+              usersRaw.first is Map) {
+            isUserArchived = (usersRaw.first as Map)['is_archived'] == true;
+          }
+          if (enrollStatus == 'archived' || isUserArchived) {
+            continue;
+          }
+          if (sId.isNotEmpty && seenStudentIds.add(sId)) {
+            uniqueEnrollData.add({
+              'student_id': sId,
+              'student_profiles': profile,
             });
           }
-        } catch (e) {
-          debugPrint('Tier 4 profiles fallback notice: $e');
-        }
-      }
-
-      // Deduplicate enrollData by student_id
-      final seenStudentIds = <String>{};
-      final uniqueEnrollData = <Map<String, dynamic>>[];
-      for (final row in enrollData) {
-        final profileRaw = row['student_profiles'];
-        final Map<String, dynamic> profile;
-        if (profileRaw is Map<String, dynamic>) {
-          profile = profileRaw;
-        } else if (profileRaw is Map) {
-          profile = Map<String, dynamic>.from(profileRaw);
-        } else if (profileRaw is List &&
-            profileRaw.isNotEmpty &&
-            profileRaw.first is Map) {
-          profile = Map<String, dynamic>.from(profileRaw.first as Map);
-        } else {
-          profile = {};
         }
 
-        final sId =
-            row['student_id']?.toString() ??
-            profile['student_id']?.toString() ??
-            '';
-        final enrollStatus = row['status']?.toString().toLowerCase() ?? '';
-        final usersRaw = profile['users'];
-        bool isUserArchived = false;
-        if (usersRaw is Map) {
-          isUserArchived = usersRaw['is_archived'] == true;
-        } else if (usersRaw is List &&
-            usersRaw.isNotEmpty &&
-            usersRaw.first is Map) {
-          isUserArchived = (usersRaw.first as Map)['is_archived'] == true;
-        }
-        if (enrollStatus == 'archived' || isUserArchived) {
-          continue;
-        }
-        if (sId.isNotEmpty && seenStudentIds.add(sId)) {
-          uniqueEnrollData.add({
-            'student_id': sId,
-            'student_profiles': profile,
-          });
-        }
-      }
-
-      // Exclude any students marked archived in student_settings
-      if (uniqueEnrollData.isNotEmpty) {
-        try {
-          final settingsRows = await client
-              .from('student_settings')
-              .select('student_id, status')
-              .inFilter(
-                'student_id',
-                uniqueEnrollData
-                    .map((r) => r['student_id'].toString())
-                    .toList(),
-              );
-          final archivedSettingsIds = <String>{};
-          for (final sr in (settingsRows as List? ?? [])) {
-            if (sr['status']?.toString().toLowerCase() == 'archived') {
-              final sid = sr['student_id']?.toString() ?? '';
-              if (sid.isNotEmpty) archivedSettingsIds.add(sid);
+        // Exclude any students marked archived in student_settings
+        if (uniqueEnrollData.isNotEmpty) {
+          try {
+            final settingsRows = await client
+                .from('student_settings')
+                .select('student_id, status')
+                .inFilter(
+                  'student_id',
+                  uniqueEnrollData
+                      .map((r) => r['student_id'].toString())
+                      .toList(),
+                );
+            final archivedSettingsIds = <String>{};
+            for (final sr in (settingsRows as List? ?? [])) {
+              if (sr['status']?.toString().toLowerCase() == 'archived') {
+                final sid = sr['student_id']?.toString() ?? '';
+                if (sid.isNotEmpty) archivedSettingsIds.add(sid);
+              }
             }
+            if (archivedSettingsIds.isNotEmpty) {
+              uniqueEnrollData.removeWhere(
+                (r) => archivedSettingsIds.contains(r['student_id']?.toString()),
+              );
+            }
+          } catch (stErr) {
+            debugPrint('student_settings archive filter notice: $stErr');
           }
-          if (archivedSettingsIds.isNotEmpty) {
-            uniqueEnrollData.removeWhere(
-              (r) => archivedSettingsIds.contains(r['student_id']?.toString()),
-            );
-          }
-        } catch (stErr) {
-          debugPrint('student_settings archive filter notice: $stErr');
         }
+        _cachedUniqueEnrollData = uniqueEnrollData;
       }
 
-      // 3. Fetch existing attempts safely (using real columns of assessment_attempts)
+      // 3. Fetch live attempts, submissions, and logs CONCURRENTLY for ultra-fast real-time updates
       final attemptsMap = <String, Map<String, dynamic>>{};
-      try {
-        final attemptsData = await client
-            .from('assessment_attempts')
-            .select(
-              'id, student_id, status, score_earned, started_at, submitted_at',
-            )
-            .eq('assessment_id', widget.assessment.id);
-        for (final a in (attemptsData as List? ?? [])) {
-          final sId = a['student_id']?.toString() ?? '';
-          if (sId.isNotEmpty) attemptsMap[sId] = Map<String, dynamic>.from(a);
-        }
-      } catch (attErr) {
-        debugPrint('attempts query notice: $attErr');
-      }
-
-      // 3b. Fetch scores from student_classwork_submissions (Gradebook / Classwork sync)
       final submissionsMap = <String, Map<String, dynamic>>{};
-      try {
-        final subsData = await client
-            .from('student_classwork_submissions')
-            .select('student_id, status, score, submitted_at')
-            .eq('classwork_id', widget.assessment.id);
-        for (final s in (subsData as List? ?? [])) {
-          final sId = s['student_id']?.toString() ?? '';
-          if (sId.isNotEmpty) {
-            submissionsMap[sId] = Map<String, dynamic>.from(s);
+      final overridesMap = <String, bool>{};
+      final latestResetAtMap = <String, DateTime>{
+        ..._localResetTimestamps,
+      };
+      final latestStartedAtMap = <String, DateTime>{};
+
+      await Future.wait<void>([
+        () async {
+          try {
+            final attemptsData = await client
+                .from('assessment_attempts')
+                .select(
+                  'id, student_id, status, score_earned, started_at, submitted_at',
+                )
+                .eq('assessment_id', widget.assessment.id);
+            for (final a in (attemptsData as List? ?? [])) {
+              final sId = a['student_id']?.toString() ?? '';
+              if (sId.isNotEmpty) {
+                attemptsMap[sId] = Map<String, dynamic>.from(a);
+              }
+            }
+          } catch (attErr) {
+            debugPrint('attempts query notice: $attErr');
           }
-        }
-      } catch (subErr) {
-        debugPrint('submissions query notice: $subErr');
-      }
+        }(),
+        () async {
+          try {
+            final subsData = await client
+                .from('student_classwork_submissions')
+                .select('student_id, status, score, submitted_at')
+                .eq('classwork_id', widget.assessment.id);
+            for (final s in (subsData as List? ?? [])) {
+              final sId = s['student_id']?.toString() ?? '';
+              if (sId.isNotEmpty) {
+                submissionsMap[sId] = Map<String, dynamic>.from(s);
+              }
+            }
+          } catch (subErr) {
+            debugPrint('submissions query notice: $subErr');
+          }
+        }(),
+        () async {
+          try {
+            final logsData = await client
+                .from('anti_cheating_logs')
+                .select('student_id, event_type, event_at')
+                .eq('assessment_id', widget.assessment.id)
+                .inFilter('event_type', [
+                  'entry_allowed',
+                  'entry_disallowed',
+                  'reset',
+                  'retake_authorized',
+                  'session_started',
+                ])
+                .order('event_at', ascending: true);
+            for (final l in (logsData as List? ?? [])) {
+              final sId = l['student_id']?.toString() ?? '';
+              final ev = l['event_type']?.toString().toLowerCase() ?? '';
+              final evAtStr = l['event_at']?.toString();
+              final evAtUtc = evAtStr != null
+                  ? DateTime.tryParse(evAtStr)?.toUtc()
+                  : null;
+              if (sId.isEmpty) continue;
+              if (ev == 'entry_allowed' || ev == 'entry_disallowed') {
+                overridesMap[sId] = ev == 'entry_allowed';
+              } else if (ev == 'reset' || ev == 'retake_authorized') {
+                final ts = evAtUtc ?? DateTime.now().toUtc();
+                final prev = latestResetAtMap[sId];
+                if (prev == null || ts.isAfter(prev)) {
+                  latestResetAtMap[sId] = ts;
+                }
+              } else if (ev == 'session_started' && evAtUtc != null) {
+                final prev = latestStartedAtMap[sId];
+                if (prev == null || evAtUtc.isAfter(prev)) {
+                  latestStartedAtMap[sId] = evAtUtc;
+                }
+              }
+            }
+          } catch (logErr) {
+            debugPrint('logs query notice: $logErr');
+          }
+        }(),
+      ]);
 
       // 3c. Fetch scores from gradebook_term_sheets (Single Source of Truth when teacher edits Gradebook)
       final gradebookScoresMap = <String, double>{};
@@ -604,26 +713,6 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         debugPrint('gradebook sheet score query notice: $gbErr');
       }
 
-      // 4. Fetch allow/disallow overrides from anti_cheating_logs safely
-      final overridesMap = <String, bool>{};
-      try {
-        final logsData = await client
-            .from('anti_cheating_logs')
-            .select('student_id, event_type, event_at')
-            .eq('assessment_id', widget.assessment.id)
-            .inFilter('event_type', ['entry_allowed', 'entry_disallowed'])
-            .order('event_at', ascending: true);
-        for (final l in (logsData as List? ?? [])) {
-          final sId = l['student_id']?.toString() ?? '';
-          final ev = l['event_type']?.toString() ?? '';
-          if (sId.isNotEmpty) {
-            overridesMap[sId] = ev == 'entry_allowed';
-          }
-        }
-      } catch (logErr) {
-        debugPrint('logs query notice: $logErr');
-      }
-
       final pastLateCutoff = _isPastLateCutoff;
       final parsedList = <StudentLiveProctorState>[];
 
@@ -652,38 +741,117 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
           lastName,
         ].where((s) => s.isNotEmpty).join(' ');
 
-        final attempt = attemptsMap[sId];
-        final sub = submissionsMap[sId];
-        final gbScore = gradebookScoresMap[sId];
+        var attempt = attemptsMap[sId];
+        var sub = submissionsMap[sId];
+        var gbScore = gradebookScoresMap[sId];
+
+        final serviceResetAt = _proctorService.getResetAt(sId);
+        DateTime? resetAt = latestResetAtMap[sId];
+        if (serviceResetAt != null &&
+            (resetAt == null || serviceResetAt.isAfter(resetAt))) {
+          resetAt = serviceResetAt;
+        }
+
+        // Guard against stale pre-reset attempts, submissions, or gradebook scores
+        if (resetAt != null) {
+          if (attempt != null) {
+            final attStatus =
+                (attempt['status']?.toString() ?? '').toLowerCase();
+            final attSubmittedAt = attempt['submitted_at'] != null
+                ? DateTime.tryParse(attempt['submitted_at'].toString())?.toUtc()
+                : null;
+            final attStartedAt = attempt['started_at'] != null
+                ? DateTime.tryParse(attempt['started_at'].toString())?.toUtc()
+                : null;
+            if (attStatus == 'submitted' || attStatus == 'auto_submitted') {
+              if (attSubmittedAt == null ||
+                  !attSubmittedAt.isAfter(
+                    resetAt.add(const Duration(seconds: 2)),
+                  )) {
+                attempt = null;
+              }
+            } else if (attStatus == 'in_progress') {
+              if (attStartedAt != null &&
+                  attStartedAt.isBefore(
+                    resetAt.subtract(const Duration(seconds: 2)),
+                  )) {
+                attempt = null;
+              }
+            }
+          }
+          if (sub != null) {
+            final subSubmittedAt = sub['submitted_at'] != null
+                ? DateTime.tryParse(sub['submitted_at'].toString())?.toUtc()
+                : null;
+            if (subSubmittedAt == null ||
+                !subSubmittedAt.isAfter(
+                  resetAt.add(const Duration(seconds: 2)),
+                )) {
+              sub = null;
+            }
+          }
+          // If student has not completed a fresh post-reset attempt, ignore any stale Gradebook score
+          final postResetSubmitted =
+              (attempt != null &&
+                  (attempt['status'] == 'submitted' ||
+                      attempt['status'] == 'auto_submitted')) ||
+              (sub != null &&
+                  (sub['status'] == 'submitted' || sub['status'] == 'graded'));
+          if (!postResetSubmitted) {
+            gbScore = null;
+          }
+        }
 
         final rawStatus = (attempt?['status']?.toString() ?? '').toLowerCase();
         final subStatus = (sub?['status']?.toString() ?? '').toLowerCase();
+        final latestStart = latestStartedAtMap[sId];
+        final startedAfterReset =
+            latestStart != null &&
+            (resetAt == null || latestStart.isAfter(resetAt));
 
-        double? score =
-            (attempt?['score_earned'] as num?)?.toDouble() ??
-            (sub?['score'] as num?)?.toDouble() ??
-            gbScore;
-        if (gbScore != null) {
-          // Gradebook is the Single Source of Truth if teacher edited the score
-          score = gbScore;
+        final isDisqualifiedInDb = rawStatus == 'disqualified';
+        final isActivelyInProgress =
+            rawStatus == 'in_progress' ||
+            (startedAfterReset &&
+                rawStatus != 'submitted' &&
+                rawStatus != 'auto_submitted' &&
+                subStatus != 'submitted' &&
+                subStatus != 'graded');
+        final isCompletedInDb =
+            !isActivelyInProgress &&
+            !isDisqualifiedInDb &&
+            (rawStatus == 'submitted' ||
+                rawStatus == 'auto_submitted' ||
+                subStatus == 'submitted' ||
+                subStatus == 'graded' ||
+                gbScore != null);
+
+        double? score;
+        if (isCompletedInDb) {
+          score =
+              (attempt?['score_earned'] as num?)?.toDouble() ??
+              (sub?['score'] as num?)?.toDouble() ??
+              gbScore;
+          if (gbScore != null && resetAt == null) {
+            score = gbScore;
+          }
+        } else {
+          // Strictly null score when student is In Progress, Retake, or Not Started
+          score = null;
         }
 
-        final isCompletedInDb =
-            rawStatus == 'submitted' ||
-            rawStatus == 'auto_submitted' ||
-            subStatus == 'submitted' ||
-            subStatus == 'graded' ||
-            gbScore != null;
-        final isInProgressInDb = rawStatus == 'in_progress' && !isCompletedInDb;
-        final isDisqualifiedInDb = rawStatus == 'disqualified';
-
         final hasStarted =
-            isInProgressInDb || isCompletedInDb || isDisqualifiedInDb;
+            isActivelyInProgress ||
+            isCompletedInDb ||
+            isDisqualifiedInDb ||
+            resetAt != null;
         final isMissing = pastLateCutoff && !hasStarted;
 
-        // Entry allowed check: default false if past 15m and never started, unless overridden
+        // Entry allowed check: default false if past 15m and never started, unless overridden or reset
         bool isAllowed;
-        if (overridesMap.containsKey(sId)) {
+        if (resetAt != null) {
+          isAllowed = overridesMap[sId] ?? true;
+        } else if (overridesMap.containsKey(sId)) {
           isAllowed = overridesMap[sId]!;
         } else {
           isAllowed = !pastLateCutoff || hasStarted;
@@ -692,10 +860,12 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         ProctorSessionStatus status;
         if (isDisqualifiedInDb) {
           status = ProctorSessionStatus.kicked;
+        } else if (isActivelyInProgress) {
+          status = ProctorSessionStatus.inProgress;
         } else if (isCompletedInDb) {
           status = ProctorSessionStatus.submitted;
-        } else if (isInProgressInDb) {
-          status = ProctorSessionStatus.inProgress;
+        } else if (resetAt != null) {
+          status = ProctorSessionStatus.retakeRequested;
         } else {
           status = ProctorSessionStatus.notStarted;
         }
@@ -762,11 +932,8 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
             .toList(),
       );
 
-      // Only query historical violations on initial load or if empty; Realtime pushes any active logs without polling
-      if (!silent ||
-          _proctorService.currentStates.every((s) => s.violationCount == 0)) {
-        await _proctorService.loadHistoricalViolations();
-      }
+      // Always load & replay chronological violation logs so real-time counts are 100% accurate
+      await _proctorService.loadHistoricalViolations();
 
       // Merge updated states from proctor service
       if (_proctorService.currentStates.isNotEmpty) {
@@ -776,11 +943,17 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         for (int i = 0; i < parsedList.length; i++) {
           final live = liveMap[parsedList[i].studentId];
           if (live != null) {
+            final shouldKeepScore =
+                live.status == ProctorSessionStatus.submitted;
+            final mergedScore = shouldKeepScore
+                ? (parsedList[i].score ?? live.score)
+                : null;
             parsedList[i] = parsedList[i].copyWith(
               status: live.status,
               violationCount: live.violationCount,
               violations: live.violations,
-              score: parsedList[i].score ?? live.score,
+              score: mergedScore,
+              clearScore: !shouldKeepScore || mergedScore == null,
               totalPoints: live.totalPoints ?? parsedList[i].totalPoints,
               isEntryAllowed: live.isEntryAllowed,
               currentQuestionNumber:
@@ -798,8 +971,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
       if (mounted) {
         final currentPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
         final shouldRestoreItemAnalysis =
-            widget.assessment.isExam &&
-            currentPath == AppRoutes.teacherClassworkItemAnalysis &&
+            AppRoutes.isTeacherClassworkItemAnalysisRoute(currentPath) &&
             (_isTestingFinished ||
                 parsedList.any(
                   (s) => s.status == ProctorSessionStatus.submitted,
@@ -820,6 +992,10 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
       if (mounted) setState(() => _isLoading = false);
     } finally {
       _isSyncingLearners = false;
+      if (_queuedSilentSync && mounted) {
+        _queuedSilentSync = false;
+        unawaited(_loadLearners(silent: true));
+      }
     }
   }
 
@@ -858,7 +1034,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
       try {
         final questionsRes = await client
             .from('assessment_questions')
-            .select('id, question_text, position, points')
+            .select('id, question_text, position, points, question_type')
             .eq('assessment_id', widget.assessment.id)
             .order('position', ascending: true);
         questions = List<Map<String, dynamic>>.from(
@@ -871,11 +1047,18 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
       if (questions.isEmpty && widget.assessment.questions.isNotEmpty) {
         for (int i = 0; i < widget.assessment.questions.length; i++) {
           final q = widget.assessment.questions[i];
+          final qTypeStr = switch (q.type) {
+            QuestionType.multipleChoice => 'multiple_choice',
+            QuestionType.trueFalse => 'true_false',
+            QuestionType.identification => 'identification',
+            QuestionType.matching => 'matching_type',
+          };
           questions.add({
             'id': q.id,
             'question_text': q.questionText,
             'position': i + 1,
             'points': q.points,
+            'question_type': qTypeStr,
           });
         }
       }
@@ -935,12 +1118,26 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
             .where((r) => r['is_correct'] == true)
             .length;
 
+        QuestionType? resolvedType =
+            ItemDifficultyStat.parseQuestionType(q['question_type']);
+        if (resolvedType == null) {
+          final match = widget.assessment.questions
+              .where((aq) => aq.id == qId)
+              .firstOrNull;
+          if (match != null) {
+            resolvedType = match.type;
+          } else if (i < widget.assessment.questions.length) {
+            resolvedType = widget.assessment.questions[i].type;
+          }
+        }
+
         statsList.add(
           ItemDifficultyStat(
-            itemNumber: i + 1,
+            itemNumber: (q['position'] as num?)?.toInt() ?? (i + 1),
             questionText: q['question_text']?.toString() ?? 'Question ${i + 1}',
             totalAttempts: total,
             correctCount: correct,
+            questionType: resolvedType ?? QuestionType.multipleChoice,
           ),
         );
       }
@@ -1071,7 +1268,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
     );
 
     if (confirmed == true) {
-      _proctorService.authorizeRetake(student.studentId);
+      _localResetTimestamps[student.studentId] = DateTime.now().toUtc();
       setState(() {
         final idx = _rosterStudents.indexWhere(
           (s) => s.studentId == student.studentId,
@@ -1080,7 +1277,10 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
           _rosterStudents[idx] = _rosterStudents[idx].copyWith(
             status: ProctorSessionStatus.retakeRequested,
             violationCount: 0,
+            violations: const [],
             score: null,
+            clearScore: true,
+            clearKickedReason: true,
             currentQuestionNumber: 1,
             isEntryAllowed: true,
             isMissing: false,
@@ -1093,6 +1293,10 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
           'Progress reset for ${student.studentName}',
           icon: LucideIcons.rotateCcw,
         );
+      }
+      await _proctorService.authorizeRetake(student.studentId);
+      if (mounted) {
+        unawaited(_loadLearners(silent: true, forceFullRefresh: true));
       }
     }
   }
@@ -1698,7 +1902,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  icon: const Icon(Icons.cancel_outlined, size: 16),
+                  icon: const Icon(LucideIcons.xCircle, size: 16),
                   label: Text(
                     widget.assessment.isExam ? 'Cancel Exam' : 'Cancel Quiz',
                     style: const TextStyle(
@@ -2190,6 +2394,38 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
       alpha: isDark ? 0.1 : 0.07,
     );
 
+    // Group items by question category in standard DepEd order
+    const orderedCategories = [
+      QuestionType.multipleChoice,
+      QuestionType.trueFalse,
+      QuestionType.identification,
+      QuestionType.matching,
+    ];
+
+    final Map<QuestionType, List<ItemDifficultyStat>> groupedStats = {};
+    final List<ItemDifficultyStat> otherItems = [];
+
+    for (final s in _itemStats) {
+      if (s.questionType != null && orderedCategories.contains(s.questionType)) {
+        groupedStats.putIfAbsent(s.questionType!, () => []).add(s);
+      } else {
+        otherItems.add(s);
+      }
+    }
+
+    // Sort items within each category by item number
+    for (final list in groupedStats.values) {
+      list.sort((a, b) => a.itemNumber.compareTo(b.itemNumber));
+    }
+    otherItems.sort((a, b) => a.itemNumber.compareTo(b.itemNumber));
+
+    final categoriesInStats = orderedCategories.where((c) => groupedStats.containsKey(c)).toList();
+    final hasOther = otherItems.isNotEmpty;
+
+    final categoriesToDisplay = _selectedAnalysisCategory != null
+        ? [_selectedAnalysisCategory!]
+        : categoriesInStats;
+
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
@@ -2203,51 +2439,104 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Top Control Bar
+            // Top Control Bar with Category Filter Chips
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF1E293B)
-                          : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'Total Items: $totalItems',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: theme.colorScheme.outline.withValues(alpha: 0.12),
+                          ),
+                        ),
+                        child: Text(
+                          'Total Items: $totalItems',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF1E293B)
-                          : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'Mean Accuracy: ${avgP.toStringAsFixed(1)}%',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: theme.colorScheme.outline.withValues(alpha: 0.12),
+                          ),
+                        ),
+                        child: Text(
+                          'Mean Accuracy: ${avgP.toStringAsFixed(1)}%',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (categoriesInStats.length > 1) ...[
+                        Container(
+                          height: 20,
+                          width: 1,
+                          color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                        ),
+                        _buildCategoryFilterChip(
+                          theme: theme,
+                          isDark: isDark,
+                          label: 'All ($totalItems)',
+                          isSelected: _selectedAnalysisCategory == null,
+                          onTap: () {
+                            setState(() => _selectedAnalysisCategory = null);
+                          },
+                        ),
+                        ...categoriesInStats.map((cat) {
+                          final count = groupedStats[cat]?.length ?? 0;
+                          final label = switch (cat) {
+                            QuestionType.multipleChoice => 'Multiple Choice',
+                            QuestionType.trueFalse => 'True / False',
+                            QuestionType.identification => 'Identification',
+                            QuestionType.matching => 'Matching',
+                          };
+                          return _buildCategoryFilterChip(
+                            theme: theme,
+                            isDark: isDark,
+                            label: '$label ($count)',
+                            isSelected: _selectedAnalysisCategory == cat,
+                            onTap: () {
+                              setState(() {
+                                _selectedAnalysisCategory =
+                                    _selectedAnalysisCategory == cat ? null : cat;
+                              });
+                            },
+                          );
+                        }),
+                      ],
+                    ],
                   ),
-                  const Spacer(),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -2387,157 +2676,52 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
                             ),
                           )
                         else
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _itemStats.length,
-                            itemBuilder: (context, idx) {
-                              final stat = _itemStats[idx];
-                              final classification = stat.classification;
-                              Color badgeColor;
-                              switch (classification) {
-                                case 'Very Easy':
-                                  badgeColor = Colors.blue;
-                                case 'Easy':
-                                  badgeColor = const Color(0xFF0F8A48);
-                                case 'Moderate / Ideal':
-                                  badgeColor = Colors.teal;
-                                case 'Difficult':
-                                  badgeColor = Colors.orange;
-                                case 'Pending Submissions':
-                                  badgeColor = AppTheme.catSlate;
-                                default:
-                                  badgeColor = Colors.red;
-                              }
-
-                              final rowBg = idx.isOdd
-                                  ? (isDark
-                                        ? theme.colorScheme.onSurface
-                                              .withValues(alpha: 0.03)
-                                        : theme.colorScheme.primary.withValues(
-                                            alpha: 0.025,
-                                          ))
-                                  : theme.colorScheme.surface;
-
-                              return Container(
-                                constraints: const BoxConstraints(
-                                  minHeight: 52,
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: rowBg,
-                                  border: Border(
-                                    bottom: BorderSide(color: rowBorder),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final cat in categoriesToDisplay) ...[
+                                if (groupedStats[cat]?.isNotEmpty == true) ...[
+                                  _buildCategorySectionBanner(
+                                    theme: theme,
+                                    isDark: isDark,
+                                    category: cat,
+                                    items: groupedStats[cat]!,
+                                    partIndex: categoriesInStats.indexOf(cat) + 1,
                                   ),
+                                  ...groupedStats[cat]!.asMap().entries.map((entry) {
+                                    final rowIdx = entry.key;
+                                    final stat = entry.value;
+                                    return _buildAnalysisRowItem(
+                                      theme: theme,
+                                      isDark: isDark,
+                                      stat: stat,
+                                      rowBorder: rowBorder,
+                                      isOdd: rowIdx.isOdd,
+                                    );
+                                  }),
+                                ],
+                              ],
+                              if (hasOther && (_selectedAnalysisCategory == null)) ...[
+                                _buildCategorySectionBanner(
+                                  theme: theme,
+                                  isDark: isDark,
+                                  category: null,
+                                  items: otherItems,
+                                  partIndex: categoriesInStats.length + 1,
                                 ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    SizedBox(
-                                      width: 44,
-                                      child: Center(
-                                        child: Text(
-                                          '${stat.itemNumber}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
-                                            color: theme.colorScheme.primary,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                        ),
-                                        child: Text(
-                                          stat.questionText,
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: theme.colorScheme.onSurface,
-                                            height: 1.4,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      width: 160,
-                                      child: Center(
-                                        child: Text(
-                                          stat.totalAttempts > 0
-                                              ? '${stat.correctCount} / ${stat.totalAttempts} correct'
-                                              : '0 / 0 attempts',
-                                          style: TextStyle(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: theme.colorScheme.onSurface
-                                                .withValues(
-                                                  alpha: stat.totalAttempts > 0
-                                                      ? 0.8
-                                                      : 0.45,
-                                                ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      width: 160,
-                                      child: Center(
-                                        child: Text(
-                                          stat.totalAttempts > 0
-                                              ? '${(stat.pIndex * 100).toStringAsFixed(1)}% (P = ${stat.pIndex.toStringAsFixed(2)})'
-                                              : '—',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
-                                            color: stat.totalAttempts > 0
-                                                ? theme.colorScheme.onSurface
-                                                : theme.colorScheme.onSurface
-                                                      .withValues(alpha: 0.4),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      width: 170,
-                                      child: Center(
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: badgeColor.withValues(
-                                              alpha: 0.12,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                            border: Border.all(
-                                              color: badgeColor.withValues(
-                                                alpha: 0.35,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            classification,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: badgeColor,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
+                                ...otherItems.asMap().entries.map((entry) {
+                                  final rowIdx = entry.key;
+                                  final stat = entry.value;
+                                  return _buildAnalysisRowItem(
+                                    theme: theme,
+                                    isDark: isDark,
+                                    stat: stat,
+                                    rowBorder: rowBorder,
+                                    isOdd: rowIdx.isOdd,
+                                  );
+                                }),
+                              ],
+                            ],
                           ),
                       ],
                     ),
@@ -2549,6 +2733,333 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildCategoryFilterChip({
+    required ThemeData theme,
+    required bool isDark,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final primary = theme.colorScheme.primary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? primary.withValues(alpha: isDark ? 0.25 : 0.12)
+              : (isDark
+                    ? const Color(0xFF1E293B).withValues(alpha: 0.6)
+                    : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected
+                ? primary
+                : theme.colorScheme.outline.withValues(alpha: 0.18),
+            width: isSelected ? 1.4 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected
+                ? primary
+                : theme.colorScheme.onSurface.withValues(alpha: 0.75),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategorySectionBanner({
+    required ThemeData theme,
+    required bool isDark,
+    required QuestionType? category,
+    required List<ItemDifficultyStat> items,
+    required int partIndex,
+  }) {
+    final (title, icon, color) = switch (category) {
+      QuestionType.multipleChoice => (
+        'PART ${_toRoman(partIndex)}: MULTIPLE CHOICE',
+        LucideIcons.listChecks,
+        const Color(0xFF2563EB),
+      ),
+      QuestionType.trueFalse => (
+        'PART ${_toRoman(partIndex)}: TRUE OR FALSE',
+        LucideIcons.checkSquare,
+        const Color(0xFF059669),
+      ),
+      QuestionType.identification => (
+        'PART ${_toRoman(partIndex)}: IDENTIFICATION',
+        LucideIcons.pencil,
+        const Color(0xFF7C3AED),
+      ),
+      QuestionType.matching => (
+        'PART ${_toRoman(partIndex)}: MATCHING TYPE',
+        LucideIcons.link2,
+        const Color(0xFFD97706),
+      ),
+      null => (
+        'PART ${_toRoman(partIndex)}: OTHER QUESTIONS',
+        LucideIcons.info,
+        const Color(0xFF64748B),
+      ),
+    };
+
+    final rangeText = items.isEmpty
+        ? ''
+        : (items.first.itemNumber == items.last.itemNumber
+            ? 'Item ${items.first.itemNumber}'
+            : 'Items ${items.first.itemNumber}–${items.last.itemNumber}');
+
+    final catAvg = items.isNotEmpty
+        ? (items.fold<double>(0.0, (sum, s) => sum + s.pIndex) / items.length) * 100
+        : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark
+            ? color.withValues(alpha: 0.12)
+            : color.withValues(alpha: 0.06),
+        border: Border(
+          top: BorderSide(
+            color: color.withValues(alpha: isDark ? 0.35 : 0.22),
+            width: 1.5,
+          ),
+          bottom: BorderSide(
+            color: color.withValues(alpha: isDark ? 0.25 : 0.14),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Center(
+              child: Icon(icon, size: 14, color: color),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+              color: isDark ? color.withValues(alpha: 0.95) : color,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: color.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Text(
+              '${items.length} ${items.length == 1 ? 'Item' : 'Items'}${rangeText.isNotEmpty ? ' • $rangeText' : ''}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+              ),
+            ),
+          ),
+          const Spacer(),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Category Accuracy: ',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Text(
+                  '${catAvg.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? color.withValues(alpha: 0.95) : color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalysisRowItem({
+    required ThemeData theme,
+    required bool isDark,
+    required ItemDifficultyStat stat,
+    required Color rowBorder,
+    required bool isOdd,
+  }) {
+    final classification = stat.classification;
+    Color badgeColor;
+    switch (classification) {
+      case 'Very Easy':
+        badgeColor = Colors.blue;
+      case 'Easy':
+        badgeColor = const Color(0xFF0F8A48);
+      case 'Moderate / Ideal':
+        badgeColor = Colors.teal;
+      case 'Difficult':
+        badgeColor = Colors.orange;
+      case 'Pending Submissions':
+        badgeColor = AppTheme.catSlate;
+      default:
+        badgeColor = Colors.red;
+    }
+
+    final rowBg = isOdd
+        ? (isDark
+              ? theme.colorScheme.onSurface.withValues(alpha: 0.03)
+              : theme.colorScheme.primary.withValues(alpha: 0.025))
+        : theme.colorScheme.surface;
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: rowBg,
+        border: Border(bottom: BorderSide(color: rowBorder)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 44,
+            child: Center(
+              child: Text(
+                '${stat.itemNumber}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                stat.questionText,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 160,
+            child: Center(
+              child: Text(
+                stat.totalAttempts > 0
+                    ? '${stat.correctCount} / ${stat.totalAttempts} correct'
+                    : '0 / 0 attempts',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withValues(
+                    alpha: stat.totalAttempts > 0 ? 0.8 : 0.45,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 160,
+            child: Center(
+              child: Text(
+                stat.totalAttempts > 0
+                    ? '${(stat.pIndex * 100).toStringAsFixed(1)}% (P = ${stat.pIndex.toStringAsFixed(2)})'
+                    : '—',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: stat.totalAttempts > 0
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 170,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: badgeColor.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Text(
+                  classification,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _toRoman(int number) {
+    return switch (number) {
+      1 => 'I',
+      2 => 'II',
+      3 => 'III',
+      4 => 'IV',
+      5 => 'V',
+      6 => 'VI',
+      _ => '$number',
+    };
   }
 
   Widget _buildAnalysisHeaderCell({

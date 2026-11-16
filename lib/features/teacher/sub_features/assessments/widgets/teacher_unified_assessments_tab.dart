@@ -15,7 +15,6 @@ import 'package:class_realm/data/repositories/teacher_classwork_repository.dart'
 import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/widgets/common/app_time_picker_field.dart';
 import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
@@ -67,7 +66,15 @@ class _TeacherUnifiedAssessmentsTabState
   void initState() {
     super.initState();
     final navState = LocalStorageService.getTeacherClassworkNavState();
-    final currentPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
+    final rawCurrentPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
+    final savedRoute = AppRoutes.normalizeRoutePath(
+      LocalStorageService.getLastActiveRoute() ?? '',
+    );
+    final currentPath =
+        (rawCurrentPath == '/' || rawCurrentPath == AppRoutes.teacherClasswork) &&
+                AppRoutes.isTeacherClassworkSubViewRoute(savedRoute)
+            ? savedRoute
+            : rawCurrentPath;
     final pathTabIdx = AppRoutes.teacherClassworkTabIndexForRoute(currentPath);
     final initialTabIdx =
         (pathTabIdx ?? (navState['categoryTabIndex'] as num?)?.toInt() ?? 0)
@@ -98,7 +105,7 @@ class _TeacherUnifiedAssessmentsTabState
     }
     _hydrateInitialFilterFromStorage();
     _loadTeacherSections();
-    _tryRestoreMonitoringAssessment();
+    _tryRestoreMonitoringAssessment(fromInit: true);
     if (CreateAssessmentFlowDialog.creationCooldown.isActive) {
       _startCreationCooldownTimer();
     }
@@ -107,7 +114,15 @@ class _TeacherUnifiedAssessmentsTabState
   @override
   void didUpdateWidget(covariant TeacherUnifiedAssessmentsTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final currentPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
+    final rawCurrentPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
+    final savedRoute = AppRoutes.normalizeRoutePath(
+      LocalStorageService.getLastActiveRoute() ?? '',
+    );
+    final currentPath =
+        (rawCurrentPath == '/' || rawCurrentPath == AppRoutes.teacherClasswork) &&
+                AppRoutes.isTeacherClassworkSubViewRoute(savedRoute)
+            ? savedRoute
+            : rawCurrentPath;
     if (_monitoringAssessment != null &&
         !AppRoutes.isTeacherClassworkProctoringRoute(currentPath) &&
         !AppRoutes.isTeacherClassworkItemAnalysisRoute(currentPath)) {
@@ -118,7 +133,15 @@ class _TeacherUnifiedAssessmentsTabState
         _categoryTabController.index = targetTab;
       }
     } else if (_monitoringAssessment == null && widget.assessments.isNotEmpty) {
-      _tryRestoreMonitoringAssessment();
+      _tryRestoreMonitoringAssessment(fromInit: true);
+    } else if (_monitoringAssessment != null && widget.assessments.isNotEmpty) {
+      for (final a in widget.assessments) {
+        if (a.id == _monitoringAssessment!.id &&
+            a.completionMode != 'in_person') {
+          _monitoringAssessment = a;
+          break;
+        }
+      }
     }
   }
 
@@ -197,8 +220,16 @@ class _TeacherUnifiedAssessmentsTabState
     );
   }
 
-  void _tryRestoreMonitoringAssessment() {
-    final currentPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
+  void _tryRestoreMonitoringAssessment({bool fromInit = false}) {
+    final rawCurrentPath = AppRoutes.normalizeRoutePath(getBrowserUrlPath());
+    final savedRoute = AppRoutes.normalizeRoutePath(
+      LocalStorageService.getLastActiveRoute() ?? '',
+    );
+    final currentPath =
+        (rawCurrentPath == '/' || rawCurrentPath == AppRoutes.teacherClasswork) &&
+                AppRoutes.isTeacherClassworkSubViewRoute(savedRoute)
+            ? savedRoute
+            : rawCurrentPath;
     if (!AppRoutes.isTeacherClassworkProctoringRoute(currentPath) &&
         !AppRoutes.isTeacherClassworkItemAnalysisRoute(currentPath)) {
       LocalStorageService.clearTeacherClassworkSubView();
@@ -209,10 +240,30 @@ class _TeacherUnifiedAssessmentsTabState
     if (savedAssessId == null || savedAssessId.isEmpty) return;
     for (final a in widget.assessments) {
       if (a.id == savedAssessId && a.completionMode != 'in_person') {
-        if (mounted) {
+        if (fromInit) {
+          _monitoringAssessment = a;
+        } else if (mounted) {
           setState(() => _monitoringAssessment = a);
         }
         return;
+      }
+    }
+    if (_monitoringAssessment == null) {
+      final rawJson = navState['activeAssessmentJson'];
+      if (rawJson is Map) {
+        try {
+          final restored = QuizOrExamModel.fromJson(
+            Map<String, dynamic>.from(rawJson),
+          );
+          if (restored.id == savedAssessId &&
+              restored.completionMode != 'in_person') {
+            if (fromInit) {
+              _monitoringAssessment = restored;
+            } else if (mounted) {
+              setState(() => _monitoringAssessment = restored);
+            }
+          }
+        } catch (_) {}
       }
     }
   }
@@ -1175,6 +1226,7 @@ class _TeacherUnifiedAssessmentsTabState
               LocalStorageService.saveTeacherClassworkNavState(
                 categoryTabIndex: item.isExam ? 2 : 0,
                 activeAssessmentId: item.id,
+                activeAssessmentJson: item.toJson(),
               );
               final proctorRoute = item.isExam
                   ? AppRoutes.teacherClassworkExProctoring
@@ -1203,11 +1255,13 @@ class _TeacherUnifiedAssessmentsTabState
               LocalStorageService.saveTeacherClassworkNavState(
                 categoryTabIndex: item.isExam ? 2 : 0,
                 activeAssessmentId: item.id,
+                activeAssessmentJson: item.toJson(),
               );
-              updateBrowserUrl(AppRoutes.teacherClassworkItemAnalysis);
-              LocalStorageService.saveLastActiveRoute(
-                AppRoutes.teacherClassworkItemAnalysis,
-              );
+              final analysisRoute = item.isExam
+                  ? AppRoutes.teacherClassworkExItemAnalysis
+                  : AppRoutes.teacherClassworkWwItemAnalysis;
+              updateBrowserUrl(analysisRoute);
+              LocalStorageService.saveLastActiveRoute(analysisRoute);
               setState(() => _monitoringAssessment = item);
             },
     );
@@ -1482,7 +1536,8 @@ class _TeacherUnifiedAssessmentsTabState
                     IconButton(
                       tooltip: 'Cancel $typeLabel',
                       icon: const Icon(
-                        Icons.cancel_outlined,
+                        LucideIcons.xCircle,
+                        size: 20,
                         color: Color(0xFFD97706),
                       ),
                       onPressed: onCancel,
@@ -1843,7 +1898,7 @@ class _TeacherUnifiedAssessmentsTabState
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
-                Icons.cancel_outlined,
+                LucideIcons.xCircle,
                 color: AppTheme.catRed,
                 size: 22,
               ),

@@ -382,6 +382,7 @@ class ActivityModel {
       'subject': subject,
       'grade_level': gradeLevel,
       'section': section,
+      'date_assigned': dateAssigned.toIso8601String(),
       'deadline': deadline.toIso8601String(),
       'max_score': maxScore,
       'is_published': isPublished,
@@ -391,6 +392,13 @@ class ActivityModel {
       'storage_path': storagePath,
       'mime_type': mimeType,
       'file_size_bytes': fileSizeBytes,
+      'term_number': termNumber,
+      'gradebook_column_index': gradebookColumnIndex,
+      'completion_mode': completionMode,
+      'allow_late_submission': allowLateSubmission,
+      'batch_group_id': batchGroupId,
+      'is_archived': isArchived,
+      'grading_category': gradingCategory,
     };
   }
 }

@@ -165,8 +165,10 @@ class _ProctoringRosterTableState extends State<ProctoringRosterTable>
           }
           return _compareByNameAsc(a, b);
         case ProctorSortColumn.score:
-          final aHasScore = a.score != null;
-          final bHasScore = b.score != null;
+          final aHasScore =
+              a.status == ProctorSessionStatus.submitted && a.score != null;
+          final bHasScore =
+              b.status == ProctorSessionStatus.submitted && b.score != null;
           if (aHasScore != bHasScore) {
             // Always place students with recorded scores before ungraded '—' rows
             return aHasScore ? -1 : 1;
