@@ -30,7 +30,7 @@ double getPreBootstrapProgressWeb() => 0;
 
 void updatePreBootstrapProgressWeb(double progress, String status) {}
 
-void registerWebLifecycleListenersPlatform({
+void Function() registerWebLifecycleListenersPlatform({
   required void Function() onFocus,
   required void Function() onBlur,
   required void Function() onHide,
@@ -38,6 +38,7 @@ void registerWebLifecycleListenersPlatform({
   required void Function() onUnload,
 }) {
   // Handled by WidgetsBindingObserver on non-web platforms.
+  return () {};
 }
 
 void downloadFileBytesWeb({

@@ -50,14 +50,14 @@ void updatePreBootstrapProgress(double progress, String status) {
 }
 
 /// Registers web-specific activity listeners (focus, blur, visibilitychange, pagehide/beforeunload).
-void registerWebLifecycleListeners({
+void Function() registerWebLifecycleListeners({
   required void Function() onFocus,
   required void Function() onBlur,
   required void Function() onHide,
   required void Function() onShow,
   required void Function() onUnload,
 }) {
-  registerWebLifecycleListenersPlatform(
+  return registerWebLifecycleListenersPlatform(
     onFocus: onFocus,
     onBlur: onBlur,
     onHide: onHide,

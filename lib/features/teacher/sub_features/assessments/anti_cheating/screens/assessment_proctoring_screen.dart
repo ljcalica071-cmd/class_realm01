@@ -174,11 +174,17 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
           if (live != null) {
             final resetTs = _localResetTimestamps[st.studentId];
             var resolvedStatus = live.status;
-            if (resetTs != null) {
+            if (live.status == ProctorSessionStatus.inProgress ||
+                live.status == ProctorSessionStatus.submitted) {
+              _localResetTimestamps.remove(st.studentId);
+            } else if (resetTs != null) {
               final lastActive = live.lastActiveAt;
-              if (lastActive != null && lastActive.toUtc().isAfter(resetTs)) {
+              if (lastActive != null &&
+                  lastActive.toUtc().isAfter(
+                        resetTs.subtract(const Duration(seconds: 5)),
+                      )) {
                 _localResetTimestamps.remove(st.studentId);
-              } else if (live.status != ProctorSessionStatus.submitted) {
+              } else {
                 resolvedStatus = ProctorSessionStatus.retakeRequested;
               }
             }
@@ -770,6 +776,17 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
           resetAt = serviceResetAt;
         }
 
+        final rawStatus = (attempt?['status']?.toString() ?? '').toLowerCase();
+        final subStatus = (sub?['status']?.toString() ?? '').toLowerCase();
+
+        // If the database has an active in_progress attempt, the student has actively started
+        final hasActiveInProgressAttempt = attempt != null && rawStatus == 'in_progress';
+
+        if (hasActiveInProgressAttempt) {
+          _localResetTimestamps.remove(sId);
+          resetAt = null;
+        }
+
         // Guard against stale pre-reset attempts, submissions, or gradebook scores
         if (resetAt != null) {
           if (attempt != null) {
@@ -784,23 +801,29 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
             if (attStatus == 'submitted' || attStatus == 'auto_submitted') {
               if (attSubmittedAt == null ||
                   !attSubmittedAt.isAfter(
-                    resetAt.add(const Duration(seconds: 2)),
+                    resetAt.subtract(const Duration(seconds: 5)),
                   )) {
                 attempt = null;
               }
             } else if (attStatus == 'in_progress') {
-              if (attStartedAt == null || !attStartedAt.isAfter(resetAt)) {
+              if (attStartedAt != null &&
+                  attStartedAt.isAfter(
+                    resetAt.subtract(const Duration(seconds: 5)),
+                  )) {
+                _localResetTimestamps.remove(sId);
+                resetAt = null;
+              } else {
                 attempt = null;
               }
             }
           }
-          if (sub != null) {
+          if (sub != null && resetAt != null) {
             final subSubmittedAt = sub['submitted_at'] != null
                 ? DateTime.tryParse(sub['submitted_at'].toString())?.toUtc()
                 : null;
             if (subSubmittedAt == null ||
                 !subSubmittedAt.isAfter(
-                  resetAt.add(const Duration(seconds: 2)),
+                  resetAt.subtract(const Duration(seconds: 5)),
                 )) {
               sub = null;
             }
@@ -817,12 +840,13 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
           }
         }
 
-        final rawStatus = (attempt?['status']?.toString() ?? '').toLowerCase();
-        final subStatus = (sub?['status']?.toString() ?? '').toLowerCase();
         final latestStart = latestStartedAtMap[sId];
         final startedAfterReset =
             latestStart != null &&
-            (resetAt == null || latestStart.isAfter(resetAt));
+            (resetAt == null ||
+                latestStart.isAfter(
+                  resetAt.subtract(const Duration(seconds: 5)),
+                ));
 
         if (startedAfterReset) {
           _localResetTimestamps.remove(sId);
@@ -830,7 +854,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         final isLocallyReset = _localResetTimestamps.containsKey(sId);
 
         final isDisqualifiedInDb = rawStatus == 'disqualified';
-        final isActivelyInProgress =
+        final isActivelyInProgress = hasActiveInProgressAttempt ||
             (attempt != null && rawStatus == 'in_progress') ||
             (startedAfterReset &&
                 rawStatus != 'submitted' &&
@@ -881,7 +905,7 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         ProctorSessionStatus status;
         if (isDisqualifiedInDb) {
           status = ProctorSessionStatus.kicked;
-        } else if (isActivelyInProgress && !isLocallyReset) {
+        } else if (isActivelyInProgress) {
           status = ProctorSessionStatus.inProgress;
         } else if (isCompletedInDb) {
           status = ProctorSessionStatus.submitted;
@@ -964,10 +988,15 @@ class _AssessmentProctoringScreenState extends State<AssessmentProctoringScreen>
         for (int i = 0; i < parsedList.length; i++) {
           final live = liveMap[parsedList[i].studentId];
           if (live != null) {
+            if (live.status == ProctorSessionStatus.inProgress ||
+                live.status == ProctorSessionStatus.submitted) {
+              _localResetTimestamps.remove(parsedList[i].studentId);
+            }
             final isLocallyReset =
                 _localResetTimestamps.containsKey(parsedList[i].studentId);
             final mergedStatus = (isLocallyReset &&
-                    live.status != ProctorSessionStatus.submitted)
+                    live.status != ProctorSessionStatus.submitted &&
+                    live.status != ProctorSessionStatus.inProgress)
                 ? ProctorSessionStatus.retakeRequested
                 : live.status;
             final shouldKeepScore =

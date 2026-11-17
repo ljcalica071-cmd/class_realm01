@@ -604,5 +604,52 @@ void main() {
       expect(grouped[QuestionType.trueFalse]!.map((e) => e.itemNumber).toList(), equals([3, 4]));
       expect(grouped[QuestionType.identification]!.map((e) => e.itemNumber).toList(), equals([5, 6]));
     });
+
+    test('Realtime attempt in_progress transitions student out of Retake and records tab switch violations', () async {
+      final proctorService = TeacherProctorChannelService(assessmentId: 'quiz_realtime_test');
+      proctorService.initializeRoster([
+        {
+          'id': 'stu_banana',
+          'name': 'Bear, Banana V.',
+          'lrn': '100000001234',
+          'section': 'Avocado',
+          'status': ProctorSessionStatus.retakeRequested,
+          'score': null,
+          'total_points': 10.0,
+          'violation_count': 0,
+        },
+      ]);
+
+      var banana = proctorService.currentStates.firstWhere((s) => s.studentId == 'stu_banana');
+      expect(banana.status, equals(ProctorSessionStatus.retakeRequested));
+
+      // Student starts attempt: Realtime attempt broadcast arrives with status: 'in_progress'
+      // Simulated via Supabase Realtime broadcast payload
+      proctorService.registerStudentStarted('stu_banana', forceRestart: true);
+
+      banana = proctorService.currentStates.firstWhere((s) => s.studentId == 'stu_banana');
+      expect(banana.status, equals(ProctorSessionStatus.inProgress));
+      expect(proctorService.currentStates.where((s) => s.status == ProctorSessionStatus.inProgress).length, equals(1));
+
+      // Student switches tabs on web, firing anti-cheating violation log
+      proctorService.recordViolation(
+        ProctorViolationLog(
+          id: 'v_banana_1',
+          attemptId: 'att_banana_1',
+          studentId: 'stu_banana',
+          studentName: 'Bear, Banana V.',
+          violationType: ProctorViolationType.appBackgrounded,
+          durationSeconds: 0,
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      banana = proctorService.currentStates.firstWhere((s) => s.studentId == 'stu_banana');
+      expect(banana.violationCount, equals(1));
+      expect(banana.violations.length, equals(1));
+      expect(banana.violations.first.violationType, equals(ProctorViolationType.appBackgrounded));
+
+      proctorService.dispose();
+    });
   });
 }

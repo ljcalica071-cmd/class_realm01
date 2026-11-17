@@ -255,20 +255,14 @@ class TeacherProctorChannelService {
     final qIndex = (record['current_question_index'] as num?)?.toInt();
 
     if (rawStatus == 'in_progress') {
-      if (resetAt != null && (startedAt == null || !startedAt.isAfter(resetAt))) {
-        // Discard stale pre-reset attempt record
-        return;
-      }
-      if (resetAt != null && startedAt != null && startedAt.isAfter(resetAt)) {
-        _studentResetAt.remove(studentId);
-      }
+      _studentResetAt.remove(studentId);
       _studentStates[studentId] = current.copyWith(
         status: ProctorSessionStatus.inProgress,
         clearScore: true,
         isMissing: false,
         currentQuestionNumber:
             qIndex != null ? qIndex + 1 : current.currentQuestionNumber,
-        lastActiveAt: DateTime.now(),
+        lastActiveAt: startedAt?.toLocal() ?? DateTime.now(),
       );
     } else if (rawStatus == 'submitted' || rawStatus == 'auto_submitted') {
       final submittedAtStr = record['submitted_at']?.toString();
@@ -276,15 +270,14 @@ class TeacherProctorChannelService {
           ? DateTime.tryParse(submittedAtStr)?.toUtc()
           : null;
       if (resetAt != null &&
-          (submittedAt == null || !submittedAt.isAfter(resetAt))) {
+          (submittedAt == null ||
+              !submittedAt.isAfter(
+                resetAt.subtract(const Duration(seconds: 5)),
+              ))) {
         // Discard stale pre-reset submission record
         return;
       }
-      if (resetAt != null &&
-          submittedAt != null &&
-          submittedAt.isAfter(resetAt)) {
-        _studentResetAt.remove(studentId);
-      }
+      _studentResetAt.remove(studentId);
       _studentStates[studentId] = current.copyWith(
         status: ProctorSessionStatus.submitted,
         score: scoreVal ?? current.score,
@@ -328,14 +321,7 @@ class TeacherProctorChannelService {
     final timestamp = parsedUtc?.toLocal() ?? DateTime.now();
 
     if (eventType == 'session_started') {
-      final resetAt = _studentResetAt[studentId];
-      if (resetAt != null && parsedUtc != null && !parsedUtc.isAfter(resetAt)) {
-        // Stale session_started log from before reset
-        return;
-      }
-      if (resetAt != null && parsedUtc != null && parsedUtc.isAfter(resetAt)) {
-        _studentResetAt.remove(studentId);
-      }
+      _studentResetAt.remove(studentId);
       registerStudentStarted(
         studentId,
         forceRestart: true,
@@ -345,7 +331,7 @@ class TeacherProctorChannelService {
       final resetAt = _studentResetAt[studentId];
       if (resetAt != null &&
           parsedUtc != null &&
-          !parsedUtc.isAfter(resetAt)) {
+          !parsedUtc.isAfter(resetAt.subtract(const Duration(seconds: 5)))) {
         return;
       }
       double? parsedScore;
@@ -353,6 +339,7 @@ class TeacherProctorChannelService {
       if (scoreMatch != null) {
         parsedScore = double.tryParse(scoreMatch.group(1) ?? '');
       }
+      _studentResetAt.remove(studentId);
       registerStudentSubmitted(
         studentId,
         score: parsedScore,
@@ -361,16 +348,22 @@ class TeacherProctorChannelService {
     } else if (eventType == 'kicked') {
       kickStudent(studentId, details, writeToDb: false, broadcastUpdate: !isReplay);
     } else if (eventType == 'retake_authorized' || eventType == 'reset') {
-      if (parsedUtc != null) {
-        _studentResetAt[studentId] = parsedUtc;
+      if (!isReplay) {
+        if (parsedUtc != null) {
+          _studentResetAt[studentId] = parsedUtc;
+        } else {
+          _studentResetAt[studentId] = DateTime.now().toUtc();
+        }
+        authorizeRetake(
+          studentId,
+          writeToDb: false,
+          broadcastUpdate: true,
+        );
       } else {
-        _studentResetAt[studentId] = DateTime.now().toUtc();
+        if (parsedUtc != null) {
+          _studentResetAt[studentId] = parsedUtc;
+        }
       }
-      authorizeRetake(
-        studentId,
-        writeToDb: false,
-        broadcastUpdate: !isReplay,
-      );
     } else if (eventType == 'entry_allowed') {
       toggleAllowStudent(
         studentId,
@@ -393,10 +386,10 @@ class TeacherProctorChannelService {
       final resetAt = _studentResetAt[studentId];
       if (resetAt != null &&
           parsedUtc != null &&
-          !parsedUtc.isAfter(resetAt)) {
+          !parsedUtc.isAfter(resetAt.subtract(const Duration(seconds: 5)))) {
         return;
       }
-      // Focus lost / blur / tab switch violation (excludes network_disconnected, force_submit, etc.)
+      _studentResetAt.remove(studentId);
       final current = _studentStates[studentId];
       final vType = eventType.contains('background')
           ? ProctorViolationType.appBackgrounded

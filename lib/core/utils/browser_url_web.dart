@@ -160,7 +160,7 @@ void updatePreBootstrapProgressWeb(double progress, String status) {
   } catch (_) {}
 }
 
-void registerWebLifecycleListenersPlatform({
+void Function() registerWebLifecycleListenersPlatform({
   required void Function() onFocus,
   required void Function() onBlur,
   required void Function() onHide,
@@ -168,18 +168,35 @@ void registerWebLifecycleListenersPlatform({
   required void Function() onUnload,
 }) {
   try {
-    html.window.addEventListener('focus', (_) => onFocus());
-    html.window.addEventListener('blur', (_) => onBlur());
-    html.document.addEventListener('visibilitychange', (_) {
+    void handleFocus(html.Event _) => onFocus();
+    void handleBlur(html.Event _) => onBlur();
+    void handleVisChange(html.Event _) {
       if (html.document.visibilityState == 'hidden') {
         onHide();
       } else {
         onShow();
       }
-    });
-    html.window.addEventListener('beforeunload', (_) => onUnload());
-    html.window.addEventListener('pagehide', (_) => onUnload());
-  } catch (_) {}
+    }
+    void handleUnload(html.Event _) => onUnload();
+
+    html.window.addEventListener('focus', handleFocus);
+    html.window.addEventListener('blur', handleBlur);
+    html.document.addEventListener('visibilitychange', handleVisChange);
+    html.window.addEventListener('beforeunload', handleUnload);
+    html.window.addEventListener('pagehide', handleUnload);
+
+    return () {
+      try {
+        html.window.removeEventListener('focus', handleFocus);
+        html.window.removeEventListener('blur', handleBlur);
+        html.document.removeEventListener('visibilitychange', handleVisChange);
+        html.window.removeEventListener('beforeunload', handleUnload);
+        html.window.removeEventListener('pagehide', handleUnload);
+      } catch (_) {}
+    };
+  } catch (_) {
+    return () {};
+  }
 }
 
 void downloadFileBytesWeb({

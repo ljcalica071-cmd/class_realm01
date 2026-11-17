@@ -17,6 +17,7 @@ import 'package:class_realm/features/teacher/sub_features/grading/widgets/teache
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
 import 'package:class_realm/features/student/sub_features/academics/widgets/student_exam_review_modal.dart';
+import 'package:class_realm/core/utils/browser_url_helper.dart';
 
 class StudentAssessmentScreen extends StatefulWidget {
   final QuizOrExamModel assessment;
@@ -235,7 +236,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached;
-    if (!isLeavingState || isAwayFromScreen) return false;
+    if (!isLeavingState) return false;
     if (lastRecordedAt != null &&
         now.difference(lastRecordedAt) < const Duration(seconds: 2)) {
       return false;
@@ -270,6 +271,7 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
   AssessmentResultModel? _submittedResult;
   RealtimeChannel? _proctorChannel;
   String? _mySessionId;
+  void Function()? _webLifecycleCleanup;
 
   String get _assessmentLabel =>
       widget.assessment.isExam ? 'examination' : 'quiz';
@@ -287,6 +289,36 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    _webLifecycleCleanup = registerWebLifecycleListeners(
+      onFocus: () {
+        if (_currentStep == 1 && !_isSubmitting) {
+          _isAwayFromScreen = false;
+          _checkConnectivityAndSessionStatus();
+        }
+      },
+      onShow: () {
+        if (_currentStep == 1 && !_isSubmitting) {
+          _isAwayFromScreen = false;
+          _checkConnectivityAndSessionStatus();
+        }
+      },
+      onBlur: () {
+        if (_currentStep == 1 && !_isSubmitting) {
+          _handleTabSwitchViolation('Window / application focus lost (Blur)');
+        }
+      },
+      onHide: () {
+        if (_currentStep == 1 && !_isSubmitting) {
+          _handleTabSwitchViolation('Browser tab switched / minimized');
+        }
+      },
+      onUnload: () {
+        if (_currentStep == 1 && !_isSubmitting) {
+          _saveVault();
+        }
+      },
+    );
 
     // Deterministically shuffle questions per student strictly within each category
     final studentId = AuthRepository.instance.currentUser?.id ?? 'student';
@@ -1183,6 +1215,8 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
 
   @override
   void dispose() {
+    _webLifecycleCleanup?.call();
+    _webLifecycleCleanup = null;
     if (_currentStep == 1 && !_isSubmitting) {
       _saveVault();
     }
@@ -1195,6 +1229,19 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
       controller.dispose();
     }
     super.dispose();
+  }
+
+  void _handleTabSwitchViolation(String event) {
+    if (!mounted || _currentStep != 1 || _isSubmitting) return;
+    _saveVault();
+    final now = DateTime.now();
+    if (_lastViolationRecordedAt != null &&
+        now.difference(_lastViolationRecordedAt!) < const Duration(seconds: 2)) {
+      return;
+    }
+    _isAwayFromScreen = true;
+    _lastViolationRecordedAt = now;
+    _recordViolation(event);
   }
 
   @override
