@@ -8,7 +8,6 @@ import 'package:class_realm/models/attendance_workspace_models.dart';
 import 'package:class_realm/data/repositories/attendance_repository.dart';
 import 'package:class_realm/data/repositories/supabase_attendance_repository.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/features/teacher/sub_features/attendance/utils/sf2_csv_exporter.dart';
 
