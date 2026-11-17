@@ -239,54 +239,10 @@ class ExcelTemplateGenerator {
   <sheetData>
 $rowsBuffer
   </sheetData>
-  <conditionalFormatting sqref="A3:A100">
-    <cfRule type="expression" dxfId="0" priority="1">
-      <formula>AND(NOT(ISBLANK(A3)),NOT(IFERROR(AND(LEN(TRIM(A3))=12,ISNUMBER(VALUE(TRIM(A3))),LEFT(TRIM(A3),1)&lt;&gt;&quot;0&quot;),0)))</formula>
-    </cfRule>
-  </conditionalFormatting>
-  <conditionalFormatting sqref="C3:D100">
-    <cfRule type="expression" dxfId="0" priority="2">
-      <formula>AND(NOT(ISBLANK(C3)),OR(LEN(TRIM(C3))&lt;2,LEN(TRIM(C3))&gt;30,ISNUMBER(FIND(&quot;@&quot;,C3)),ISNUMBER(FIND(&quot;/&quot;,C3)),ISNUMBER(FIND(&quot;0&quot;,C3)),ISNUMBER(FIND(&quot;1&quot;,C3)),ISNUMBER(FIND(&quot;2&quot;,C3)),ISNUMBER(FIND(&quot;3&quot;,C3)),ISNUMBER(FIND(&quot;4&quot;,C3)),ISNUMBER(FIND(&quot;5&quot;,C3)),ISNUMBER(FIND(&quot;6&quot;,C3)),ISNUMBER(FIND(&quot;7&quot;,C3)),ISNUMBER(FIND(&quot;8&quot;,C3)),ISNUMBER(FIND(&quot;9&quot;,C3))))</formula>
-    </cfRule>
-  </conditionalFormatting>
-  <conditionalFormatting sqref="E3:E100">
-    <cfRule type="expression" dxfId="0" priority="3">
-      <formula>AND(NOT(ISBLANK(E3)),OR(LEN(TRIM(E3))&gt;2,AND(LEN(TRIM(E3))=2,RIGHT(TRIM(E3),1)&lt;&gt;&quot;.&quot;),ISNUMBER(FIND(&quot;-&quot;,E3)),ISNUMBER(FIND(&quot;/&quot;,E3)),ISNUMBER(FIND(&quot;0&quot;,E3)),ISNUMBER(FIND(&quot;1&quot;,E3)),ISNUMBER(FIND(&quot;2&quot;,E3)),ISNUMBER(FIND(&quot;3&quot;,E3)),ISNUMBER(FIND(&quot;4&quot;,E3)),ISNUMBER(FIND(&quot;5&quot;,E3)),ISNUMBER(FIND(&quot;6&quot;,E3)),ISNUMBER(FIND(&quot;7&quot;,E3)),ISNUMBER(FIND(&quot;8&quot;,E3)),ISNUMBER(FIND(&quot;9&quot;,E3))))</formula>
-    </cfRule>
-  </conditionalFormatting>
-  <conditionalFormatting sqref="G3:G100">
-    <cfRule type="expression" dxfId="0" priority="4">
-      <formula>AND(NOT(ISBLANK(G3)),NOT(OR(IFERROR(AND(ISNUMBER(G3),DATEDIF(G3,TODAY(),&quot;Y&quot;)&gt;=10,DATEDIF(G3,TODAY(),&quot;Y&quot;)&lt;=50),0),IFERROR(AND(TEXT(DATE(LEFT(G3,4),MID(G3,6,2),RIGHT(G3,2)),&quot;yyyy-mm-dd&quot;)=TRIM(G3),YEAR(TODAY())-LEFT(G3,4)&gt;=10,YEAR(TODAY())-LEFT(G3,4)&lt;=50),0))))</formula>
-    </cfRule>
-  </conditionalFormatting>
-  <dataValidations count="7">
-    <!-- Validation 1: LRN (Numbers only, Exactly 12 Digits, No leading zero) -->
-    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="0" showErrorMessage="1" errorTitle="Invalid LRN" error="LRN must be exactly 12 numeric digits." promptTitle="LRN (12 Digits)" prompt="Enter 12-digit LRN" sqref="A3:A100">
-      <formula1>IFERROR(AND(LEN(TRIM(A3))=12,ISNUMBER(VALUE(TRIM(A3))),LEFT(TRIM(A3),1)&lt;&gt;&quot;0&quot;),0)</formula1>
-    </dataValidation>
-    <!-- Validation 2: Email Address (Valid Format with @ and .) -->
-    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="0" showErrorMessage="1" errorTitle="Invalid Email" error="Please enter a valid email address." promptTitle="Email Address" prompt="Enter student email" sqref="B3:B100">
-      <formula1>AND(ISNUMBER(FIND(&quot;@&quot;,B3)),ISNUMBER(FIND(&quot;.&quot;,B3)),LEN(B3)&gt;=6)</formula1>
-    </dataValidation>
-    <!-- Validation 3: Last Name (2 to 30 characters, no numbers, no @, no /) -->
-    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="0" showErrorMessage="1" errorTitle="Invalid Name" error="Names cannot contain numbers or symbols (2-30 letters)." promptTitle="Last Name" prompt="Enter surname (2-30 letters)" sqref="C3:C100">
-      <formula1>AND(ISERROR(FIND(&quot;@&quot;,C3)),ISERROR(FIND(&quot;/&quot;,C3)),ISERROR(FIND(&quot;0&quot;,C3)),ISERROR(FIND(&quot;1&quot;,C3)),ISERROR(FIND(&quot;2&quot;,C3)),ISERROR(FIND(&quot;3&quot;,C3)),ISERROR(FIND(&quot;4&quot;,C3)),ISERROR(FIND(&quot;5&quot;,C3)),ISERROR(FIND(&quot;6&quot;,C3)),ISERROR(FIND(&quot;7&quot;,C3)),ISERROR(FIND(&quot;8&quot;,C3)),ISERROR(FIND(&quot;9&quot;,C3)),LEN(TRIM(C3))&gt;=2,LEN(TRIM(C3))&lt;=30)</formula1>
-    </dataValidation>
-    <!-- Validation 4: First Name (2 to 30 characters, no numbers, no @, no /) -->
-    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="0" showErrorMessage="1" errorTitle="Invalid Name" error="Names cannot contain numbers or symbols (2-30 letters)." promptTitle="First Name" prompt="Enter given name (2-30 letters)" sqref="D3:D100">
-      <formula1>AND(ISERROR(FIND(&quot;@&quot;,D3)),ISERROR(FIND(&quot;/&quot;,D3)),ISERROR(FIND(&quot;0&quot;,D3)),ISERROR(FIND(&quot;1&quot;,D3)),ISERROR(FIND(&quot;2&quot;,D3)),ISERROR(FIND(&quot;3&quot;,D3)),ISERROR(FIND(&quot;4&quot;,D3)),ISERROR(FIND(&quot;5&quot;,D3)),ISERROR(FIND(&quot;6&quot;,D3)),ISERROR(FIND(&quot;7&quot;,D3)),ISERROR(FIND(&quot;8&quot;,D3)),ISERROR(FIND(&quot;9&quot;,D3)),LEN(TRIM(D3))&gt;=2,LEN(TRIM(D3))&lt;=30)</formula1>
-    </dataValidation>
-    <!-- Validation 5: Optional middle initial, exactly one letter and a period, no digits, no - or / -->
-    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="0" showErrorMessage="1" errorTitle="Invalid Format" error="Use 1 letter and 1 period only (e.g., H.)" promptTitle="Middle Initial" prompt="1 letter and 1 period (e.g., H.)" sqref="E3:E100">
-      <formula1>OR(LEN(TRIM(E3))=0,AND(ISERROR(FIND(&quot;-&quot;,E3)),ISERROR(FIND(&quot;/&quot;,E3)),OR(AND(LEN(TRIM(E3))=1,OR(AND(UPPER(TRIM(E3))&gt;=&quot;A&quot;,UPPER(TRIM(E3))&lt;=&quot;Z&quot;),UPPER(TRIM(E3))=&quot;Ñ&quot;)),AND(LEN(TRIM(E3))=2,OR(AND(UPPER(LEFT(TRIM(E3),1))&gt;=&quot;A&quot;,UPPER(LEFT(TRIM(E3),1))&lt;=&quot;Z&quot;),UPPER(LEFT(TRIM(E3),1))=&quot;Ñ&quot;),RIGHT(TRIM(E3),1)=&quot;.&quot;))))</formula1>
-    </dataValidation>
-    <!-- Validation 6: Gender Dropdown (Male / Female) -->
-    <dataValidation type="list" errorStyle="stop" allowBlank="1" showInputMessage="0" showErrorMessage="1" errorTitle="Invalid Gender" error="Please select 'Male' or 'Female' from the dropdown list." promptTitle="Gender" prompt="Select Male or Female" sqref="F3:F100">
+  <dataValidations count="1">
+    <!-- Validation: Gender Dropdown (Male / Female) -->
+    <dataValidation type="list" allowBlank="1" showInputMessage="0" showErrorMessage="0" sqref="F3:F100">
       <formula1>&quot;Male,Female&quot;</formula1>
-    </dataValidation>
-    <!-- Validation 7: Birthday (Supports YYYY-MM-DD or Excel date; Age 10 to 50) -->
-    <dataValidation type="custom" errorStyle="stop" allowBlank="1" showInputMessage="0" showErrorMessage="1" errorTitle="Invalid Birthday" error="Use YYYY-MM-DD format and age 10-50." promptTitle="Birthday [YYYY-MM-DD]" prompt="YYYY-MM-DD (Age 10-50)" sqref="G3:G100">
-      <formula1>OR(ISBLANK(G3),IFERROR(AND(ISNUMBER(G3),DATEDIF(G3,TODAY(),&quot;Y&quot;)&gt;=10,DATEDIF(G3,TODAY(),&quot;Y&quot;)&lt;=50),0),IFERROR(AND(TEXT(DATE(LEFT(G3,4),MID(G3,6,2),RIGHT(G3,2)),&quot;yyyy-mm-dd&quot;)=TRIM(G3),YEAR(TODAY())-LEFT(G3,4)&gt;=10,YEAR(TODAY())-LEFT(G3,4)&lt;=50),0))</formula1>
     </dataValidation>
   </dataValidations>
 </worksheet>''';
