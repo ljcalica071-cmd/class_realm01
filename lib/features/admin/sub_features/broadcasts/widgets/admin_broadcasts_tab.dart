@@ -15,6 +15,7 @@ import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:class_realm/features/admin/shared/widgets/admin_fixed_dropdown.dart';
 
 class AdminBroadcastsTab extends StatefulWidget {
   const AdminBroadcastsTab({super.key});
@@ -984,74 +985,36 @@ class _AdminBroadcastsTabState extends State<AdminBroadcastsTab> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedAudience,
-                              isDense: true,
-                              items: [
-                                DropdownMenuItem(
-                                  value: 'all',
-                                  enabled: (_userCounts['total'] ?? 0) > 0,
-                                  child: Text(
-                                    'All Users (${_userCounts['total'] ?? 0} active${(_userCounts['total'] ?? 0) == 0 ? ' - No users' : ''})',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: (_userCounts['total'] ?? 0) == 0
-                                          ? Colors.grey
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'teachers',
-                                  enabled: (_userCounts['teachers'] ?? 0) > 0,
-                                  child: Text(
-                                    'Teachers (${_userCounts['teachers'] ?? 0} active${(_userCounts['teachers'] ?? 0) == 0 ? ' - No users' : ''})',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: (_userCounts['teachers'] ?? 0) == 0
-                                          ? Colors.grey
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'students',
-                                  enabled: (_userCounts['students'] ?? 0) > 0,
-                                  child: Text(
-                                    'Students (${_userCounts['students'] ?? 0} active${(_userCounts['students'] ?? 0) == 0 ? ' - No users' : ''})',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: (_userCounts['students'] ?? 0) == 0
-                                          ? Colors.grey
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'parents',
-                                  enabled: (_userCounts['parents'] ?? 0) > 0,
-                                  child: Text(
-                                    'Parents (${_userCounts['parents'] ?? 0} active${(_userCounts['parents'] ?? 0) == 0 ? ' - No users' : ''})',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: (_userCounts['parents'] ?? 0) == 0
-                                          ? Colors.grey
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              onChanged: (v) {
-                                if (v != null) {
-                                  setState(() => _selectedAudience = v);
-                                }
-                              },
-                            ),
+                          child: AdminFixedDropdown<String>(
+                            value: _selectedAudience,
+                            isExpanded: true,
+                            items: [
+                              AdminDropdownItem(
+                                value: 'all',
+                                enabled: (_userCounts['total'] ?? 0) > 0,
+                                label: 'All Users (${_userCounts['total'] ?? 0} active${(_userCounts['total'] ?? 0) == 0 ? ' - No users' : ''})',
+                              ),
+                              AdminDropdownItem(
+                                value: 'teachers',
+                                enabled: (_userCounts['teachers'] ?? 0) > 0,
+                                label: 'Teachers (${_userCounts['teachers'] ?? 0} active${(_userCounts['teachers'] ?? 0) == 0 ? ' - No users' : ''})',
+                              ),
+                              AdminDropdownItem(
+                                value: 'students',
+                                enabled: (_userCounts['students'] ?? 0) > 0,
+                                label: 'Students (${_userCounts['students'] ?? 0} active${(_userCounts['students'] ?? 0) == 0 ? ' - No users' : ''})',
+                              ),
+                              AdminDropdownItem(
+                                value: 'parents',
+                                enabled: (_userCounts['parents'] ?? 0) > 0,
+                                label: 'Parents (${_userCounts['parents'] ?? 0} active${(_userCounts['parents'] ?? 0) == 0 ? ' - No users' : ''})',
+                              ),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) {
+                                setState(() => _selectedAudience = v);
+                              }
+                            },
                           ),
                         ),
                       ],
@@ -2103,46 +2066,32 @@ class _EditAnnouncementDialogState extends State<_EditAnnouncementDialog> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedAudience,
-                          isDense: true,
-                          items: [
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text(
-                                'All Users (${widget.userCounts['total'] ?? 0} active)',
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'teachers',
-                              child: Text(
-                                'Teachers (${widget.userCounts['teachers'] ?? 0} active)',
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'students',
-                              child: Text(
-                                'Students (${widget.userCounts['students'] ?? 0} active)',
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'parents',
-                              child: Text(
-                                'Parents (${widget.userCounts['parents'] ?? 0} active)',
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                              ),
-                            ),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) {
-                              setState(() => _selectedAudience = v);
-                            }
-                          },
-                        ),
+                      child: AdminFixedDropdown<String>(
+                        value: _selectedAudience,
+                        isExpanded: true,
+                        items: [
+                          AdminDropdownItem(
+                            value: 'all',
+                            label: 'All Users (${widget.userCounts['total'] ?? 0} active)',
+                          ),
+                          AdminDropdownItem(
+                            value: 'teachers',
+                            label: 'Teachers (${widget.userCounts['teachers'] ?? 0} active)',
+                          ),
+                          AdminDropdownItem(
+                            value: 'students',
+                            label: 'Students (${widget.userCounts['students'] ?? 0} active)',
+                          ),
+                          AdminDropdownItem(
+                            value: 'parents',
+                            label: 'Parents (${widget.userCounts['parents'] ?? 0} active)',
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() => _selectedAudience = v);
+                          }
+                        },
                       ),
                     ),
                   ],

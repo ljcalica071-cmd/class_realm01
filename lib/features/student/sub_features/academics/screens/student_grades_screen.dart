@@ -7,7 +7,6 @@ import 'package:class_realm/core/utils/deped_grading_engine.dart';
 import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/models/user_model.dart';
-import 'package:class_realm/features/student/sub_features/academics/screens/student_academic_performance_screen.dart';
 import 'package:class_realm/features/student/sub_features/profile/screens/student_settings_screen.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/routes/app_routes.dart';
@@ -232,23 +231,6 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
           'My Grades',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Academic Performance',
-            icon: const Icon(Icons.school_outlined),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  settings: const RouteSettings(
-                    name: AppRoutes.studentPerformance,
-                  ),
-                  builder: (_) => const StudentAcademicPerformanceScreen(),
-                ),
-              );
-            },
-          ),
-        ],
       ),
       body: Center(
         child: ConstrainedBox(

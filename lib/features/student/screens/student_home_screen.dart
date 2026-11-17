@@ -1141,10 +1141,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Container(
+                AppFixedDropdown<String>(
+                  value: activeEnrollment.subjectId,
+                  isExpanded: true,
+                  icon: const Icon(Icons.arrow_drop_down, size: 22),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
-                    vertical: 4,
+                    vertical: 10,
                   ),
                   decoration: BoxDecoration(
                     color: isDark
@@ -1157,34 +1160,23 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                       ),
                     ),
                   ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: activeEnrollment.subjectId,
-                      isExpanded: true,
-                      icon: const Icon(Icons.arrow_drop_down, size: 22),
-                      items: enrollments.map((e) {
-                        return DropdownMenuItem<String>(
-                          value: e.subjectId,
-                          child: Text(
-                            e.subjectName.isNotEmpty
-                                ? e.subjectName
-                                : 'Enrolled Subject',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (newId) {
-                        if (newId != null && newId != _selectedOfferingId) {
-                          setState(() => _selectedOfferingId = newId);
-                        }
-                      },
-                    ),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
                   ),
+                  items: enrollments.map((e) {
+                    return AppDropdownItem<String>(
+                      value: e.subjectId,
+                      label: e.subjectName.isNotEmpty
+                          ? e.subjectName
+                          : 'Enrolled Subject',
+                    );
+                  }).toList(),
+                  onChanged: (newId) {
+                    if (newId != null && newId != _selectedOfferingId) {
+                      setState(() => _selectedOfferingId = newId);
+                    }
+                  },
                 ),
               ],
             ),

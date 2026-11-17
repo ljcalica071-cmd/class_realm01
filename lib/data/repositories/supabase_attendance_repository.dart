@@ -1424,6 +1424,41 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       }
     }
 
+    // 2b. Check class-level suspension for this specific subject offering on selected date
+    bool isClassSuspended = false;
+    String? classSuspensionReason;
+    try {
+      final cachedSuspension = LocalStorageService.getJson(
+        'class_suspended_${subjectOfferingId}_$dateStr',
+      );
+      if (cachedSuspension is Map && cachedSuspension['is_suspended'] == true) {
+        isClassSuspended = true;
+        classSuspensionReason = cachedSuspension['reason']?.toString();
+      } else {
+        final suspendedRow = await _client
+            .from('attendance_records')
+            .select('remarks')
+            .eq('subject_offering_id', subjectOfferingId)
+            .eq('attendance_date', dateStr)
+            .eq('status', 'excused')
+            .ilike('remarks', 'Class Suspended%')
+            .limit(1)
+            .maybeSingle();
+
+        if (suspendedRow != null) {
+          isClassSuspended = true;
+          final rawRemarks = suspendedRow['remarks']?.toString() ?? '';
+          classSuspensionReason = rawRemarks.startsWith('Class Suspended: ')
+              ? rawRemarks.substring('Class Suspended: '.length)
+              : rawRemarks;
+          await LocalStorageService.saveJson(
+            'class_suspended_${subjectOfferingId}_$dateStr',
+            {'is_suspended': true, 'reason': classSuspensionReason},
+          );
+        }
+      }
+    } catch (_) {}
+
     // 3. Load cutoff configuration (falling back to Drift / LocalStorage / defaults 15/15/45/60)
     AttendanceCutoffConfig cutoffConfig = AttendanceCutoffConfig(
       subjectOfferingId: subjectOfferingId,
@@ -1472,6 +1507,8 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
       isScheduledOnDate: isScheduledOnDate,
       isHoliday: isHoliday,
       holidayName: holidayName,
+      isClassSuspended: isClassSuspended,
+      classSuspensionReason: classSuspensionReason,
       startTime: startTime,
       endTime: endTime,
       room: room,

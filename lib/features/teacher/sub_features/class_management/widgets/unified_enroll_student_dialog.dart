@@ -22,6 +22,7 @@ import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/utils/browser_url_helper.dart';
 import 'package:class_realm/core/utils/excel_template_generator.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 
 /// Unified dialog that enables teachers to enroll students either one-by-one or via Excel/CSV import.
 /// Allows selecting Grade Level -> Subject -> Section, and supports pre-selection when triggered
@@ -3467,15 +3468,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 flex: 3,
                 child: _buildSelectorField(
                   label: 'Grade Level',
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _selectedGradeLevel,
+                  child: AppFixedDropdown<String>(
+                    value: _selectedGradeLevel,
                     isExpanded: true,
-                    decoration: _inputDecoration(theme),
-                    hint: const Text('Grade', style: TextStyle(fontSize: 12)),
+                    hintText: 'Grade',
                     items: gradeLevels.map((g) {
-                      return DropdownMenuItem(
+                      return AppDropdownItem(
                         value: g,
-                        child: Text(g, style: const TextStyle(fontSize: 12)),
+                        label: g,
                       );
                     }).toList(),
                     onChanged: (val) {
@@ -3501,6 +3501,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                         _checkResumableBatch();
                       }
                     },
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   ),
                 ),
               ),
@@ -3510,22 +3518,14 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 flex: 5,
                 child: _buildSelectorField(
                   label: 'Subject',
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _selectedSubjectName,
+                  child: AppFixedDropdown<String>(
+                    value: _selectedSubjectName,
                     isExpanded: true,
-                    decoration: _inputDecoration(theme),
-                    hint: const Text(
-                      'Select Subject',
-                      style: TextStyle(fontSize: 12),
-                    ),
+                    hintText: 'Select Subject',
                     items: subjects.map((sub) {
-                      return DropdownMenuItem(
+                      return AppDropdownItem(
                         value: sub,
-                        child: Text(
-                          sub,
-                          style: const TextStyle(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        label: sub,
                       );
                     }).toList(),
                     onChanged: (val) {
@@ -3537,12 +3537,20 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                             val,
                           );
                           _selectedOfferingId = secs.isNotEmpty
-                              ? secs.first['id']?.toString()
-                              : null;
+                                ? secs.first['id']?.toString()
+                                : null;
                         });
                         _checkResumableBatch();
                       }
                     },
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   ),
                 ),
               ),
@@ -3552,34 +3560,31 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
                 flex: 4,
                 child: _buildSelectorField(
                   label: 'Section',
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _selectedOfferingId,
+                  child: AppFixedDropdown<String>(
+                    value: _selectedOfferingId,
                     isExpanded: true,
-                    decoration: _inputDecoration(theme),
-                    hint: const Text(
-                      'Select Section',
-                      style: TextStyle(fontSize: 12),
-                    ),
+                    hintText: 'Select Section',
                     items: sections.map((sec) {
                       final id = sec['id']?.toString() ?? '';
                       final secName =
                           sec['section_name']?.toString() ?? 'Section';
-                      return DropdownMenuItem(
+                      return AppDropdownItem(
                         value: id,
-                        child: Text(
-                          secName,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        label: secName,
                       );
                     }).toList(),
                     onChanged: (val) {
                       setState(() => _selectedOfferingId = val);
                       _checkResumableBatch();
                     },
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   ),
                 ),
               ),
@@ -3606,27 +3611,6 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
         const SizedBox(height: 6),
         child,
       ],
-    );
-  }
-
-  InputDecoration _inputDecoration(ThemeData theme) {
-    return InputDecoration(
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      filled: true,
-      fillColor: theme.colorScheme.surface,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(
-          color: theme.colorScheme.outline.withValues(alpha: 0.3),
-        ),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(
-          color: theme.colorScheme.outline.withValues(alpha: 0.3),
-        ),
-      ),
     );
   }
 
@@ -3792,45 +3776,21 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
           ),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
+        AppFixedDropdownFormField<String>(
           initialValue: _gender,
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: theme.colorScheme.surface,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: theme.colorScheme.outline.withValues(alpha: 0.4),
-              ),
-            ),
-          ),
-          hint: const Text('Select Gender', style: TextStyle(fontSize: 13)),
+          hintText: 'Select Gender',
           validator: (v) =>
               (v == null || v.isEmpty) ? 'Gender is required' : null,
           items: const [
-            DropdownMenuItem(
+            AppDropdownItem(
               value: 'Male',
-              child: Row(
-                children: [
-                  Icon(Icons.male, size: 18, color: Colors.blue),
-                  SizedBox(width: 6),
-                  Text('Male'),
-                ],
-              ),
+              label: 'Male',
+              icon: Icon(Icons.male, size: 18, color: Colors.blue),
             ),
-            DropdownMenuItem(
+            AppDropdownItem(
               value: 'Female',
-              child: Row(
-                children: [
-                  Icon(Icons.female, size: 18, color: Colors.pink),
-                  SizedBox(width: 6),
-                  Text('Female'),
-                ],
-              ),
+              label: 'Female',
+              icon: Icon(Icons.female, size: 18, color: Colors.pink),
             ),
           ],
           onChanged: (v) => setState(() => _gender = v),

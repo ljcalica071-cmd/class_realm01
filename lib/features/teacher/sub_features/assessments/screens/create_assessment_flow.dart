@@ -2543,35 +2543,16 @@ class _CreateAssessmentFlowDialogState
                         ),
                       )
                     else
-                      DropdownButtonFormField<int>(
+                      AppFixedDropdownFormField<int>(
                         initialValue: availableTerms.contains(_termNumber)
                             ? _termNumber
                             : availableTerms.first,
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 11,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: theme.colorScheme.outline.withValues(
-                                alpha: 0.3,
-                              ),
-                            ),
-                          ),
-                        ),
+                        hintText: 'Select Term',
                         items: availableTerms
                             .map(
-                              (t) => DropdownMenuItem<int>(
+                              (t) => AppDropdownItem<int>(
                                 value: t,
-                                child: Text(
-                                  _termLabel(t),
-                                  style: const TextStyle(fontSize: 13),
-                                ),
+                                label: _termLabel(t),
                               ),
                             )
                             .toList(),

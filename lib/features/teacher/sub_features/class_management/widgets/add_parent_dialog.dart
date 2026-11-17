@@ -12,6 +12,7 @@ import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:class_realm/data/repositories/supabase_parent_repository.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 
 class AddParentDialog extends StatefulWidget {
   final VoidCallback onParentCreated;
@@ -1234,46 +1235,23 @@ class _AddParentDialogState extends State<AddParentDialog> {
           ),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
+        AppFixedDropdownFormField<String>(
           initialValue: _relationship,
           autovalidateMode: AutovalidateMode.onUserInteraction,
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: theme.colorScheme.surface,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: theme.colorScheme.outline.withValues(alpha: 0.4),
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: theme.colorScheme.outline.withValues(alpha: 0.4),
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: theme.colorScheme.primary,
-                width: 2,
-              ),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: theme.colorScheme.error),
-            ),
-          ),
+          hintText: 'Select Relationship',
           items: const [
             'Mother',
             'Father',
             'Guardian',
             'Other',
-          ].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+          ]
+              .map(
+                (r) => AppDropdownItem(
+                  value: r,
+                  label: r,
+                ),
+              )
+              .toList(),
           onChanged: (val) {
             setState(() {
               _relationship = val;

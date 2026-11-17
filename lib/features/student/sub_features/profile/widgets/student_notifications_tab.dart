@@ -343,51 +343,45 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
           const SizedBox(width: 10),
           // Subject dropdown
           Expanded(
-            child: Container(
-              height: 42,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: AppFixedDropdown<String?>(
+              key: const Key('student_notif_subject_dropdown'),
+              value: _selectedSubject,
+              isExpanded: true,
+              icon: Icon(
+                LucideIcons.chevronDown,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               decoration: BoxDecoration(
                 color: surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: borderColor),
               ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String?>(
-                  key: const Key('student_notif_subject_dropdown'),
-                  value: _selectedSubject,
-                  isExpanded: true,
-                  borderRadius: BorderRadius.circular(12),
-                  icon: Icon(
-                    LucideIcons.chevronDown,
-                    size: 16,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text(
-                        'All Subjects',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    ..._subjectOptions.map(
-                      (s) => DropdownMenuItem<String?>(
-                        value: s,
-                        child: Text(s, overflow: TextOverflow.ellipsis),
-                      ),
-                    ),
-                  ],
-                  onChanged: (val) => setState(() {
-                    _selectedSubject = val;
-                    _currentPage = 1;
-                  }),
+              items: [
+                const AppDropdownItem<String?>(
+                  value: null,
+                  label: 'All Subjects',
                 ),
-              ),
+                ..._subjectOptions.map(
+                  (s) => AppDropdownItem<String?>(
+                    value: s,
+                    label: s,
+                  ),
+                ),
+              ],
+              onChanged: (val) => setState(() {
+                _selectedSubject = val;
+                _currentPage = 1;
+              }),
             ),
           ),
           Builder(

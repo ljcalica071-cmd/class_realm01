@@ -10,11 +10,10 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/models/subject_catalog_model.dart';
 import 'package:class_realm/core/utils/validators.dart';
 import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
-import 'package:class_realm/widgets/common/app_buttons.dart';
-import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/widgets/common/app_time_picker_field.dart';
 import 'package:class_realm/widgets/common/expandable_instructions_text.dart';
+import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
 class CreateRequirementFlowDialog extends StatefulWidget {
   final VoidCallback onRequirementCreated;
@@ -1250,29 +1249,13 @@ class _CreateRequirementFlowDialogState
                                         ),
                                       )
                                     else
-                                      DropdownButtonFormField<int>(
+                                      AppFixedDropdownFormField<int>(
                                         initialValue: currentTerm,
-                                        decoration: InputDecoration(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 10,
-                                              ),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                        ),
+                                        hintText: 'Select Term',
                                         items: availableTerms.map((term) {
-                                          return DropdownMenuItem<int>(
+                                          return AppDropdownItem<int>(
                                             value: term,
-                                            child: Text(
-                                              _termLabel(term),
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                              ),
-                                            ),
+                                            label: _termLabel(term),
                                           );
                                         }).toList(),
                                         onChanged: (val) {
@@ -1347,35 +1330,19 @@ class _CreateRequirementFlowDialogState
                                         ),
                                       )
                                     else
-                                      DropdownButtonFormField<int?>(
-                                              key: ValueKey(
-                                                'column-$_termNumber-$_maxAvailableSlots-${_occupiedColumns.join(',')}',
-                                              ),
+                                      AppFixedDropdownFormField<int?>(
+                                        key: ValueKey(
+                                          'column---',
+                                        ),
                                         initialValue:
                                             _occupiedColumns.contains(
                                               _gradebookColumnIndex,
                                             )
                                             ? null
                                             : _gradebookColumnIndex,
-                                        isExpanded: true,
-                                        hint: Text(
-                                          _isLoadingOccupied
-                                              ? 'Checking used slots...'
-                                              : 'Select ${widget.isPerformanceTask ? 'PT' : 'WW'} Slot',
-                                          style: const TextStyle(fontSize: 13),
-                                        ),
-                                        decoration: InputDecoration(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 10,
-                                              ),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                        ),
+                                        hintText: _isLoadingOccupied
+                                            ? 'Checking used slots...'
+                                            : 'Select ${widget.isPerformanceTask ? 'PT' : 'WW'} Slot',
                                         items: List.generate(
                                           _maxAvailableSlots,
                                           (i) {
@@ -1386,10 +1353,11 @@ class _CreateRequirementFlowDialogState
                                                 : 'WW';
                                             final isUsed = _occupiedColumns
                                                 .contains(col);
-                                            return DropdownMenuItem<int?>(
+                                            return AppDropdownItem<int?>(
                                               value: col,
+                                              label: '$prefix $col',
                                               enabled: !isUsed,
-                                              child: Row(
+                                              customChild: Row(
                                                 children: [
                                                   Expanded(
                                                     child: Text(

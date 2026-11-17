@@ -15,6 +15,7 @@ import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/features/teacher/sub_features/setup/widgets/teacher_classroom_setup_templates.dart';
 import 'package:class_realm/core/theme/subject_palette.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 
 /// A section the teacher handles for a subject.
 class _ClassSection {
@@ -1427,31 +1428,27 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
 
     final gradeField = _buildLabeledField(
       label: 'Grade Level',
-      field: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+      field: AppFixedDropdown<String>(
+        value: _gradeLevel,
+        isExpanded: true,
+        items: _gradeLevels
+            .map(
+              (g) => AppDropdownItem<String>(
+                value: g,
+                label: g,
+              ),
+            )
+            .toList(),
+        onChanged: (val) {
+          if (val != null) setState(() => _gradeLevel = val);
+        },
         decoration: BoxDecoration(
           border: Border.all(
             color: theme.colorScheme.outline.withValues(alpha: 0.4),
           ),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: _gradeLevel,
-            isExpanded: true,
-            items: _gradeLevels
-                .map(
-                  (g) => DropdownMenuItem(
-                    value: g,
-                    child: Text(g, style: const TextStyle(fontSize: 13)),
-                  ),
-                )
-                .toList(),
-            onChanged: (val) {
-              if (val != null) setState(() => _gradeLevel = val);
-            },
-          ),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
     );
 
@@ -1480,8 +1477,32 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               ],
             )
           : null,
-      field: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+      field: AppFixedDropdown<int>(
+        value: _termsTaught,
+        isExpanded: true,
+        items: const [
+          AppDropdownItem(
+            value: 3,
+            label: '3 Terms (Full Year / Trimester)',
+          ),
+          AppDropdownItem(value: 1, label: '1 Term Only'),
+          AppDropdownItem(value: 2, label: '2 Terms'),
+        ],
+        onChanged: isTermsTaughtLocked
+            ? null
+            : (value) {
+                if (value == null) return;
+                setState(() {
+                  _termsTaught = value;
+                  _termBlock = value == 3
+                      ? '1ST, 2ND, 3RD'
+                      : value == 1
+                      ? 'FIRST TERM'
+                      : '1ST & 2ND';
+                  _termBlockError = null;
+                });
+              },
+        icon: isTermsTaughtLocked ? const SizedBox(width: 16) : null,
         decoration: BoxDecoration(
           color: isTermsTaughtLocked
               ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
@@ -1491,35 +1512,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
           ),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<int>(
-            value: _termsTaught,
-            isExpanded: true,
-            iconEnabledColor: isTermsTaughtLocked ? Colors.transparent : null,
-            items: const [
-              DropdownMenuItem(
-                value: 3,
-                child: Text('3 Terms (Full Year / Trimester)'),
-              ),
-              DropdownMenuItem(value: 1, child: Text('1 Term Only')),
-              DropdownMenuItem(value: 2, child: Text('2 Terms')),
-            ],
-            onChanged: isTermsTaughtLocked
-                ? null
-                : (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _termsTaught = value;
-                      _termBlock = value == 3
-                          ? '1ST, 2ND, 3RD'
-                          : value == 1
-                          ? 'FIRST TERM'
-                          : '1ST & 2ND';
-                      _termBlockError = null;
-                    });
-                  },
-          ),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
     );
 
@@ -1551,8 +1544,29 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
       field: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+          AppFixedDropdown<String>(
+            value: _termBlock.isNotEmpty ? _termBlock : null,
+            isExpanded: true,
+            hintText: 'Select Term Block',
+            items: termBlockOptions
+                .map(
+                  (option) => AppDropdownItem(
+                    value: option.$1,
+                    label: option.$2,
+                  ),
+                )
+                .toList(),
+            onChanged: isTermBlockLocked
+                ? null
+                : (value) {
+                    if (value != null) {
+                      setState(() {
+                        _termBlock = value;
+                        _termBlockError = null;
+                      });
+                    }
+                  },
+            icon: isTermBlockLocked ? const SizedBox(width: 16) : null,
             decoration: BoxDecoration(
               color: isTermBlockLocked
                   ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
@@ -1564,34 +1578,7 @@ class _TeacherClassroomSetupTabState extends State<TeacherClassroomSetupTab> {
               ),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _termBlock.isNotEmpty ? _termBlock : null,
-                isExpanded: true,
-                iconEnabledColor: isTermBlockLocked ? Colors.transparent : null,
-                items: termBlockOptions
-                    .map(
-                      (option) => DropdownMenuItem(
-                        value: option.$1,
-                        child: Text(
-                          option.$2,
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: isTermBlockLocked
-                    ? null
-                    : (value) {
-                        if (value != null) {
-                          setState(() {
-                            _termBlock = value;
-                            _termBlockError = null;
-                          });
-                        }
-                      },
-              ),
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
           const SizedBox(height: 5),
           Text(termBlockNote, style: TextStyle(fontSize: 11, color: muted)),

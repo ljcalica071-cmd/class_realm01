@@ -10,6 +10,7 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:class_realm/features/admin/shared/widgets/admin_fixed_dropdown.dart';
 
 enum TeacherCreationStep { details, otpVerification, success }
 
@@ -1246,22 +1247,18 @@ class _AdminAddTeacherDialogState extends State<AdminAddTeacherDialog>
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     _buildFieldLabel('Gender*', theme),
-                                    DropdownButtonFormField<String>(
+                                    AdminFixedDropdownFormField<String>(
                                       initialValue: _gender,
-                                      isExpanded: true,
-                                      decoration: _inputDecoration(
-                                        theme,
-                                        hintText: 'Select Gender',
-                                        isDark: isDark,
-                                      ),
+                                      hintText: 'Select Gender',
+                                      isDark: isDark,
                                       items: const [
-                                        DropdownMenuItem(
+                                        AdminDropdownItem(
                                           value: 'Male',
-                                          child: Text('Male'),
+                                          label: 'Male',
                                         ),
-                                        DropdownMenuItem(
+                                        AdminDropdownItem(
                                           value: 'Female',
-                                          child: Text('Female'),
+                                          label: 'Female',
                                         ),
                                       ],
                                       onChanged: (v) =>

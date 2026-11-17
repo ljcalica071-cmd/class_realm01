@@ -1099,18 +1099,17 @@ class _EditTeacherProfileDialogState extends State<EditTeacherProfileDialog> {
           ),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          isExpanded: true,
+        AppFixedDropdownFormField<String>(
           initialValue:
               ['Male', 'Female', 'Prefer not to say'].contains(_selectedGender)
               ? _selectedGender
               : 'Female',
           items: const [
-            DropdownMenuItem(value: 'Male', child: Text('Male')),
-            DropdownMenuItem(value: 'Female', child: Text('Female')),
-            DropdownMenuItem(
+            AppDropdownItem(value: 'Male', label: 'Male'),
+            AppDropdownItem(value: 'Female', label: 'Female'),
+            AppDropdownItem(
               value: 'Prefer not to say',
-              child: Text('Prefer not to say'),
+              label: 'Prefer not to say',
             ),
           ],
           onChanged: (val) {

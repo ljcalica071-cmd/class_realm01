@@ -15,3 +15,4 @@ export 'indicators/app_pull_to_refresh.dart'; // AppPullToRefresh
 export 'empty_state/app_empty_state.dart'; // AppEmptyState
 export 'shimmer_loading.dart';
 export 'app_top_toast.dart'; // AppTopToast, AppToastType
+export 'app_fixed_dropdown.dart'; // AppFixedDropdown, AppFixedDropdownFormField, AppDropdownItem

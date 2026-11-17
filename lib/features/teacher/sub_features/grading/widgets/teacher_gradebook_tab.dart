@@ -19,6 +19,7 @@ import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/shared/widgets/app_top_toast.dart';
 import 'package:class_realm/core/utils/deped_ecr_export_service.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 
 /// DepEd-style Strengthened SHS Class Record (Gradebook).
 /// Mirrors the official DepEd grading spreadsheet layout with
@@ -1568,8 +1569,25 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
     return Row(
       children: [
         // Subject selector
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        AppFixedDropdown<String>(
+          value: _selectedSubject,
+          hintText: _isLoadingSubjects ? 'Loading subjects...' : 'Subject',
+          items: _teacherSubjects
+              .map((s) => s['subject_name']?.toString() ?? '')
+              .where((s) => s.isNotEmpty)
+              .toSet()
+              .map((s) => AppDropdownItem<String>(value: s, label: s))
+              .toList(),
+          onChanged: _teacherSubjects.isEmpty
+              ? null
+              : (val) {
+                  if (val == null) return;
+                  final selectedRow = _teacherSubjects.firstWhere(
+                    (subject) => subject['subject_name'] == val,
+                  );
+                  unawaited(_selectOffering(selectedRow));
+                },
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
             color: isDark
                 ? theme.colorScheme.surfaceContainerHighest
@@ -1579,49 +1597,41 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
               color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
             ),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedSubject,
-              isDense: true,
-              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              hint: Text(
-                _isLoadingSubjects ? 'Loading subjects...' : 'Subject',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface,
-              ),
-              items: _teacherSubjects.isEmpty
-                  ? null
-                  : _teacherSubjects
-                      .map((s) => s['subject_name']?.toString() ?? '')
-                      .where((s) => s.isNotEmpty)
-                      .toSet()
-                      .toList()
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                      .toList(),
-              onChanged: _teacherSubjects.isEmpty
-                  ? null
-                  : (val) {
-                      if (val == null) return;
-                      final selectedRow = _teacherSubjects.firstWhere(
-                        (subject) => subject['subject_name'] == val,
-                      );
-                      unawaited(_selectOffering(selectedRow));
-                    },
-            ),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
           ),
         ),
         const SizedBox(width: 8),
         // Section selector
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        AppFixedDropdown<String>(
+          value: _selectedSection,
+          hintText: 'Section',
+          items: (_selectedSubject == null
+                  ? <String>[]
+                  : _teacherSubjects
+                        .where(
+                          (s) => s['subject_name'] == _selectedSubject,
+                        )
+                        .map((s) => s['section_name']?.toString() ?? '')
+                        .where((s) => s.isNotEmpty)
+                        .toSet()
+                        .toList())
+              .map((s) => AppDropdownItem<String>(value: s, label: s))
+              .toList(),
+          onChanged: (_selectedSubject == null || _teacherSubjects.isEmpty)
+              ? null
+              : (val) {
+                  if (val == null) return;
+                  final selectedRow = _teacherSubjects.firstWhere(
+                    (subject) =>
+                        subject['subject_name'] == _selectedSubject &&
+                        subject['section_name'] == val,
+                  );
+                  unawaited(_selectOffering(selectedRow));
+                },
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
             color: isDark
                 ? theme.colorScheme.surfaceContainerHighest
@@ -1631,59 +1641,10 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
               color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
             ),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedSection,
-              isDense: true,
-              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              hint: Text(
-                'Section',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface,
-              ),
-              items:
-                  (_selectedSubject == null
-                          ? <String>[]
-                          : _teacherSubjects
-                                .where(
-                                  (s) => s['subject_name'] == _selectedSubject,
-                                )
-                                .map((s) => s['section_name']?.toString() ?? '')
-                                .where((s) => s.isNotEmpty)
-                                .toSet()
-                                .toList())
-                      .isEmpty
-                      ? null
-                      : (_teacherSubjects
-                            .where(
-                              (s) => s['subject_name'] == _selectedSubject,
-                            )
-                            .map((s) => s['section_name']?.toString() ?? '')
-                            .where((s) => s.isNotEmpty)
-                            .toSet()
-                            .toList())
-                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                          .toList(),
-              onChanged: (_selectedSubject == null || _teacherSubjects.isEmpty)
-                  ? null
-                  : (val) {
-                      if (val == null) return;
-                      final selectedRow = _teacherSubjects.firstWhere(
-                        (subject) =>
-                            subject['subject_name'] == _selectedSubject &&
-                            subject['section_name'] == val,
-                      );
-                      unawaited(_selectOffering(selectedRow));
-                    },
-            ),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
           ),
         ),
         const SizedBox(width: 8),

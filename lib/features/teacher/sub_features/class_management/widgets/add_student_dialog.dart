@@ -7,6 +7,7 @@ import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 import 'package:class_realm/core/utils/validators.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 
 class AddStudentDialog extends StatefulWidget {
   final VoidCallback onStudentCreated;
@@ -458,7 +459,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
           ),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
+        AppFixedDropdownFormField<String>(
           initialValue: _gender,
           autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: InputDecoration(
@@ -503,35 +504,19 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
             ),
             errorStyle: TextStyle(fontSize: 12, color: theme.colorScheme.error),
           ),
-          hint: Text(
-            'Select Gender',
-            style: TextStyle(
-              fontSize: 14,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-            ),
-          ),
+          hintText: 'Select Gender',
           validator: (v) =>
               (v == null || v.isEmpty) ? 'Gender is required.' : null,
           items: const [
-            DropdownMenuItem(
+            AppDropdownItem(
               value: 'Male',
-              child: Row(
-                children: [
-                  Icon(Icons.male, size: 20, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Text('Male'),
-                ],
-              ),
+              label: 'Male',
+              icon: Icon(Icons.male, size: 20, color: Colors.blue),
             ),
-            DropdownMenuItem(
+            AppDropdownItem(
               value: 'Female',
-              child: Row(
-                children: [
-                  Icon(Icons.female, size: 20, color: Colors.pink),
-                  SizedBox(width: 8),
-                  Text('Female'),
-                ],
-              ),
+              label: 'Female',
+              icon: Icon(Icons.female, size: 20, color: Colors.pink),
             ),
           ],
           onChanged: (v) => setState(() => _gender = v),
@@ -553,7 +538,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
           ),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
+        AppFixedDropdownFormField<String>(
           initialValue: _selectedSubjectId,
           autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: InputDecoration(
@@ -587,13 +572,12 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
               borderSide: BorderSide(color: AppTheme.catRed, width: 1.5),
             ),
           ),
-          hint: const Text('Select a subject/section to enroll'),
+          hintText: 'Select a subject/section to enroll',
           items: widget.teacherSubjects.map((subject) {
-            return DropdownMenuItem<String>(
+            return AppDropdownItem<String>(
               value: subject['id'].toString(),
-              child: Text(
-                '${subject['subject_name']} - ${subject['section_name'] ?? 'No Section'}',
-              ),
+              label:
+                  '${subject['subject_name']} - ${subject['section_name'] ?? 'No Section'}',
             );
           }).toList(),
           onChanged: (val) => setState(() => _selectedSubjectId = val),

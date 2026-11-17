@@ -474,9 +474,11 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
               ),
               if (_viewMode != ScheduleViewMode.mySchedule &&
                   _availableMasterSections.isNotEmpty)
-                Container(
-                  height: 38,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                AppFixedDropdown<String?>(
+                  value: _sectionFilter,
+                  icon: const Icon(LucideIcons.chevronDown, size: 16),
+                  hintText: 'All Sections',
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surface,
                     borderRadius: BorderRadius.circular(8),
@@ -485,49 +487,26 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                           theme.colorScheme.onSurface.withValues(alpha: 0.15),
                     ),
                   ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String?>(
-                      value: _sectionFilter,
-                      icon: const Icon(LucideIcons.chevronDown, size: 16),
-                      hint: Row(
-                        children: [
-                          Icon(
-                            LucideIcons.filter,
-                            size: 14,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'All Sections',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  items: [
+                    AppDropdownItem<String?>(
+                      value: null,
+                      label: 'All Sections',
+                      icon: Icon(
+                        LucideIcons.filter,
+                        size: 14,
+                        color: theme.colorScheme.primary,
                       ),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text(
-                            'All Sections',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                        ),
-                        ..._availableMasterSections.map(
-                          (sec) => DropdownMenuItem<String?>(
-                            value: sec,
-                            child: Text(
-                              'Section: $sec',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        ),
-                      ],
-                      onChanged: (val) =>
-                          setState(() => _sectionFilter = val),
                     ),
-                  ),
+                    ..._availableMasterSections.map(
+                      (sec) => AppDropdownItem<String?>(
+                        value: sec,
+                        label: 'Section: $sec',
+                      ),
+                    ),
+                  ],
+                  onChanged: (val) =>
+                      setState(() => _sectionFilter = val),
                 ),
             ],
           ),
@@ -1535,20 +1514,16 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                     Row(
                       children: [
                         Expanded(
-                          child: DropdownButtonFormField<int>(
+                          child: AppFixedDropdownFormField<int>(
                             initialValue: selectedGrade,
                             decoration: const InputDecoration(
                               labelText: 'GRADE LEVEL',
                               border: OutlineInputBorder(),
                             ),
-                            isExpanded: true,
                             items: availableGrades.map((g) {
-                              return DropdownMenuItem(
+                              return AppDropdownItem<int>(
                                 value: g,
-                                child: Text(
-                                  'Grade $g',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                label: 'Grade $g',
                               );
                             }).toList(),
                             onChanged: (val) {
@@ -1596,7 +1571,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         const SizedBox(width: 12),
                         // Section Selector
                         Expanded(
-                          child: DropdownButtonFormField<String>(
+                          child: AppFixedDropdownFormField<String>(
                             key: ValueKey('section_selector_${selectedGrade}_$selectedSubjectName'),
                             initialValue: currentSections.any((sec) => sec['id'].toString() == selectedOfferingId)
                                 ? selectedOfferingId
@@ -1607,17 +1582,13 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                               labelText: 'SECTION',
                               border: OutlineInputBorder(),
                             ),
-                            isExpanded: true,
                             items: currentSections.map((sec) {
                               final id = sec['id'].toString();
                               final name =
                                   sec['section_name']?.toString() ?? 'Section';
-                              return DropdownMenuItem<String>(
+                              return AppDropdownItem<String>(
                                 value: id,
-                                child: Text(
-                                  name,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                label: name,
                               );
                             }).toList(),
                             onChanged: (val) {
@@ -1658,7 +1629,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                     const SizedBox(height: 16),
 
                     // Subject Selector
-                    DropdownButtonFormField<String>(
+                    AppFixedDropdownFormField<String>(
                       key: ValueKey('subject_selector_$selectedGrade'),
                       initialValue: currentSubjects.contains(selectedSubjectName)
                           ? selectedSubjectName
@@ -1669,11 +1640,10 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         labelText: 'SUBJECT',
                         border: OutlineInputBorder(),
                       ),
-                      isExpanded: true,
                       items: currentSubjects.map((subName) {
-                        return DropdownMenuItem<String>(
+                        return AppDropdownItem<String>(
                           value: subName,
-                          child: Text(subName, overflow: TextOverflow.ellipsis),
+                          label: subName,
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -1714,31 +1684,29 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                     const SizedBox(height: 16),
 
                     // Day of Week
-                    DropdownButtonFormField<String>(
+                    AppFixedDropdownFormField<String>(
                       initialValue: selectedDay,
                       decoration: const InputDecoration(
                         labelText: 'DAY OF WEEK',
                         border: OutlineInputBorder(),
                       ),
-                      items:
-                          const [
-                                'Monday',
-                                'Tuesday',
-                                'Wednesday',
-                                'Thursday',
-                                'Friday',
-                                'Saturday',
-                                'Sunday',
-                              ]
-                              .map(
-                                (d) =>
-                                    DropdownMenuItem(value: d, child: Text(d)),
-                              )
-                              .toList(),
-                      onChanged: (v) => setModalState(() {
-                        selectedDay = v!;
-                        clashErrorMessage = null;
-                      }),
+                      items: const [
+                        'Monday',
+                        'Tuesday',
+                        'Wednesday',
+                        'Thursday',
+                        'Friday',
+                        'Saturday',
+                        'Sunday',
+                      ].map((d) => AppDropdownItem<String>(value: d, label: d)).toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setModalState(() {
+                            selectedDay = v;
+                            clashErrorMessage = null;
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 16),
 

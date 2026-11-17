@@ -18,6 +18,7 @@ import 'package:class_realm/data/repositories/supabase_learning_material_reposit
 
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 
 class TeacherLearningMaterialsTab extends StatefulWidget {
   final List<LearningMaterialModel>? materials;
@@ -2054,20 +2055,21 @@ class _TeacherLearningMaterialsTabState
       crossAxisAlignment: WrapCrossAlignment.end,
       children: [
         // 1. Grade Level Dropdown
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Grade Level',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Grade Level',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+              ),
+            ),
+            const SizedBox(height: 4),
+            availableGrades.isEmpty
+                ? Container(
                     height: 38,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     decoration: BoxDecoration(
@@ -2079,100 +2081,100 @@ class _TeacherLearningMaterialsTabState
                         ),
                       ),
                     ),
-                    child: availableGrades.isEmpty
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                LucideIcons.graduationCap,
-                                size: 13.5,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Grade Level',
-                                style: TextStyle(
-                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Icon(
-                                LucideIcons.chevronDown,
-                                size: 14,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                              ),
-                            ],
-                          )
-                        : DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              value: availableGrades.contains(_selectedGrade)
-                                  ? _selectedGrade
-                                  : availableGrades.first,
-                              dropdownColor: theme.colorScheme.surface,
-                              icon: Icon(
-                                LucideIcons.chevronDown,
-                                size: 14,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                              ),
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12.5,
-                              ),
-                              isDense: true,
-                              items: availableGrades.map((g) {
-                                return DropdownMenuItem<int>(
-                                  value: g,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        LucideIcons.graduationCap,
-                                        size: 13.5,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text('Grade $g'),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val == null || val == _selectedGrade) return;
-                                setState(() {
-                                  _selectedGrade = val;
-                                  final subs = _availableSubjects;
-                                  _selectedSubject = subs.isNotEmpty ? subs.first : null;
-                                  final secs = _availableSections;
-                                  _selectedOffering = secs.isNotEmpty ? secs.first : null;
-                                  _folderStack.clear();
-                                  _currentFolder = null;
-                                });
-                                _loadFolderContents();
-                              },
-                            ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.graduationCap,
+                          size: 13.5,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Grade Level',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12.5,
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          LucideIcons.chevronDown,
+                          size: 14,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                        ),
+                      ],
+                    ),
+                  )
+                : AppFixedDropdown<int>(
+                    value: availableGrades.contains(_selectedGrade)
+                        ? _selectedGrade
+                        : (availableGrades.isNotEmpty ? availableGrades.first : null),
+                    items: availableGrades.map((g) {
+                      return AppDropdownItem<int>(
+                        value: g,
+                        label: 'Grade $g',
+                        icon: Icon(
+                          LucideIcons.graduationCap,
+                          size: 13.5,
+                          color: theme.colorScheme.primary,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val == null || val == _selectedGrade) return;
+                      setState(() {
+                        _selectedGrade = val;
+                        final subs = _availableSubjects;
+                        _selectedSubject = subs.isNotEmpty ? subs.first : null;
+                        final secs = _availableSections;
+                        _selectedOffering = secs.isNotEmpty ? secs.first : null;
+                        _folderStack.clear();
+                        _currentFolder = null;
+                      });
+                      _loadFolderContents();
+                    },
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.18 : 0.16,
+                        ),
+                      ),
+                    ),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12.5,
+                    ),
+                    icon: Icon(
+                      LucideIcons.chevronDown,
+                      size: 14,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
                   ),
-                ],
-              ),
+          ],
+        ),
 
-              // 2. Subject Dropdown
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Subject',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
+        // 2. Subject Dropdown
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Subject',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+              ),
+            ),
+            const SizedBox(height: 4),
+            availableSubjects.isEmpty
+                ? Container(
                     height: 38,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     decoration: BoxDecoration(
@@ -2184,104 +2186,98 @@ class _TeacherLearningMaterialsTabState
                         ),
                       ),
                     ),
-                    child: availableSubjects.isEmpty
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                LucideIcons.bookOpen,
-                                size: 13.5,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Subject',
-                                style: TextStyle(
-                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Icon(
-                                LucideIcons.chevronDown,
-                                size: 14,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                              ),
-                            ],
-                          )
-                        : DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: availableSubjects.contains(_selectedSubject)
-                                  ? _selectedSubject
-                                  : availableSubjects.first,
-                              dropdownColor: theme.colorScheme.surface,
-                              icon: Icon(
-                                LucideIcons.chevronDown,
-                                size: 14,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                              ),
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12.5,
-                              ),
-                              isDense: true,
-                              items: availableSubjects.map((name) {
-                                return DropdownMenuItem<String>(
-                                  value: name,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        LucideIcons.bookOpen,
-                                        size: 13.5,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      ConstrainedBox(
-                                        constraints: const BoxConstraints(maxWidth: 220),
-                                        child: Text(
-                                          name,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val == null || val == _selectedSubject) return;
-                                setState(() {
-                                  _selectedSubject = val;
-                                  final secs = _availableSections;
-                                  _selectedOffering = secs.isNotEmpty ? secs.first : null;
-                                  _folderStack.clear();
-                                  _currentFolder = null;
-                                });
-                                _loadFolderContents();
-                              },
-                            ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.bookOpen,
+                          size: 13.5,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Subject',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12.5,
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          LucideIcons.chevronDown,
+                          size: 14,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                        ),
+                      ],
+                    ),
+                  )
+                : AppFixedDropdown<String>(
+                    value: availableSubjects.contains(_selectedSubject)
+                        ? _selectedSubject
+                        : (availableSubjects.isNotEmpty ? availableSubjects.first : null),
+                    items: availableSubjects.map((name) {
+                      return AppDropdownItem<String>(
+                        value: name,
+                        label: name,
+                        icon: Icon(
+                          LucideIcons.bookOpen,
+                          size: 13.5,
+                          color: theme.colorScheme.primary,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val == null || val == _selectedSubject) return;
+                      setState(() {
+                        _selectedSubject = val;
+                        final secs = _availableSections;
+                        _selectedOffering = secs.isNotEmpty ? secs.first : null;
+                        _folderStack.clear();
+                        _currentFolder = null;
+                      });
+                      _loadFolderContents();
+                    },
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.18 : 0.16,
+                        ),
+                      ),
+                    ),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12.5,
+                    ),
+                    icon: Icon(
+                      LucideIcons.chevronDown,
+                      size: 14,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
                   ),
-                ],
-              ),
+          ],
+        ),
 
-              // 3. Section Dropdown
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Section',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
+        // 3. Section Dropdown
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Section',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+              ),
+            ),
+            const SizedBox(height: 4),
+            availableSections.isEmpty
+                ? Container(
                     height: 38,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     decoration: BoxDecoration(
@@ -2293,89 +2289,82 @@ class _TeacherLearningMaterialsTabState
                         ),
                       ),
                     ),
-                    child: availableSections.isEmpty
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                LucideIcons.users,
-                                size: 13.5,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Section',
-                                style: TextStyle(
-                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Icon(
-                                LucideIcons.chevronDown,
-                                size: 14,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                              ),
-                            ],
-                          )
-                        : DropdownButtonHideUnderline(
-                            child: DropdownButton<Map<String, dynamic>>(
-                              value: availableSections.contains(_selectedOffering)
-                                  ? _selectedOffering
-                                  : availableSections.first,
-                              dropdownColor: theme.colorScheme.surface,
-                              icon: Icon(
-                                LucideIcons.chevronDown,
-                                size: 14,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                              ),
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12.5,
-                              ),
-                              isDense: true,
-                              items: availableSections.map((offering) {
-                                final secName = _formatSectionName(
-                                  offering['section_name'],
-                                );
-                                return DropdownMenuItem<Map<String, dynamic>>(
-                                  value: offering,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        LucideIcons.users,
-                                        size: 13.5,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      ConstrainedBox(
-                                        constraints: const BoxConstraints(maxWidth: 160),
-                                        child: Text(
-                                          secName,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (newVal) {
-                                if (newVal == null || newVal == _selectedOffering) return;
-                                setState(() {
-                                  _selectedOffering = newVal;
-                                  _folderStack.clear();
-                                  _currentFolder = null;
-                                });
-                                _loadFolderContents();
-                              },
-                            ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.users,
+                          size: 13.5,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Section',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12.5,
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          LucideIcons.chevronDown,
+                          size: 14,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                        ),
+                      ],
+                    ),
+                  )
+                : AppFixedDropdown<Map<String, dynamic>>(
+                    value: availableSections.contains(_selectedOffering)
+                        ? _selectedOffering
+                        : (availableSections.isNotEmpty ? availableSections.first : null),
+                    items: availableSections.map((offering) {
+                      final secName = _formatSectionName(
+                        offering['section_name'],
+                      );
+                      return AppDropdownItem<Map<String, dynamic>>(
+                        value: offering,
+                        label: secName,
+                        icon: Icon(
+                          LucideIcons.users,
+                          size: 13.5,
+                          color: theme.colorScheme.primary,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (newVal) {
+                      if (newVal == null || newVal == _selectedOffering) return;
+                      setState(() {
+                        _selectedOffering = newVal;
+                        _folderStack.clear();
+                        _currentFolder = null;
+                      });
+                      _loadFolderContents();
+                    },
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: isDark ? 0.18 : 0.16,
+                        ),
+                      ),
+                    ),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12.5,
+                    ),
+                    icon: Icon(
+                      LucideIcons.chevronDown,
+                      size: 14,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
                   ),
-                ],
-              ),
+          ],
+        ),
             ],
           );
 

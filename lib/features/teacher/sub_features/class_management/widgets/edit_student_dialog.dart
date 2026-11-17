@@ -317,12 +317,12 @@ class _EditStudentDialogState extends State<EditStudentDialog> {
   }
 
   Widget _buildGenderField() {
-    return DropdownButtonFormField<String>(
+    return AppFixedDropdownFormField<String>(
       initialValue: _gender,
       decoration: const InputDecoration(labelText: 'Gender *'),
       items: const [
-        DropdownMenuItem(value: 'Male', child: Text('Male')),
-        DropdownMenuItem(value: 'Female', child: Text('Female')),
+        AppDropdownItem(value: 'Male', label: 'Male'),
+        AppDropdownItem(value: 'Female', label: 'Female'),
       ],
       validator: (value) => value == null ? 'Gender is required' : null,
       onChanged: (value) => setState(() => _gender = value),

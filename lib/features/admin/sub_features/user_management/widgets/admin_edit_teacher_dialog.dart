@@ -8,6 +8,7 @@ import 'package:class_realm/widgets/common/app_buttons.dart';
 import 'package:class_realm/widgets/common/app_modals.dart';
 import 'package:class_realm/widgets/common/app_text_field.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
+import 'package:class_realm/features/admin/shared/widgets/admin_fixed_dropdown.dart';
 
 class AdminEditTeacherDialog extends StatefulWidget {
   final UserModel teacher;
@@ -291,27 +292,17 @@ class _AdminEditTeacherDialogState extends State<AdminEditTeacherDialog> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            DropdownButtonFormField<String>(
+                            AdminFixedDropdownFormField<String>(
                               initialValue: _gender,
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 12,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
+                              hintText: 'Select Gender',
                               items: const [
-                                DropdownMenuItem(
+                                AdminDropdownItem(
                                   value: 'Male',
-                                  child: Text('Male'),
+                                  label: 'Male',
                                 ),
-                                DropdownMenuItem(
+                                AdminDropdownItem(
                                   value: 'Female',
-                                  child: Text('Female'),
+                                  label: 'Female',
                                 ),
                               ],
                               onChanged: (v) => setState(() => _gender = v),

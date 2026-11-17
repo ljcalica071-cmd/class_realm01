@@ -479,6 +479,8 @@ class AttendanceScheduleStatus {
   final bool isScheduledOnDate;
   final bool isHoliday;
   final String? holidayName;
+  final bool isClassSuspended;
+  final String? classSuspensionReason;
   final String? startTime; // HH:mm:ss or HH:mm
   final String? endTime;
   final String? room;
@@ -489,6 +491,8 @@ class AttendanceScheduleStatus {
     required this.isScheduledOnDate,
     this.isHoliday = false,
     this.holidayName,
+    this.isClassSuspended = false,
+    this.classSuspensionReason,
     this.startTime,
     this.endTime,
     this.room,
@@ -496,9 +500,18 @@ class AttendanceScheduleStatus {
   });
 
   bool get isLockedByDefault =>
-      isHoliday || !hasPlottedScheduleAnyDay || !isScheduledOnDate;
+      isHoliday ||
+      isClassSuspended ||
+      !hasPlottedScheduleAnyDay ||
+      !isScheduledOnDate;
 
   String? get lockReason {
+    if (isClassSuspended) {
+      return classSuspensionReason != null &&
+              classSuspensionReason!.trim().isNotEmpty
+          ? 'Class Suspended: $classSuspensionReason — Attendance scans are excused for this session.'
+          : 'Class Suspended — Attendance scans are excused for this session.';
+    }
     if (isHoliday) {
       return holidayName != null && holidayName!.trim().isNotEmpty
           ? 'School Holiday: $holidayName — Attendance scans are locked for this date.'

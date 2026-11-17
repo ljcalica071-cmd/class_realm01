@@ -6,3 +6,4 @@ export 'package:class_realm/features/admin/sub_features/profile/widgets/admin_pr
 export 'package:class_realm/features/admin/shared/widgets/admin_sidebar.dart';
 export 'package:class_realm/features/admin/shared/widgets/admin_stat_card.dart';
 export 'package:class_realm/features/admin/shared/widgets/admin_topbar.dart';
+export 'package:class_realm/features/admin/shared/widgets/admin_fixed_dropdown.dart';

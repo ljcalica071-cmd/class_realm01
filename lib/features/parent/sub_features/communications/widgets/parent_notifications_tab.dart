@@ -308,63 +308,41 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _selectedChildId ?? 'ALL',
+                        child: AppFixedDropdown<String>(
+                          value: _selectedChildId ?? 'ALL',
+                          isExpanded: true,
                           icon: const Icon(LucideIcons.chevronDown, size: 16),
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
                             color: theme.colorScheme.onSurface,
                           ),
-                          dropdownColor: isDark
-                              ? const Color(0xFF263040)
-                              : Colors.white,
-                          decoration: InputDecoration(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 0,
-                            ),
-                            filled: true,
-                            fillColor: isDark
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
                                 ? const Color(0xFF1E293B)
                                 : Colors.white,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.1)
-                                    : const Color(0xFFE2E8F0),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.1)
-                                    : const Color(0xFFE2E8F0),
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.primary,
-                                width: 1.5,
-                              ),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.1)
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                           items: [
-                            const DropdownMenuItem<String>(
+                            const AppDropdownItem<String>(
                               value: 'ALL',
-                              child: Text('All Children'),
+                              label: 'All Children',
                             ),
                             ..._linkedChildren.map(
-                              (c) => DropdownMenuItem<String>(
+                              (c) => AppDropdownItem<String>(
                                 value: c.id,
-                                child: Text(
-                                  c.fullName.isNotEmpty ? c.fullName : 'Learner',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                label: c.fullName.isNotEmpty
+                                    ? c.fullName
+                                    : 'Learner',
                               ),
                             ),
                           ],
@@ -574,51 +552,45 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
 
           // Subject dropdown filter
           Expanded(
-            child: Container(
-              height: 42,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: AppFixedDropdown<String?>(
+              key: const Key('parent_notif_subject_dropdown'),
+              value: _selectedSubject,
+              isExpanded: true,
+              icon: Icon(
+                LucideIcons.chevronDown,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               decoration: BoxDecoration(
                 color: surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: borderColor),
               ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String?>(
-                  key: const Key('parent_notif_subject_dropdown'),
-                  value: _selectedSubject,
-                  isExpanded: true,
-                  borderRadius: BorderRadius.circular(12),
-                  icon: Icon(
-                    LucideIcons.chevronDown,
-                    size: 16,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text(
-                        'All Subjects',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    ..._subjectOptions.map(
-                      (s) => DropdownMenuItem<String?>(
-                        value: s,
-                        child: Text(s, overflow: TextOverflow.ellipsis),
-                      ),
-                    ),
-                  ],
-                  onChanged: (val) => setState(() {
-                    _selectedSubject = val;
-                    _currentPage = 1;
-                  }),
+              items: [
+                const AppDropdownItem<String?>(
+                  value: null,
+                  label: 'All Subjects',
                 ),
-              ),
+                ..._subjectOptions.map(
+                  (s) => AppDropdownItem<String?>(
+                    value: s,
+                    label: s,
+                  ),
+                ),
+              ],
+              onChanged: (val) => setState(() {
+                _selectedSubject = val;
+                _currentPage = 1;
+              }),
             ),
           ),
 

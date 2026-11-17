@@ -22,6 +22,7 @@ import 'package:class_realm/core/services/local_storage_service.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 import 'package:class_realm/shared/services/in_app_notification_service.dart';
 import 'package:class_realm/routes/app_routes.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({
@@ -1407,88 +1408,118 @@ class _SchoolYearSelectorWidgetState extends State<SchoolYearSelectorWidget> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final selectedSy = _selectedSy;
+
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E293B) : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isDark ? Colors.white12 : const Color(0xFFCBD5E1),
-          ),
-          boxShadow: isDark
-              ? []
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+      child: AppFixedDropdown<String>(
+        value: selectedSy,
+        items: _schoolYears.map((sy) {
+          final isCurrent = sy == _schoolYears.last;
+          return AppDropdownItem<String>(
+            value: sy,
+            label: 'S.Y. $sy ${isCurrent ? "(Current Active)" : "(Archived)"}',
+            customChild: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: isCurrent
+                        ? const Color(0xFF16A34A)
+                        : const Color(0xFFEAB308),
+                    shape: BoxShape.circle,
                   ),
-                ],
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: _selectedSy,
-            isDense: true,
-            padding: EdgeInsets.zero,
-            icon: Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Icon(
-                LucideIcons.chevronDown,
-                color: isDark ? Colors.white70 : const Color(0xFF475569),
-                size: 16,
-              ),
-            ),
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white : const Color(0xFF0F172A),
-            ),
-            items: _schoolYears.map((sy) {
-              final isCurrent = sy == _schoolYears.last;
-              return DropdownMenuItem<String>(
-                value: sy,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: isCurrent
-                            ? const Color(0xFF16A34A)
-                            : const Color(0xFFEAB308),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    Text(
-                      'S.Y. $sy ${isCurrent ? "(Current Active)" : "(Archived)"}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: isCurrent
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        color: isCurrent
-                            ? (isDark ? Colors.white : const Color(0xFF0F172A))
-                            : (isDark
-                                  ? Colors.white70
-                                  : const Color(0xFF64748B)),
-                      ),
-                    ),
-                  ],
                 ),
-              );
-            }).toList(),
-            onChanged: (val) {
-              if (val != null) {
-                setState(() => _selectedSy = val);
+                Text(
+                  'S.Y. $sy ${isCurrent ? "(Current Active)" : "(Archived)"}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                    color: isCurrent
+                        ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                        : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+        onChanged: (val) {
+          if (val != null) {
+            setState(() => _selectedSy = val);
+          }
+        },
+        builder: (context, controller, selectedItem) {
+          final isOpen = controller.isOpen;
+          final isCurrent = selectedSy == _schoolYears.last;
+
+          return InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
               }
             },
-          ),
-        ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isOpen
+                      ? theme.colorScheme.primary
+                      : (isDark ? Colors.white12 : const Color(0xFFCBD5E1)),
+                  width: isOpen ? 1.4 : 1.0,
+                ),
+                boxShadow: isDark
+                    ? []
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: isCurrent
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFEAB308),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  Text(
+                    'S.Y. $selectedSy ${isCurrent ? "(Current Active)" : "(Archived)"}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    isOpen ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                    size: 16,
+                    color: isDark ? Colors.white70 : const Color(0xFF475569),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

@@ -320,7 +320,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
     if (sched == null) return false;
 
-    if (sched.isHoliday) return true; // Holidays stay strictly locked
+    if (sched.isHoliday || sched.isClassSuspended) return true; // Holidays and suspensions stay strictly locked
 
     if (!sched.hasPlottedScheduleAnyDay) {
       // Strictly locked if no schedule is set in My Schedule at all
@@ -1034,7 +1034,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       ]);
       final rosterResult = results[0] as AttendanceRosterResult;
       final scheduleStatus = results[1] as AttendanceScheduleStatus;
-      if (scheduleStatus.isHoliday || !scheduleStatus.hasPlottedScheduleAnyDay) {
+      if (scheduleStatus.isHoliday ||
+          scheduleStatus.isClassSuspended ||
+          !scheduleStatus.hasPlottedScheduleAnyDay) {
         return;
       }
       if (scheduleStatus.isLockedByDefault && rosterResult.records.isEmpty) {
@@ -1449,21 +1451,26 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     if (_isEffectivelyLocked) {
       _triggerScanHaptic(pattern: 'error');
       final isHoliday = _scheduleStatus?.isHoliday == true;
+      final isSuspended = _scheduleStatus?.isClassSuspended == true;
       setState(() {
         _inlineNotice = _WorkspaceInlineNotice(
-          tone: isHoliday
+          tone: (isHoliday || isSuspended)
               ? _WorkspaceNoticeTone.error
               : _WorkspaceNoticeTone.warning,
 
-          title: isHoliday
-              ? '[ SCHOOL HOLIDAY ] NO CLASS — Class Suspended'
-              : '[ SCHEDULE LOCKED ] NO CLASS TODAY',
+          title: isSuspended
+              ? '[ CLASS SUSPENDED ] NO CLASS — Class Suspended'
+              : (isHoliday
+                  ? '[ SCHOOL HOLIDAY ] NO CLASS — School Holiday'
+                  : '[ SCHEDULE LOCKED ] NO CLASS TODAY'),
 
           message:
               _scheduleStatus?.lockReason ??
               'Enable Make-Up Class Override to record RFID scans for this unscheduled session.',
 
-          code: isHoliday ? 'HOLIDAY_LOCKED' : 'SCHEDULE_LOCKED',
+          code: isSuspended
+              ? 'CLASS_SUSPENDED'
+              : (isHoliday ? 'HOLIDAY_LOCKED' : 'SCHEDULE_LOCKED'),
 
           scannedUid: scannedUid,
         );
@@ -1620,8 +1627,11 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             case 'NO_SCHEDULE_TODAY':
               rejectTitle = '[ SCHEDULE LOCKED ] NO CLASS TODAY';
               break;
+            case 'CLASS_SUSPENDED':
+              rejectTitle = '[ CLASS SUSPENDED ] NO CLASS — Class Suspended';
+              break;
             case 'HOLIDAY_LOCKED':
-              rejectTitle = '[ SCHOOL HOLIDAY ] NO CLASS — Class Suspended';
+              rejectTitle = '[ SCHOOL HOLIDAY ] NO CLASS — School Holiday';
               break;
             case 'CROSS_SECTION_TAP':
               rejectTitle =
@@ -1955,6 +1965,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
         holidayName: prev?.holidayName,
 
+        isClassSuspended: prev?.isClassSuspended ?? false,
+
+        classSuspensionReason: prev?.classSuspensionReason,
+
         startTime: prev?.startTime,
 
         endTime: prev?.endTime,
@@ -1981,60 +1995,134 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     final readableDate = _formatReadableDate(_attendanceSelectedDate);
     final dateStr = _formatDate(_attendanceSelectedDate);
 
-    final reason = await _SuspendClassDialog.show(
+    final result = await _SuspendClassDialog.show(
       context,
       readableDate: readableDate,
       subjectLabel: _selectedSubjectLabel,
     );
 
-    if (reason == null || reason.trim().isEmpty || !mounted) return;
-    final cleanReason = reason.trim();
+    if (result == null || result.reason.trim().isEmpty || !mounted) return;
+    final cleanReason = result.reason.trim();
+    final allMyClassesToday = result.allMyClassesToday;
 
     try {
       final client = Supabase.instance.client;
+      final teacherId = AuthRepository.instance.currentUser?.id;
+      final nowIso = DateTime.now().toUtc().toIso8601String();
 
-      // 1. Upsert into school_holidays so RFID & EOD Auto-Absent are strictly blocked for this date
-      await client.from('school_holidays').upsert(
-        {
-          'holiday_date': dateStr,
-          'holiday_name': cleanReason,
-          'is_active': true,
-        },
-        onConflict: 'holiday_date',
-      );
+      // Determine target offerings based on selected scope
+      final targetOfferings = <Map<String, dynamic>>[];
+      if (allMyClassesToday) {
+        final seenIds = <String>{};
+        for (final s in _teacherSubjects) {
+          final id = s['id']?.toString();
+          if (id != null && id.isNotEmpty && !seenIds.contains(id)) {
+            seenIds.add(id);
+            targetOfferings.add(s);
+          }
+        }
+        if (targetOfferings.isEmpty && _currentOffering != null) {
+          targetOfferings.add(_currentOffering!);
+        }
+      } else {
+        if (_currentOffering != null) {
+          targetOfferings.add(_currentOffering!);
+        } else {
+          targetOfferings.add({
+            'id': _selectedSubjectId!,
+            'subject_name': _selectedSubjectName ?? 'Subject',
+            'section_name':
+                _currentOffering?['section_name']?.toString() ?? 'Section',
+          });
+        }
+      }
 
-      // 2. Clear any attendance records already saved for this date
-      await _repository.clearAttendanceForDate(
-        subjectOfferingId: _selectedSubjectId!,
-        date: _attendanceSelectedDate,
-      );
+      for (final offering in targetOfferings) {
+        final offeringId = offering['id']?.toString() ?? '';
+        if (offeringId.isEmpty) continue;
+        final subjectName = offering['subject_name']?.toString() ?? 'Subject';
+        final sectionName = offering['section_name']?.toString() ?? 'Section';
 
-      // 3. Ensure notification to Students & Parents exists (if not already inserted by DB trigger)
-      final recentCheck = await client
-          .from('notifications')
-          .select('id')
-          .ilike('title', '%$cleanReason%')
-          .gte(
-            'created_at',
-            DateTime.now()
-                .toUtc()
-                .subtract(const Duration(minutes: 2))
-                .toIso8601String(),
-          )
-          .limit(1);
+        // 1. Clear any attendance records already saved for this offering & date
+        await _repository.clearAttendanceForDate(
+          subjectOfferingId: offeringId,
+          date: _attendanceSelectedDate,
+        );
 
-      if ((recentCheck as List).isEmpty) {
-        await client.from('notifications').insert({
-          'title': 'No Classes / Class Suspension: $cleanReason',
-          'message':
-              'Classes and RFID attendance are suspended on $readableDate ($cleanReason). All students are excused and no auto-absent will be recorded for this date.',
-          'notification_type': 'announcement',
-          'target_audience': 'students_parents',
-          'is_archived': false,
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-          'subject_offering_id': _selectedSubjectId,
-          'scope': 'class',
-        });
+        // 2. Fetch enrolled students for this offering
+        final enrollments = await client
+            .from('student_enrollments')
+            .select('student_id')
+            .eq('subject_offering_id', offeringId);
+        final studentIds = (enrollments as List)
+            .map((e) => e['student_id']?.toString().trim() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet();
+
+        // 3. Mark all enrolled students as excused with suspension remarks
+        if (studentIds.isNotEmpty) {
+          final attendanceRows = studentIds.map((sid) => {
+            'student_id': sid,
+            'subject_offering_id': offeringId,
+            'attendance_date': dateStr,
+            'status': 'excused',
+            'remarks': 'Class Suspended: $cleanReason',
+            'recording_method': 'Manual',
+            'recorded_by': teacherId,
+            'created_at': nowIso,
+            'updated_at': nowIso,
+          }).toList();
+
+          await client.from('attendance_records').upsert(
+            attendanceRows,
+            onConflict: 'student_id, subject_offering_id, attendance_date',
+          );
+
+          // 4. Query linked parents for targeted notification
+          final parentLinks = await client
+              .from('parent_student_links')
+              .select('parent_id')
+              .inFilter('student_id', studentIds.toList());
+          final parentIds = (parentLinks as List)
+              .map((p) => p['parent_id']?.toString().trim() ?? '')
+              .where((id) => id.isNotEmpty)
+              .toSet();
+
+          // 5. Insert targeted notification to students & parents of this specific class
+          final notifInsert = await client.from('notifications').insert({
+            'title': 'Class Suspended: $cleanReason in $subjectName ($sectionName)',
+            'message':
+                'Classes and RFID attendance are suspended on $readableDate ($cleanReason) for $subjectName ($sectionName). All enrolled students are excused for this session.',
+            'notification_type': 'announcement',
+            'target_audience': 'students_parents',
+            'is_archived': false,
+            'created_at': nowIso,
+            'subject_offering_id': offeringId,
+            'scope': 'class',
+            'created_by': teacherId,
+          }).select('id').maybeSingle();
+
+          final notifId = notifInsert?['id']?.toString();
+          if (notifId != null) {
+            final targetUserIds = {...studentIds, ...parentIds};
+            if (targetUserIds.isNotEmpty) {
+              final recipientRows = targetUserIds.map((uid) => {
+                'notification_id': notifId,
+                'user_id': uid,
+                'created_at': nowIso,
+              }).toList();
+              try {
+                await client.from('notification_recipients').insert(recipientRows);
+              } catch (_) {}
+            }
+          }
+        }
+
+        // 6. Save local suspension flag
+        await LocalStorageService.saveJson(
+          'class_suspended_${offeringId}_$dateStr',
+          {'is_suspended': true, 'reason': cleanReason},
+        );
       }
 
       if (!mounted) return;
@@ -2046,8 +2134,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
         _inlineNotice = _WorkspaceInlineNotice(
           tone: _WorkspaceNoticeTone.info,
           title: 'Class Suspended ($cleanReason)',
-          message:
-              'Auto-absent is disabled for $readableDate and Students & Parents have been notified.',
+          message: allMyClassesToday
+              ? 'All your classes on $readableDate are suspended. Enrolled students are excused and their parents notified.'
+              : '$_selectedSubjectLabel is suspended for $readableDate. Enrolled students are excused and their parents notified.',
         );
       });
     } catch (e) {
@@ -2070,7 +2159,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       context: context,
       title: 'Resume Class on $readableDate?',
       message:
-          'This will lift the class suspension/holiday lock for $readableDate ($dateStr) and re-enable attendance recording and RFID scanning.',
+          'This will lift the class suspension for $_selectedSubjectLabel on $readableDate and re-enable attendance recording and RFID scanning.',
       confirmLabel: 'Resume Class',
       confirmColor: AppTheme.catTeal,
     );
@@ -2078,10 +2167,39 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     if (confirmed != true || !mounted) return;
 
     try {
-      await Supabase.instance.client
-          .from('school_holidays')
-          .update({'is_active': false})
-          .eq('holiday_date', dateStr);
+      final client = Supabase.instance.client;
+
+      // 1. Delete the excused suspension attendance records for this offering & date
+      await client
+          .from('attendance_records')
+          .delete()
+          .eq('subject_offering_id', _selectedSubjectId!)
+          .eq('attendance_date', dateStr)
+          .eq('status', 'excused')
+          .ilike('remarks', 'Class Suspended%');
+
+      // 2. Remove local suspension cache
+      await LocalStorageService.remove(
+        'class_suspended_${_selectedSubjectId}_$dateStr',
+      );
+
+      // 3. Deactivate any historical school_holidays entry if it was a class suspension
+      try {
+        await client
+            .from('school_holidays')
+            .update({'is_active': false})
+            .eq('holiday_date', dateStr)
+            .ilike('holiday_name', 'Class Suspended%');
+      } catch (_) {}
+
+      // 4. Archive notifications for this suspension
+      try {
+        await client
+            .from('notifications')
+            .update({'is_archived': true})
+            .eq('subject_offering_id', _selectedSubjectId!)
+            .ilike('title', '%Class Suspended%');
+      } catch (_) {}
 
       if (!mounted) return;
       await _loadRosterAndRecords(_selectedSubjectId!, _attendanceSelectedDate);
@@ -2886,13 +3004,16 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     final IconData scannerIcon;
 
     if (_isEffectivelyLocked) {
-      scannerLabel = 'Schedule Locked';
+      final isSusp = _scheduleStatus?.isClassSuspended == true;
+      final isHol = _scheduleStatus?.isHoliday == true;
+      scannerLabel = isSusp
+          ? 'Class Suspended'
+          : (isHol ? 'Holiday Locked' : 'Schedule Locked');
 
-      scannerColor = _scheduleStatus?.isHoliday == true
-          ? AppTheme.catRed
-          : AppTheme.catOrange;
+      scannerColor = isHol ? AppTheme.catRed : AppTheme.catOrange;
 
-      scannerIcon = LucideIcons.lock;
+      scannerIcon =
+          (isSusp || isHol) ? LucideIcons.calendarOff : LucideIcons.lock;
     } else if (_isOffline) {
       final qCount = LocalStorageService.getOfflineAttendanceQueue().length;
       scannerLabel = qCount > 0
@@ -3089,7 +3210,8 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
             children: [
               if (_selectedSubjectId != null) ...[
-                if (_scheduleStatus?.isHoliday == true)
+                if (_scheduleStatus?.isHoliday == true ||
+                    _scheduleStatus?.isClassSuspended == true)
                   AppSecondaryButton(
                     label: 'Resume Class',
                     icon: LucideIcons.calendarCheck,
@@ -3894,9 +4016,21 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
           ),
         ),
         const SizedBox(height: 4),
-        Container(
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+        AppFixedDropdown<String>(
+          value: validValue,
+          items: items.map((item) {
+            return AppDropdownItem<String>(
+              value: item,
+              label: itemLabel(item),
+              icon: Icon(
+                icon,
+                size: 13.5,
+                color: theme.colorScheme.primary,
+              ),
+            );
+          }).toList(),
+          onChanged: onChanged,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(8),
@@ -3906,40 +4040,15 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
               ),
             ),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: validValue,
-              dropdownColor: theme.colorScheme.surface,
-              icon: Icon(
-                LucideIcons.chevronDown,
-                size: 14,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-              style: TextStyle(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-                fontSize: 12.5,
-              ),
-              isDense: true,
-              items: items.map((item) {
-                return DropdownMenuItem<String>(
-                  value: item,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        icon,
-                        size: 13.5,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(itemLabel(item)),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: onChanged,
-            ),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w600,
+            fontSize: 12.5,
+          ),
+          icon: Icon(
+            LucideIcons.chevronDown,
+            size: 14,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
       ],
@@ -3950,9 +4059,10 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
     final sched = _scheduleStatus!;
 
     final isHoliday = sched.isHoliday;
+    final isSuspended = sched.isClassSuspended;
     final hasAnySchedule = sched.hasPlottedScheduleAnyDay;
 
-    if (_manualMakeupOverride && !isHoliday && hasAnySchedule) {
+    if (_manualMakeupOverride && !isHoliday && !isSuspended && hasAnySchedule) {
       return Container(
         margin: const EdgeInsets.only(bottom: 14),
 
@@ -4002,10 +4112,17 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       );
     }
 
-    final bannerColor = isHoliday ? AppTheme.catRed : AppTheme.catOrange;
+    final bannerColor = (isHoliday || isSuspended)
+        ? (isHoliday ? AppTheme.catRed : AppTheme.catOrange)
+        : (hasAnySchedule ? AppTheme.catOrange : AppTheme.catRed);
 
     final String bannerTitle;
-    if (isHoliday) {
+    if (isSuspended) {
+      bannerTitle = sched.classSuspensionReason != null &&
+              sched.classSuspensionReason!.trim().isNotEmpty
+          ? 'Class Suspended: ${sched.classSuspensionReason}'
+          : 'Class Suspended — Attendance Excused';
+    } else if (isHoliday) {
       bannerTitle = 'Holiday Lock Enforced';
     } else if (!hasAnySchedule) {
       bannerTitle = 'No Class Schedule Set Yet — Attendance Locked';
@@ -4013,7 +4130,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
       bannerTitle = 'Unscheduled Session — Attendance Locked';
     }
 
-    final reason = !hasAnySchedule && !isHoliday
+    final reason = !hasAnySchedule && !isHoliday && !isSuspended
         ? 'No class schedule is set for $_selectedSubjectLabel in My Schedule. Set up a schedule in the My Schedule tab before recording attendance.'
         : (sched.lockReason ??
               'Attendance is locked because no class session is scheduled on this date.');
@@ -4052,7 +4169,9 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
 
             children: [
               Icon(
-                isHoliday ? LucideIcons.calendarOff : LucideIcons.lock,
+                (isHoliday || isSuspended)
+                    ? LucideIcons.calendarOff
+                    : LucideIcons.lock,
 
                 size: 18,
 
@@ -4103,7 +4222,15 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             ],
           ),
 
-          if (!isHoliday && hasAnySchedule)
+          if (isSuspended)
+            AppButton(
+              label: 'Resume Class',
+              icon: LucideIcons.calendarCheck,
+              type: AppButtonType.primary,
+              isSmall: true,
+              onPressed: _handleLiftSuspension,
+            )
+          else if (!isHoliday && hasAnySchedule)
             AppButton(
               label: 'Enable Make-Up Class Override',
 
@@ -4845,6 +4972,16 @@ class _SelectStudentForRfidDialogState
   }
 }
 
+class SuspendClassDialogResult {
+  final String reason;
+  final bool allMyClassesToday;
+
+  const SuspendClassDialogResult({
+    required this.reason,
+    this.allMyClassesToday = false,
+  });
+}
+
 class _SuspendClassDialog extends StatefulWidget {
   final String readableDate;
   final String subjectLabel;
@@ -4854,13 +4991,13 @@ class _SuspendClassDialog extends StatefulWidget {
     required this.subjectLabel,
   });
 
-  static Future<String?> show(
+  static Future<SuspendClassDialogResult?> show(
     BuildContext context, {
     required String readableDate,
     required String subjectLabel,
   }) {
     final theme = Theme.of(context);
-    return showDialog<String>(
+    return showDialog<SuspendClassDialogResult>(
       context: context,
       builder: (ctx) => Theme(
         data: theme,
@@ -4881,10 +5018,13 @@ class _SuspendClassDialogState extends State<_SuspendClassDialog> {
     text: 'Class Suspension (Typhoon / Heavy Rain)',
   );
   String? _inlineError;
+  bool _allMyClassesToday = false;
 
   static const List<String> _presets = [
     'Class Suspension (Typhoon / Heavy Rain)',
     'Sudden Class Suspension',
+    'Teacher Official Business',
+    'Special Class Activity',
     'School Holiday / No Classes',
   ];
 
@@ -4909,7 +5049,12 @@ class _SuspendClassDialogState extends State<_SuspendClassDialog> {
       setState(() => _inlineError = 'Reason cannot exceed 100 characters.');
       return;
     }
-    Navigator.of(context).pop(trimmed);
+    Navigator.of(context).pop(
+      SuspendClassDialogResult(
+        reason: trimmed,
+        allMyClassesToday: _allMyClassesToday,
+      ),
+    );
   }
 
   @override
@@ -4922,7 +5067,7 @@ class _SuspendClassDialogState extends State<_SuspendClassDialog> {
       backgroundColor: theme.colorScheme.surface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
+        constraints: const BoxConstraints(maxWidth: 480),
         child: Padding(
           padding: const EdgeInsets.all(22),
           child: Column(
@@ -4973,12 +5118,177 @@ class _SuspendClassDialogState extends State<_SuspendClassDialog> {
               ),
               const SizedBox(height: 14),
               Text(
-                'This will mark ${widget.readableDate} as a suspended/holiday session, prevent auto-absent from marking students absent, and automatically send an alert to Students & Parents.',
+                'This will mark the selected session as suspended, excuse all enrolled students, and send targeted notifications exclusively to students and parents of this class.',
                 style: TextStyle(
                   fontSize: 12.5,
                   height: 1.45,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
                 ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Suspension Scope',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => setState(() => _allMyClassesToday = false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: !_allMyClassesToday
+                              ? theme.colorScheme.primary.withValues(
+                                  alpha: 0.12,
+                                )
+                              : (isDark
+                                  ? Colors.white.withValues(alpha: 0.04)
+                                  : const Color(0xFFF1F5F9)),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: !_allMyClassesToday
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.12,
+                                  ),
+                            width: !_allMyClassesToday ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  LucideIcons.bookOpen,
+                                  size: 14,
+                                  color: !_allMyClassesToday
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.onSurface.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'This Class Only',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: !_allMyClassesToday
+                                          ? FontWeight.w700
+                                          : FontWeight.w600,
+                                      color: !_allMyClassesToday
+                                          ? theme.colorScheme.primary
+                                          : theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              widget.subjectLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => setState(() => _allMyClassesToday = true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _allMyClassesToday
+                              ? theme.colorScheme.primary.withValues(
+                                  alpha: 0.12,
+                                )
+                              : (isDark
+                                  ? Colors.white.withValues(alpha: 0.04)
+                                  : const Color(0xFFF1F5F9)),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: _allMyClassesToday
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.12,
+                                  ),
+                            width: _allMyClassesToday ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  LucideIcons.calendarDays,
+                                  size: 14,
+                                  color: _allMyClassesToday
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.onSurface.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'All My Classes',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: _allMyClassesToday
+                                          ? FontWeight.w700
+                                          : FontWeight.w600,
+                                      color: _allMyClassesToday
+                                          ? theme.colorScheme.primary
+                                          : theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'All taught on ${widget.readableDate}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
               Text(

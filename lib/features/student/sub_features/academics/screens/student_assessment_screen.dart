@@ -2401,16 +2401,16 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
                                 .split('=')
                                 .skip(1)
                                 .join('=');
-                            return DropdownButtonFormField<String>(
+                            return AppFixedDropdownFormField<String>(
                               initialValue: options.contains(current)
                                   ? current
                                   : null,
                               decoration: InputDecoration(labelText: left),
                               items: options
                                   .map(
-                                    (option) => DropdownMenuItem(
+                                    (option) => AppDropdownItem<String>(
                                       value: option,
-                                      child: Text(option),
+                                      label: option,
                                     ),
                                   )
                                   .toList(),

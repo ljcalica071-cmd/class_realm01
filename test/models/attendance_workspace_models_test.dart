@@ -163,5 +163,28 @@ void main() {
       expect(summary.trendPoints.first.periodLabel, '10/12');
       expect(summary.atRiskStudents, isEmpty);
     });
+
+    test('AttendanceScheduleStatus properly reflects class-level suspension', () {
+      final statusSuspended = AttendanceScheduleStatus(
+        hasPlottedScheduleAnyDay: true,
+        isScheduledOnDate: true,
+        isClassSuspended: true,
+        classSuspensionReason: 'Typhoon Signal #2',
+        cutoffConfig: const AttendanceCutoffConfig(subjectOfferingId: 'off-1'),
+      );
+      expect(statusSuspended.isClassSuspended, isTrue);
+      expect(statusSuspended.isLockedByDefault, isTrue);
+      expect(statusSuspended.lockReason, contains('Class Suspended: Typhoon Signal #2'));
+
+      final statusNormal = AttendanceScheduleStatus(
+        hasPlottedScheduleAnyDay: true,
+        isScheduledOnDate: true,
+        isClassSuspended: false,
+        cutoffConfig: const AttendanceCutoffConfig(subjectOfferingId: 'off-1'),
+      );
+      expect(statusNormal.isClassSuspended, isFalse);
+      expect(statusNormal.isLockedByDefault, isFalse);
+      expect(statusNormal.lockReason, isNull);
+    });
   });
 }

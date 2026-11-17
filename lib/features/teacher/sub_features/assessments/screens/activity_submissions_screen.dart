@@ -23,6 +23,8 @@ import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/shared/widgets/app_top_toast.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class ActivitySubmissionsScreen extends StatefulWidget {
   final ActivityModel activity;
@@ -2025,9 +2027,38 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                     const SizedBox(width: 12),
 
                     // Filter Status Dropdown
-                    Container(
-                      height: 38,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    AppFixedDropdown<String>(
+                      value: _selectedStatus,
+                      items: const [
+                        AppDropdownItem(
+                          value: 'All',
+                          label: 'All Statuses',
+                        ),
+                        AppDropdownItem(
+                          value: 'Submitted',
+                          label: 'Submitted',
+                        ),
+                        AppDropdownItem(
+                          value: 'Graded',
+                          label: 'Graded',
+                        ),
+                        AppDropdownItem(
+                          value: 'Missing',
+                          label: 'Missing',
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedStatus = val;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(8),
@@ -2037,35 +2068,16 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                           ),
                         ),
                       ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedStatus,
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'All',
-                              child: Text('All Statuses'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Submitted',
-                              child: Text('Submitted'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Graded',
-                              child: Text('Graded'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Missing',
-                              child: Text('Missing'),
-                            ),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                _selectedStatus = val;
-                                _currentPage = 1;
-                              });
-                            }
-                          },
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      icon: Icon(
+                        LucideIcons.chevronDown,
+                        size: 14,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
                         ),
                       ),
                     ),
@@ -2779,9 +2791,14 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
           SizedBox(
             width: 100,
             child: (_isInPerson && status != 'Graded')
-                ? Container(
-                    height: 32,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                ? AppFixedDropdown<String>(
+                    value: (status == 'Submitted' || status == 'Late')
+                        ? 'Submitted'
+                        : 'Missing',
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: (status == 'Submitted' || status == 'Late')
                           ? AppTheme.catGreen.withValues(alpha: 0.12)
@@ -2793,50 +2810,54 @@ class _ActivitySubmissionsScreenState extends State<ActivitySubmissionsScreen> {
                             : const Color(0xFFDC2626).withValues(alpha: 0.3),
                       ),
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: (status == 'Submitted' || status == 'Late')
-                            ? 'Submitted'
-                            : 'Missing',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: (status == 'Submitted' || status == 'Late')
-                              ? AppTheme.catGreen
-                              : const Color(0xFFDC2626),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'Submitted',
-                            child: Text(
-                              'Submitted',
-                              style: TextStyle(
-                                color: AppTheme.catGreen,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: 'Missing',
-                            child: Text(
-                              'Missing',
-                              style: TextStyle(
-                                color: Color(0xFFDC2626),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) {
-                            _updateInPersonStatus(
-                              student,
-                              val.toLowerCase(),
-                            );
-                          }
-                        },
-                      ),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: (status == 'Submitted' || status == 'Late')
+                          ? AppTheme.catGreen
+                          : const Color(0xFFDC2626),
                     ),
+                    icon: Icon(
+                      LucideIcons.chevronDown,
+                      size: 13,
+                      color: (status == 'Submitted' || status == 'Late')
+                          ? AppTheme.catGreen
+                          : const Color(0xFFDC2626),
+                    ),
+                    items: const [
+                      AppDropdownItem(
+                        value: 'Submitted',
+                        label: 'Submitted',
+                        customChild: Text(
+                          'Submitted',
+                          style: TextStyle(
+                            color: AppTheme.catGreen,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      AppDropdownItem(
+                        value: 'Missing',
+                        label: 'Missing',
+                        customChild: Text(
+                          'Missing',
+                          style: TextStyle(
+                            color: Color(0xFFDC2626),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        _updateInPersonStatus(
+                          student,
+                          val.toLowerCase(),
+                        );
+                      }
+                    },
                   )
                 : Align(
                     alignment: Alignment.centerLeft,

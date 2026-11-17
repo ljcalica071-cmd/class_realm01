@@ -16,6 +16,7 @@ import 'package:class_realm/data/repositories/supabase_student_repository.dart';
 import 'package:class_realm/features/teacher/sub_features/grading/utils/gradebook_analytics_calculator.dart';
 import 'package:class_realm/features/teacher/sub_features/grading/widgets/teacher_gradebook_tab.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 
 class TeacherGradesTab extends StatefulWidget {
   final List<UserModel> students;
@@ -1166,38 +1167,17 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       ),
                     ),
                     const SizedBox(height: 4),
-                    DropdownButtonFormField<String>(
+                    AppFixedDropdown<String>(
                       key: ValueKey('subject_${safeSubject ?? "none"}'),
                       isExpanded: true,
-                      initialValue: safeSubject,
-                      dropdownColor: isDark
-                          ? theme.colorScheme.surface
-                          : Colors.white,
-                      decoration: _inputDecoration(isDark),
-                      hint: const Text(
-                        'Subject',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: crSlateMuted,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      items: uniqueSubjects.isEmpty
-                          ? null
-                          : uniqueSubjects.map((s) {
-                              return DropdownMenuItem<String>(
-                                value: s,
-                                child: Text(
-                                  s,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            }).toList(),
+                      value: safeSubject,
+                      hintText: 'Subject',
+                      items: uniqueSubjects.map((s) {
+                        return AppDropdownItem<String>(
+                          value: s,
+                          label: s,
+                        );
+                      }).toList(),
                       onChanged: uniqueSubjects.isEmpty
                           ? null
                           : (val) {
@@ -1221,6 +1201,17 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                 _loadSubjectData();
                               }
                             },
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: isDark ? Colors.white12 : crBorder),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : crSlateDark,
+                      ),
                     ),
                   ],
                 ),
@@ -1243,38 +1234,17 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       ),
                     ),
                     const SizedBox(height: 4),
-                    DropdownButtonFormField<String>(
+                    AppFixedDropdown<String>(
                       key: ValueKey('section_${safeSubject}_$safeSection'),
                       isExpanded: true,
-                      initialValue: safeSection,
-                      dropdownColor: isDark
-                          ? theme.colorScheme.surface
-                          : Colors.white,
-                      decoration: _inputDecoration(isDark),
-                      hint: const Text(
-                        'Section',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: crSlateMuted,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      items: sectionItems.isEmpty
-                          ? null
-                          : sectionItems.map((sec) {
-                              return DropdownMenuItem<String>(
-                                value: sec,
-                                child: Text(
-                                  sec,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            }).toList(),
+                      value: safeSection,
+                      hintText: 'Section',
+                      items: sectionItems.map((sec) {
+                        return AppDropdownItem<String>(
+                          value: sec,
+                          label: sec,
+                        );
+                      }).toList(),
                       onChanged: sectionItems.isEmpty
                           ? null
                           : (val) {
@@ -1287,6 +1257,17 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                                 _loadSubjectData();
                               }
                             },
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: isDark ? Colors.white12 : crBorder),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : crSlateDark,
+                      ),
                     ),
                   ],
                 ),
@@ -2743,45 +2724,40 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   ),
                 ],
               ),
-              Container(
-                height: 30,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+              AppFixedDropdown<String>(
+                value: _donutMode,
+                icon: Icon(
+                  LucideIcons.chevronDown,
+                  size: 13,
+                  color: isDark ? Colors.white70 : crSlateDark,
+                ),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : crSlateDark,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
                   color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: isDark ? Colors.white12 : crBorder),
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _donutMode,
-                    icon: Icon(
-                      LucideIcons.chevronDown,
-                      size: 13,
-                      color: isDark ? Colors.white70 : crSlateDark,
-                    ),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : crSlateDark,
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'components',
-                        child: Text('WW vs PT vs EX'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'distribution',
-                        child: Text('Performance Distribution'),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      if (val != null && val != _donutMode) {
-                        setState(() => _donutMode = val);
-                        _animController.forward(from: 0.0);
-                      }
-                    },
+                items: const [
+                  AppDropdownItem(
+                    value: 'components',
+                    label: 'WW vs PT vs EX',
                   ),
-                ),
+                  AppDropdownItem(
+                    value: 'distribution',
+                    label: 'Performance Distribution',
+                  ),
+                ],
+                onChanged: (val) {
+                  if (val != null && val != _donutMode) {
+                    setState(() => _donutMode = val);
+                    _animController.forward(from: 0.0);
+                  }
+                },
               ),
             ],
           ),
@@ -3268,95 +3244,85 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                     ),
 
                     // Sort Order Dropdown
-                    Container(
-                      height: 36,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    AppFixedDropdown<String>(
+                      value: _sortOrder,
+                      icon: const Icon(
+                        LucideIcons.arrowUpDown,
+                        size: 13,
+                        color: crSlateMuted,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: crSlateDark,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       decoration: BoxDecoration(
                         color: isDark ? Colors.white10 : Colors.white,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: crBorder),
                       ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _sortOrder,
-                          icon: const Icon(
-                            LucideIcons.arrowUpDown,
-                            size: 13,
-                            color: crSlateMuted,
-                          ),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: crSlateDark,
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'desc',
-                              child: Text('Sort: Highest to Lowest'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'asc',
-                              child: Text('Sort: Lowest to Highest'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'alpha',
-                              child: Text('Sort: Alphabetical (A–Z)'),
-                            ),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                _sortOrder = val;
-                                _currentPage = 1;
-                              });
-                            }
-                          },
+                      items: const [
+                        AppDropdownItem(
+                          value: 'desc',
+                          label: 'Sort: Highest to Lowest',
                         ),
-                      ),
+                        AppDropdownItem(
+                          value: 'asc',
+                          label: 'Sort: Lowest to Highest',
+                        ),
+                        AppDropdownItem(
+                          value: 'alpha',
+                          label: 'Sort: Alphabetical (A–Z)',
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _sortOrder = val;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
                     ),
 
                     // Page Size Selector
-                    Container(
-                      height: 36,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    AppFixedDropdown<int>(
+                      value: _pageSize,
+                      icon: const Icon(
+                        LucideIcons.chevronDown,
+                        size: 13,
+                        color: crSlateMuted,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: crSlateDark,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       decoration: BoxDecoration(
                         color: isDark ? Colors.white10 : Colors.white,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: crBorder),
                       ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: _pageSize,
-                          icon: const Icon(
-                            LucideIcons.chevronDown,
-                            size: 13,
-                            color: crSlateMuted,
-                          ),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: crSlateDark,
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 10,
-                              child: Text('10 / page'),
-                            ),
-                            DropdownMenuItem(
-                              value: 20,
-                              child: Text('20 / page'),
-                            ),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                _pageSize = val;
-                                _currentPage = 1;
-                              });
-                            }
-                          },
+                      items: const [
+                        AppDropdownItem(
+                          value: 10,
+                          label: '10 / page',
                         ),
-                      ),
+                        AppDropdownItem(
+                          value: 20,
+                          label: '20 / page',
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _pageSize = val;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -3938,22 +3904,6 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     );
   }
 
-  InputDecoration _inputDecoration(bool isDark) {
-    return InputDecoration(
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      filled: true,
-      fillColor: isDark ? Colors.white10 : const Color(0xFFF8FAFC),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: crBorder),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: crBorder),
-      ),
-    );
-  }
 }
 
 class _BarItem {

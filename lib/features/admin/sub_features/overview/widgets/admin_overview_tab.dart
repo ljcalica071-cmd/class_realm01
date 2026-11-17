@@ -11,6 +11,7 @@ import 'package:class_realm/core/services/rate_limit_service.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:class_realm/features/admin/shared/widgets/admin_fixed_dropdown.dart';
 
 class AdminOverviewTab extends StatefulWidget {
   final List<UserModel> teachers;
@@ -1274,64 +1275,110 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                               ? _selectedPreviewSchoolYearId
                               : _allSchoolYears.first.id;
 
-                          dropdownWidget = Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: isDark ? Colors.white12 : const Color(0xFFCBD5E1),
-                              ),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: selectedId,
-                                isDense: true,
-                                icon: Icon(
-                                  LucideIcons.chevronDown,
-                                  size: 16,
-                                  color: isDark ? Colors.white70 : const Color(0xFF475569),
-                                ),
-                                items: _allSchoolYears.map((sy) {
-                                  return DropdownMenuItem<String>(
-                                    value: sy.id,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          margin: const EdgeInsets.only(right: 8),
-                                          decoration: BoxDecoration(
-                                            color: sy.isCurrent
-                                                ? const Color(0xFF16A34A)
-                                                : const Color(0xFFEAB308),
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        Text(
-                                          'S.Y. ${sy.schoolYear} ${sy.isCurrent ? "(Current Active)" : "(Archived)"}',
-                                          style: TextStyle(
-                                            fontSize: 12.5,
-                                            fontWeight: sy.isCurrent ? FontWeight.w700 : FontWeight.w500,
-                                            color: sy.isCurrent
-                                                ? (isDark ? Colors.white : const Color(0xFF0F172A))
-                                                : (isDark ? Colors.white70 : const Color(0xFF64748B)),
-                                          ),
-                                        ),
-                                      ],
+                          final selectedSy = _allSchoolYears.firstWhere(
+                            (sy) => sy.id == selectedId,
+                            orElse: () => _allSchoolYears.first,
+                          );
+
+                          dropdownWidget = AdminFixedDropdown<String>(
+                            value: selectedId,
+                            items: _allSchoolYears.map((sy) {
+                              return AdminDropdownItem<String>(
+                                value: sy.id,
+                                label: 'S.Y. ${sy.schoolYear} ${sy.isCurrent ? "(Current Active)" : "(Archived)"}',
+                                customChild: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      margin: const EdgeInsets.only(right: 8),
+                                      decoration: BoxDecoration(
+                                        color: sy.isCurrent
+                                            ? const Color(0xFF16A34A)
+                                            : const Color(0xFFEAB308),
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
-                                  );
-                                }).toList(),
-                                onChanged: (id) {
-                                  if (id != null) {
-                                    setState(
-                                      () => _selectedPreviewSchoolYearId = id,
-                                    );
+                                    Text(
+                                      'S.Y. ${sy.schoolYear} ${sy.isCurrent ? "(Current Active)" : "(Archived)"}',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: sy.isCurrent ? FontWeight.w700 : FontWeight.w500,
+                                        color: sy.isCurrent
+                                            ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                                            : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (id) {
+                              if (id != null) {
+                                setState(
+                                  () => _selectedPreviewSchoolYearId = id,
+                                );
+                              }
+                            },
+                            builder: (context, controller, selectedItem) {
+                              final isOpen = controller.isOpen;
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () {
+                                  if (controller.isOpen) {
+                                    controller.close();
+                                  } else {
+                                    controller.open();
                                   }
                                 },
-                              ),
-                            ),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: isOpen
+                                          ? theme.colorScheme.primary
+                                          : (isDark ? Colors.white12 : const Color(0xFFCBD5E1)),
+                                      width: isOpen ? 1.4 : 1.0,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        margin: const EdgeInsets.only(right: 8),
+                                        decoration: BoxDecoration(
+                                          color: selectedSy.isCurrent
+                                              ? const Color(0xFF16A34A)
+                                              : const Color(0xFFEAB308),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      Text(
+                                        'S.Y. ${selectedSy.schoolYear} ${selectedSy.isCurrent ? "(Current Active)" : "(Archived)"}',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: selectedSy.isCurrent ? FontWeight.w700 : FontWeight.w500,
+                                          color: selectedSy.isCurrent
+                                              ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                                              : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Icon(
+                                        isOpen ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                                        size: 16,
+                                        color: isDark ? Colors.white70 : const Color(0xFF475569),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
                           );
                         }
 

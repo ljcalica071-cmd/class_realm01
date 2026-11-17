@@ -157,6 +157,18 @@ class _TeacherStudentManagementTabState
               .toSet()
               .toList()
             ..sort();
+
+      final availableSubs = _availableSubjects;
+      if ((_selectedSubjectFilter == '— All Subjects —' ||
+              !availableSubs.contains(_selectedSubjectFilter)) &&
+          availableSubs.isNotEmpty) {
+        _selectedSubjectFilter = availableSubs.first;
+      }
+      final availableSecs = _availableSections;
+      if (_selectedSectionFilter != '— All Sections —' &&
+          !availableSecs.contains(_selectedSectionFilter)) {
+        _selectedSectionFilter = '— All Sections —';
+      }
     }
   }
 
@@ -273,6 +285,13 @@ class _TeacherStudentManagementTabState
                   !availableSubs.contains(_selectedSubjectFilter)) &&
               availableSubs.isNotEmpty) {
             _selectedSubjectFilter = availableSubs.first;
+          }
+
+          final availableSecs = _availableSections;
+          if (_selectedSectionFilter != '— All Sections —' &&
+              !availableSecs.contains(_selectedSectionFilter)) {
+            _selectedSectionFilter = '— All Sections —';
+            unawaited(_saveFilters());
           }
 
           _isLoading = false;
@@ -449,14 +468,22 @@ class _TeacherStudentManagementTabState
         }
       }
       availableSections = filteredSectionsSet.toList()..sort();
+    }
 
-      // If the currently selected section is not in the available sections, reset it
-      if (_selectedSectionFilter != '— All Sections —' &&
-          !availableSections.contains(_selectedSectionFilter)) {
-        // We can't setState during build easily, but since this is just filtering,
-        // we can just treat it as '— All Sections —' for now, or just let it reset in the UI.
-        // It's better to reset it in the onChanged of the subject dropdown.
-      }
+    final effectiveSection = (_selectedSectionFilter == '— All Sections —' ||
+            availableSections.contains(_selectedSectionFilter))
+        ? _selectedSectionFilter
+        : '— All Sections —';
+
+    if (_selectedSectionFilter != effectiveSection) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedSectionFilter = effectiveSection;
+          });
+          unawaited(_saveFilters());
+        }
+      });
     }
 
     var displayList =
@@ -477,9 +504,9 @@ class _TeacherStudentManagementTabState
               (s.enrolledSubjectName?.trim().toLowerCase() ==
                   effectiveSubject.trim().toLowerCase());
           final matchesSection =
-              _selectedSectionFilter == '— All Sections —' ||
+              effectiveSection == '— All Sections —' ||
               (s.departmentOrSection?.trim().toLowerCase() ==
-                  _selectedSectionFilter.trim().toLowerCase());
+                  effectiveSection.trim().toLowerCase());
           return matchesSearch && matchesSubject && matchesSection;
         }).toList();
 
@@ -689,10 +716,10 @@ class _TeacherStudentManagementTabState
                         _buildFilterDropdown(
                           label: 'Section',
                           icon: LucideIcons.users,
-                          value: _selectedSectionFilter,
-                          items: _availableSections.isEmpty
+                          value: effectiveSection,
+                          items: availableSections.isEmpty
                               ? const <String>[]
-                              : ['— All Sections —', ..._availableSections],
+                              : ['— All Sections —', ...availableSections],
                           onChanged: (val) {
                             if (val != null) {
                               setState(() {
@@ -950,7 +977,7 @@ class _TeacherStudentManagementTabState
                                                               Text(
                                                                 _showArchivedStudents
                                                                     ? 'No archived students found.'
-                                                                    : 'No students found for ${_teacherSubjects.contains(_selectedSubjectFilter) ? _selectedSubjectFilter : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : "this subject")} in $_selectedSectionFilter.',
+                                                                    : 'No students found for ${_teacherSubjects.contains(_selectedSubjectFilter) ? _selectedSubjectFilter : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : "this subject")}${effectiveSection != '— All Sections —' ? ' in $effectiveSection' : ''}.',
                                                                 textAlign: TextAlign.center,
                                                                 style: TextStyle(
                                                                   fontSize: 16,
@@ -1914,9 +1941,21 @@ class _TeacherStudentManagementTabState
           ),
         ),
         const SizedBox(height: 4),
-        Container(
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+        AppFixedDropdown<String>(
+          value: validValue,
+          items: items.map((item) {
+            return AppDropdownItem<String>(
+              value: item,
+              label: itemLabel(item),
+              icon: Icon(
+                icon,
+                size: 13.5,
+                color: theme.colorScheme.primary,
+              ),
+            );
+          }).toList(),
+          onChanged: onChanged,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(8),
@@ -1926,40 +1965,15 @@ class _TeacherStudentManagementTabState
               ),
             ),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: validValue,
-              dropdownColor: theme.colorScheme.surface,
-              icon: Icon(
-                LucideIcons.chevronDown,
-                size: 14,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-              style: TextStyle(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-                fontSize: 12.5,
-              ),
-              isDense: true,
-              items: items.map((item) {
-                return DropdownMenuItem<String>(
-                  value: item,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        icon,
-                        size: 13.5,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(itemLabel(item)),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: onChanged,
-            ),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w600,
+            fontSize: 12.5,
+          ),
+          icon: Icon(
+            LucideIcons.chevronDown,
+            size: 14,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
       ],

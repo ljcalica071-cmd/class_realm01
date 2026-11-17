@@ -19,7 +19,6 @@ import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/core/utils/parent_credential_helper.dart';
 import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:class_realm/core/utils/validators.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 
 class TeacherParentManagementTab extends StatefulWidget {
@@ -1639,9 +1638,21 @@ class _TeacherParentManagementTabState
           ),
         ),
         const SizedBox(height: 4),
-        Container(
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+        AppFixedDropdown<String>(
+          value: validValue,
+          items: items.map((item) {
+            return AppDropdownItem<String>(
+              value: item,
+              label: itemLabel(item),
+              icon: Icon(
+                icon,
+                size: 13.5,
+                color: theme.colorScheme.primary,
+              ),
+            );
+          }).toList(),
+          onChanged: onChanged,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(8),
@@ -1651,36 +1662,15 @@ class _TeacherParentManagementTabState
               ),
             ),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: validValue,
-              dropdownColor: theme.colorScheme.surface,
-              icon: Icon(
-                LucideIcons.chevronDown,
-                size: 14,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-              style: TextStyle(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-                fontSize: 12.5,
-              ),
-              isDense: true,
-              items: items.map((item) {
-                return DropdownMenuItem<String>(
-                  value: item,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 13.5, color: theme.colorScheme.primary),
-                      const SizedBox(width: 6),
-                      Text(itemLabel(item)),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: onChanged,
-            ),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w600,
+            fontSize: 12.5,
+          ),
+          icon: Icon(
+            LucideIcons.chevronDown,
+            size: 14,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
       ],
@@ -3055,41 +3045,22 @@ class _EditParentAccountDialogState extends State<_EditParentAccountDialog> {
                                     ),
                                   ),
                                   const SizedBox(height: 6),
-                                  DropdownButtonFormField<String>(
+                                  AppFixedDropdownFormField<String>(
                                     initialValue: _newLinkRelationship,
-                                    decoration: InputDecoration(
-                                      prefixIcon: const Icon(
-                                        Icons.family_restroom,
-                                        size: 18,
-                                      ),
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 12,
+                                    hintText: 'Select Relationship',
+                                    items: const [
+                                      'Mother',
+                                      'Father',
+                                      'Guardian',
+                                      'Other',
+                                    ]
+                                        .map(
+                                          (r) => AppDropdownItem(
+                                            value: r,
+                                            label: r,
                                           ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                    items:
-                                        const [
-                                              'Mother',
-                                              'Father',
-                                              'Guardian',
-                                              'Other',
-                                            ]
-                                            .map(
-                                              (r) => DropdownMenuItem(
-                                                value: r,
-                                                child: Text(
-                                                  r,
-                                                  style: const TextStyle(
-                                                    fontSize: 13.5,
-                                                  ),
-                                                ),
-                                              ),
-                                            )
-                                            .toList(),
+                                        )
+                                        .toList(),
                                     onChanged: (val) {
                                       if (val != null) {
                                         setState(() {

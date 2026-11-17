@@ -515,47 +515,53 @@ class _StudentLearningMaterialsScreenState
       }
 
       final ext = material.fileExtension.toLowerCase();
-      final isOfficeDoc =
-          ext == 'doc' || ext == 'docx' || ext == 'ppt' || ext == 'pptx';
+      final isDocument = ext == 'doc' ||
+          ext == 'docx' ||
+          ext == 'ppt' ||
+          ext == 'pptx' ||
+          ext == 'xls' ||
+          ext == 'xlsx' ||
+          ext == 'pdf' ||
+          ext == 'txt' ||
+          ext == 'csv' ||
+          ext == 'rtf';
 
-      Uri targetUri = Uri.parse(resolvedUrl);
-
-      if (kIsWeb && isOfficeDoc) {
-        // In Web browsers, doc/docx/ppt/pptx cannot be natively viewed without downloading.
-        // Google Docs Viewer renders it inline in a new tab without downloading.
-        targetUri = Uri.parse(
-          'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
-        );
-      }
+      // For office and text documents, route through Google Docs Viewer so the file
+      // is previewed/rendered in HTML without triggering an automatic device download.
+      final targetUri = isDocument
+          ? Uri.parse(
+              'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
+            )
+          : Uri.parse(resolvedUrl);
 
       bool launched = false;
       if (kIsWeb) {
         launched = await launchUrl(targetUri, webOnlyWindowName: '_blank');
       } else {
         // Native App (Android / iOS):
-        // 1. Try launching in external application (e.g. Acrobat Reader, Word, Drive)
+        // 1. Primary: In-App Browser View (Chrome Custom Tabs / Safari View Controller)
+        // Strictly displays document preview inside app without downloading to device storage.
         try {
           launched =
-              await launchUrl(targetUri, mode: LaunchMode.externalApplication);
+              await launchUrl(targetUri, mode: LaunchMode.inAppBrowserView);
         } catch (_) {}
 
-        // 2. Fallback: If no external app is installed or handler fails, open via in-app browser overlay
+        // 2. Fallback: Launch external browser with the Google Docs viewer URL (NOT raw file download)
         if (!launched) {
           try {
-            final inAppUri = isOfficeDoc
-                ? Uri.parse(
-                    'https://docs.google.com/viewer?url=${Uri.encodeComponent(resolvedUrl)}&embedded=true',
-                  )
-                : targetUri;
-            launched =
-                await launchUrl(inAppUri, mode: LaunchMode.inAppBrowserView);
+            launched = await launchUrl(
+              targetUri,
+              mode: LaunchMode.externalApplication,
+            );
           } catch (_) {}
         }
 
         // 3. Last-resort fallback to platform default
         if (!launched) {
-          launched =
-              await launchUrl(targetUri, mode: LaunchMode.platformDefault);
+          try {
+            launched =
+                await launchUrl(targetUri, mode: LaunchMode.platformDefault);
+          } catch (_) {}
         }
       }
 

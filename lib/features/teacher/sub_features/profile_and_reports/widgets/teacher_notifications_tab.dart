@@ -13,6 +13,7 @@ import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/widgets/common/expandable_notification_card.dart';
 import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 import 'package:class_realm/shared/widgets/app_top_toast.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
 
 /// Real-Time Paginated Teacher Notifications Tab
@@ -341,77 +342,48 @@ class _TeacherNotificationsTabState extends State<TeacherNotificationsTab> {
                     minWidth: 200,
                     maxWidth: 280,
                   ),
-                  child: SizedBox(
-                    height: 40,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedSubjectFilter ?? 'ALL',
-                      icon: const Icon(LucideIcons.chevronDown, size: 16),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                      dropdownColor: theme.colorScheme.surface,
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 0,
-                        ),
-                        filled: true,
-                        fillColor: isDark
-                            ? theme.colorScheme.surface.withValues(alpha: 0.8)
-                            : Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.12)
-                                : const Color(0xFFE2E8F0),
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.12)
-                                : const Color(0xFFE2E8F0),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: theme.colorScheme.primary,
-                            width: 1.5,
-                          ),
-                        ),
-                      ),
-                      items: [
-                        const DropdownMenuItem<String>(
-                          value: 'ALL',
-                          child: Text(
-                            'All Handled Subjects',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        ..._distinctHandledSubjects.map(
-                          (sub) => DropdownMenuItem<String>(
-                            value: sub,
-                            child: Text(
-                              sub,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        setState(() {
-                          _selectedSubjectFilter = val;
-                          _currentPage = 1;
-                        });
-                      },
+                  child: AppFixedDropdown<String>(
+                    value: _selectedSubjectFilter ?? 'ALL',
+                    isExpanded: true,
+                    icon: const Icon(LucideIcons.chevronDown, size: 16),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
                     ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 9,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? theme.colorScheme.surface.withValues(alpha: 0.8)
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    items: [
+                      const AppDropdownItem<String>(
+                        value: 'ALL',
+                        label: 'All Handled Subjects',
+                      ),
+                      ..._distinctHandledSubjects.map(
+                        (sub) => AppDropdownItem<String>(
+                          value: sub,
+                          label: sub,
+                        ),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      setState(() {
+                        _selectedSubjectFilter = val;
+                        _currentPage = 1;
+                      });
+                    },
                   ),
                 ),
                 // Mark All As Read Button

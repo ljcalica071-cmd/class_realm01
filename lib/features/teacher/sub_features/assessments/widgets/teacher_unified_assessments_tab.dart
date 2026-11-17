@@ -1017,9 +1017,21 @@ class _TeacherUnifiedAssessmentsTabState
           ),
         ),
         const SizedBox(height: 4),
-        Container(
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+        AppFixedDropdown<String>(
+          value: validValue,
+          items: items.map((item) {
+            return AppDropdownItem<String>(
+              value: item,
+              label: itemLabel(item),
+              icon: Icon(
+                icon,
+                size: 13.5,
+                color: theme.colorScheme.primary,
+              ),
+            );
+          }).toList(),
+          onChanged: onChanged,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(8),
@@ -1029,36 +1041,15 @@ class _TeacherUnifiedAssessmentsTabState
               ),
             ),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: validValue,
-              dropdownColor: theme.colorScheme.surface,
-              icon: Icon(
-                LucideIcons.chevronDown,
-                size: 14,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-              style: TextStyle(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-                fontSize: 12.5,
-              ),
-              isDense: true,
-              items: items.map((item) {
-                return DropdownMenuItem<String>(
-                  value: item,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 13.5, color: theme.colorScheme.primary),
-                      const SizedBox(width: 6),
-                      Text(itemLabel(item), overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: onChanged,
-            ),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w600,
+            fontSize: 12.5,
+          ),
+          icon: Icon(
+            LucideIcons.chevronDown,
+            size: 14,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
       ],
