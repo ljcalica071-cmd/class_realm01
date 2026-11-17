@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:class_realm/core/theme/app_theme.dart';
+import 'package:class_realm/core/theme/subject_palette.dart';
 import 'package:class_realm/core/services/app_data_cache.dart';
 import 'package:class_realm/models/academic_models.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
@@ -10,7 +11,6 @@ import 'package:class_realm/data/repositories/supabase_schedule_repository.dart'
 import 'package:class_realm/data/repositories/subject_repository.dart';
 import 'package:class_realm/features/teacher/widgets/timetable_grid_widget.dart';
 import 'package:class_realm/widgets/common/app_time_picker_field.dart';
-import 'package:class_realm/shared/widgets/shimmer_loading.dart';
 
 enum ScheduleViewMode {
   mySchedule,
@@ -896,13 +896,22 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                 s.teacherId == currentTeacherId) ||
             (s.teacherId == null && _viewMode == ScheduleViewMode.mySchedule);
 
+        final secKey = s.section.trim().isNotEmpty ? s.section.trim() : s.subject.trim();
+        int secHash = 5381;
+        for (int i = 0; i < secKey.length; i++) {
+          secHash = ((secHash << 5) + secHash) + secKey.codeUnitAt(i);
+          secHash &= 0x7FFFFFFF;
+        }
+        final secColor = SubjectPalette.colors[secHash % SubjectPalette.colors.length];
+
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
+              color: secColor.withValues(alpha: 0.25),
+              width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
@@ -917,12 +926,12 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  color: secColor.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   Icons.calendar_today,
-                  color: theme.colorScheme.primary,
+                  color: secColor,
                   size: 24,
                 ),
               ),

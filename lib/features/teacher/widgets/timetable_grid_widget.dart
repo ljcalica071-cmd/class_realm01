@@ -125,11 +125,15 @@ class TimetableGridWidget extends StatelessWidget {
   }
 
   static int _getScheduleColorIndex(ScheduleModel s) {
-    final key = (s.teacherName != null && s.teacherName!.trim().isNotEmpty)
-        ? s.teacherName!.trim()
-        : ((s.teacherId != null && s.teacherId!.trim().isNotEmpty)
-            ? s.teacherId!.trim()
-            : s.subject.trim());
+    // Prioritize section name first so each distinct section has its own unique, recognizable color!
+    final sectionClean = s.section.trim();
+    final key = sectionClean.isNotEmpty
+        ? sectionClean
+        : ((s.sectionId != null && s.sectionId!.trim().isNotEmpty)
+            ? s.sectionId!.trim()
+            : ((s.subject.trim().isNotEmpty)
+                ? s.subject.trim()
+                : (s.teacherName?.trim() ?? '')));
 
     int hash = 5381;
     for (int i = 0; i < key.length; i++) {
