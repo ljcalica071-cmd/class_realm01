@@ -241,7 +241,7 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
 
   String _persistentCacheKey(String filterKey) {
     final adminId = AuthRepository.instance.currentUser?.id ?? 'unknown';
-    return 'admin_activity_v3_${adminId}_$filterKey';
+    return 'admin_activity_v4_${adminId}_$filterKey';
   }
 
   bool _restoreCachedData(String filterKey) {
