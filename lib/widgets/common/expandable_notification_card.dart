@@ -67,6 +67,7 @@ class _ExpandableNotificationCardState
 
   // 60-30-10 Colors
   static const Color _crSteelBlue = Color(0xFF3A6B88);
+  static const Color _crTeal = Color(0xFF0D9488);
   static const Color _crAmber = Color(0xFFF59E0B);
   static const Color _crOrange = Color(0xFFEA580C);
   static const Color _crRed = Color(0xFFDC2626);
@@ -96,7 +97,17 @@ class _ExpandableNotificationCardState
     return 0;
   }
 
-  Color _getAccentColor(int warningLevel) {
+  Color _getAccentColor(int warningLevel, String type, String title) {
+    final lowerTitle = title.toLowerCase();
+    if (type == 'grade') {
+      if (lowerTitle.contains('alert') || lowerTitle.contains('remediation')) {
+        return _crRed;
+      }
+      return _crTeal;
+    }
+    if (lowerTitle.contains('suspension') || lowerTitle.contains('suspended')) {
+      return _crOrange;
+    }
     switch (warningLevel) {
       case 10:
         return _crRed;
@@ -109,7 +120,17 @@ class _ExpandableNotificationCardState
     }
   }
 
-  IconData _getIcon(int warningLevel, String type) {
+  IconData _getIcon(int warningLevel, String type, String title) {
+    final lowerTitle = title.toLowerCase();
+    if (type == 'grade') {
+      if (lowerTitle.contains('alert') || lowerTitle.contains('remediation')) {
+        return LucideIcons.octagonAlert;
+      }
+      return LucideIcons.graduationCap;
+    }
+    if (lowerTitle.contains('suspension') || lowerTitle.contains('suspended')) {
+      return LucideIcons.calendarX;
+    }
     switch (warningLevel) {
       case 10:
         return LucideIcons.octagonAlert;
@@ -123,7 +144,22 @@ class _ExpandableNotificationCardState
     }
   }
 
-  String _getBadgeLabel(int warningLevel, String audience) {
+  String _getBadgeLabel(
+    int warningLevel,
+    String audience,
+    String type,
+    String title,
+  ) {
+    final lowerTitle = title.toLowerCase();
+    if (type == 'grade') {
+      if (lowerTitle.contains('alert') || lowerTitle.contains('remediation')) {
+        return 'Academic Alert';
+      }
+      return 'Grades';
+    }
+    if (lowerTitle.contains('suspension') || lowerTitle.contains('suspended')) {
+      return 'Suspension';
+    }
     switch (warningLevel) {
       case 10:
         return 'Final Warning';
@@ -187,9 +223,14 @@ class _ExpandableNotificationCardState
     final n = widget.notification;
 
     final warningLevel = _detectWarningLevel(n.title, n.message);
-    final accentColor = _getAccentColor(warningLevel);
-    final iconData = _getIcon(warningLevel, n.type);
-    final badgeLabel = _getBadgeLabel(warningLevel, n.targetAudience);
+    final accentColor = _getAccentColor(warningLevel, n.type, n.title);
+    final iconData = _getIcon(warningLevel, n.type, n.title);
+    final badgeLabel = _getBadgeLabel(
+      warningLevel,
+      n.targetAudience,
+      n.type,
+      n.title,
+    );
 
     final formattedTitle = ExpandableNotificationCard.wrapUnbrokenString(
       _cleanTitle(n.title),

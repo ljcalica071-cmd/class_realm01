@@ -178,25 +178,30 @@ class SupabaseNotificationRepository {
     final message = n.message.toLowerCase();
     final fullText = '$title $message';
 
-    // Regex to match "in [Subject Name] ([Section Name])"
+    // Regex to match "in [Subject Name] ([Section Name])", ": [Subject Name] ([Section Name])", etc.
     final subjectRegex = RegExp(
-      r'in\s+([A-Za-z0-9\s/&_-]+?)\s*\(([^)]+)\)',
+      r'(?:in|for|:\s*)\s*([A-Za-z0-9\s/&_-]+?)\s*\(([^)]+)\)',
       caseSensitive: false,
     );
     final subjectMatch = subjectRegex.firstMatch(fullText);
+    final notifSubject = subjectMatch?.group(1)?.trim().toLowerCase() ?? '';
+    final isGeneric =
+        notifSubject.isEmpty ||
+        notifSubject == 'general' ||
+        notifSubject == 'general announcement' ||
+        notifSubject == 'all';
 
     if (roleStr == 'teacher') {
       // Filter out notifications for subjects this teacher doesn't teach
-      if (subjectMatch != null && handledOrEnrolledSubjects != null) {
-        final notifSubject = subjectMatch.group(1)?.trim().toLowerCase() ?? '';
+      if (notifSubject.isNotEmpty &&
+          !isGeneric &&
+          handledOrEnrolledSubjects != null) {
         final handled = handledOrEnrolledSubjects
             .map((s) => s.toLowerCase().trim())
             .where((s) => s.isNotEmpty)
             .toSet();
 
         if (handled.isNotEmpty &&
-            notifSubject.isNotEmpty &&
-            !notifSubject.contains('general') &&
             !handled.any(
               (h) => notifSubject.contains(h) || h.contains(notifSubject),
             )) {
@@ -234,20 +239,45 @@ class SupabaseNotificationRepository {
       }
 
       // 2. Enrolled subjects check
-      if (subjectMatch != null && handledOrEnrolledSubjects != null) {
-        final notifSubject = subjectMatch.group(1)?.trim().toLowerCase() ?? '';
+      if (notifSubject.isNotEmpty &&
+          !isGeneric &&
+          handledOrEnrolledSubjects != null) {
         final enrolled = handledOrEnrolledSubjects
             .map((s) => s.toLowerCase().trim())
             .where((s) => s.isNotEmpty)
             .toSet();
 
         if (enrolled.isNotEmpty &&
-            notifSubject.isNotEmpty &&
-            !notifSubject.contains('general') &&
             !enrolled.any(
               (e) => notifSubject.contains(e) || e.contains(notifSubject),
             )) {
           return false;
+        }
+      }
+
+      // 3. Class-scoped or suspension check for students
+      if (n.scope == 'class' ||
+          title.contains('suspension') ||
+          title.contains('suspended')) {
+        if (!isDirectlyTargeted && handledOrEnrolledSubjects != null) {
+          final enrolled = handledOrEnrolledSubjects
+              .map((s) => s.toLowerCase().trim())
+              .where((s) => s.isNotEmpty)
+              .toSet();
+
+          if (enrolled.isNotEmpty) {
+            if (notifSubject.isNotEmpty && !isGeneric) {
+              final matchesEnrolled = enrolled.any(
+                (e) => notifSubject.contains(e) || e.contains(notifSubject),
+              );
+              if (!matchesEnrolled) return false;
+            } else {
+              final anyEnrolledInText = enrolled.any(
+                (e) => fullText.contains(e),
+              );
+              if (!anyEnrolledInText) return false;
+            }
+          }
         }
       }
     } else if (roleStr == 'parent') {
@@ -256,6 +286,45 @@ class SupabaseNotificationRepository {
           n.studentId != null &&
           linkedChildren != null &&
           linkedChildren.any((c) => c.id.trim() == n.studentId!.trim());
+
+      // If notification is explicitly tied to a student, but not in linked children -> block immediately
+      if (n.studentId != null &&
+          n.studentId!.trim().isNotEmpty &&
+          linkedChildren != null &&
+          linkedChildren.isNotEmpty &&
+          !isMatchingLinkedChild) {
+        return false;
+      }
+
+      // Check subject enrollment match for class suspension & grade notifications
+      if (n.scope == 'class' ||
+          title.contains('suspension') ||
+          title.contains('suspended') ||
+          title.contains('grade') ||
+          n.type.toLowerCase() == 'grade') {
+        if (!isDirectlyTargeted &&
+            !isMatchingLinkedChild &&
+            handledOrEnrolledSubjects != null) {
+          final enrolled = handledOrEnrolledSubjects
+              .map((s) => s.toLowerCase().trim())
+              .where((s) => s.isNotEmpty)
+              .toSet();
+
+          if (enrolled.isNotEmpty) {
+            if (notifSubject.isNotEmpty && !isGeneric) {
+              final matchesEnrolled = enrolled.any(
+                (e) => notifSubject.contains(e) || e.contains(notifSubject),
+              );
+              if (!matchesEnrolled) return false;
+            } else {
+              final anyEnrolledInText = enrolled.any(
+                (e) => fullText.contains(e),
+              );
+              if (!anyEnrolledInText) return false;
+            }
+          }
+        }
+      }
 
       // If not explicitly matched via DB keys, fallback to text matching for legacy alerts
       if (!isDirectlyTargeted && !isMatchingLinkedChild) {
@@ -319,14 +388,52 @@ class SupabaseNotificationRepository {
         rawRows = rpcRes is List ? rpcRes : [];
       } catch (rpcErr) {
         debugPrint('SupabaseNotificationRepository RPC fallback: $rpcErr');
-        // Fallback: direct select if RPC is temporarily unavailable
-        final res = await _client
-            .from('notifications')
-            .select()
-            .eq('is_archived', false)
-            .order('created_at', ascending: false)
-            .limit(limit);
-        rawRows = res;
+        // Fallback: secure direct select strictly filtered by user role & identifiers
+        final role = user.role.name.toLowerCase().trim();
+        try {
+          if (role == 'student') {
+            final res = await _client
+                .from('notifications')
+                .select()
+                .eq('is_archived', false)
+                .or(
+                  'recipient_id.eq.${user.id},student_id.eq.${user.id},scope.eq.school_wide',
+                )
+                .order('created_at', ascending: false)
+                .limit(limit);
+            rawRows = res;
+          } else if (role == 'parent') {
+            final res = await _client
+                .from('notifications')
+                .select()
+                .eq('is_archived', false)
+                .or('recipient_id.eq.${user.id},scope.eq.school_wide')
+                .order('created_at', ascending: false)
+                .limit(limit);
+            rawRows = res;
+          } else if (role == 'teacher') {
+            final res = await _client
+                .from('notifications')
+                .select()
+                .eq('is_archived', false)
+                .or(
+                  'recipient_id.eq.${user.id},created_by.eq.${user.id},scope.eq.school_wide',
+                )
+                .order('created_at', ascending: false)
+                .limit(limit);
+            rawRows = res;
+          } else {
+            final res = await _client
+                .from('notifications')
+                .select()
+                .eq('is_archived', false)
+                .order('created_at', ascending: false)
+                .limit(limit);
+            rawRows = res;
+          }
+        } catch (_) {
+          rawRows = [];
+        }
       }
 
       final items = <AppNotificationModel>[];

@@ -1113,17 +1113,17 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
         final String parentTitle;
         final String parentMsg;
         if (threshold == 10) {
-          parentTitle = '$sName (10 Absences)';
+          parentTitle = '$sName (CRITICAL SARDO Alert: 10 Absences)';
           parentMsg =
-              'Urgent: Your child $sName has reached 10 absences in $subjectName ($section) and is at imminent risk of dropping out. Immediate conference required.';
+              'Urgent Notice for Parent/Guardian: Your child $sName has reached 10 absences in $subjectName ($section), placing them at critical risk under DepEd SARDO policies. Please visit the school immediately to confer with the adviser and teacher.';
         } else if (threshold == 6) {
-          parentTitle = '$sName (6 Absences)';
+          parentTitle = '$sName (Attendance Warning: 6 Absences)';
           parentMsg =
-              'Your child $sName has accumulated 6 absences in $subjectName ($section). Please schedule a conference with the subject teacher.';
+              'Dear Parent/Guardian, your child $sName has accumulated 6 absences in $subjectName ($section). A parent-teacher conference is requested to arrange attendance remediation.';
         } else {
-          parentTitle = '$sName (3 Absences)';
+          parentTitle = '$sName (Attendance Alert: 3 Absences)';
           parentMsg =
-              'Your child $sName has missed 3 sessions in $subjectName ($section). Please assist in ensuring regular and punctual class attendance.';
+              'Dear Parent/Guardian, your child $sName has recorded 3 absences in $subjectName ($section). Please assist in ensuring regular attendance and coordinate with the subject teacher if excuse documentation is needed.';
         }
 
         // Query linked parents
@@ -1194,8 +1194,33 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
           });
         }
 
-        // Insert scoped notifications to database
-        await _client.from('notifications').insert(scopedRows);
+        // Insert scoped notifications to database and track recipients
+        final inserted = await _client
+            .from('notifications')
+            .insert(scopedRows)
+            .select('id, recipient_id');
+
+        if (inserted.isNotEmpty) {
+          final recipientRows = <Map<String, dynamic>>[];
+          for (final row in inserted) {
+            final nid = row['id']?.toString();
+            final rid = row['recipient_id']?.toString();
+            if (nid != null && rid != null && rid.isNotEmpty) {
+              recipientRows.add({
+                'notification_id': nid,
+                'user_id': rid,
+                'created_at': nowIso,
+              });
+            }
+          }
+          if (recipientRows.isNotEmpty) {
+            try {
+              await _client
+                  .from('notification_recipients')
+                  .insert(recipientRows);
+            } catch (_) {}
+          }
+        }
 
         // Pop up the top in-app push banner on active screen if notifications enabled
         InAppNotificationSeverity bannerSeverity =

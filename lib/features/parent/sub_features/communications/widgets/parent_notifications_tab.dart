@@ -265,6 +265,7 @@ class _ParentNotificationsTabState extends State<ParentNotificationsTab> {
               .isNotificationVisibleForUser(
                 n,
                 currentUser,
+                handledOrEnrolledSubjects: _subjectOptions,
                 linkedChildren: childrenToCheck,
               );
         })

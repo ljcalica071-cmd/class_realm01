@@ -4044,6 +4044,253 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
         }
       }
 
+      // Grade publication / at-risk notification pipeline
+      if (willPublish) {
+        try {
+          final subjectName =
+              _currentSubjectData?['subject_name']?.toString() ?? 'Subject';
+          final sectionName =
+              _currentSubjectData?['section_name']?.toString() ?? 'Section';
+          final teacherId = AuthRepository.instance.currentUser?.id;
+          final nowIso = DateTime.now().toUtc().toIso8601String();
+          final termDesc = isTermGrade ? 'Term $_selectedTerm' : 'Final';
+
+          final studentIds = _students
+              .map((s) => s.id)
+              .where((id) => id.isNotEmpty)
+              .toList();
+
+          if (studentIds.isNotEmpty) {
+            final parentLinksRes = await client
+                .from('parent_student_links')
+                .select('parent_id, student_id')
+                .inFilter('student_id', studentIds);
+
+            final studentToParentsMap = <String, List<String>>{};
+            for (final row in (parentLinksRes as List? ?? [])) {
+              final sid = row['student_id']?.toString() ?? '';
+              final pid = row['parent_id']?.toString() ?? '';
+              if (sid.isNotEmpty && pid.isNotEmpty) {
+                studentToParentsMap.putIfAbsent(sid, () => []).add(pid);
+              }
+            }
+
+            final passingStudentIds = <String>[];
+            final passingParentIds = <String>{};
+
+            for (final student in _students) {
+              final int? grade;
+              if (isTermGrade) {
+                grade = _termGrade(student.id, _selectedTerm);
+              } else {
+                final activeTermsList =
+                    _activeTerms.isEmpty ? const [1] : _activeTerms;
+                final termGrades = {
+                  for (final t in activeTermsList) t: _termGrade(student.id, t),
+                };
+                grade = DepEdGradingEngine.computeFinalGrade(
+                  termsTaught: _termsTaught,
+                  activeTerms: activeTermsList,
+                  termGrades: termGrades,
+                  unitsPerTerm: _unitsPerTerm,
+                  totalUnitsEarned: _unitsPerYear,
+                );
+              }
+
+              // 74 pababa (<= 74): Failing / At-Risk Academic Alert
+              if (grade != null && grade <= 74) {
+                final studentAlertTitle = isTermGrade
+                    ? 'Academic Grade Alert: $subjectName - $termDesc'
+                    : 'Academic Final Grade Alert: $subjectName';
+                final studentAlertMsg = isTermGrade
+                    ? 'Your official grade for $termDesc in $subjectName is $grade. Please coordinate with your teacher for academic remediation and intervention.'
+                    : 'Your official Final Grade in $subjectName is $grade. Please coordinate with your teacher immediately regarding academic remediation and course completion.';
+
+                // At-Risk Grade Alert: Individual Student Notification
+                final sNotifInsert = await client
+                    .from('notifications')
+                    .insert({
+                      'title': studentAlertTitle,
+                      'message': studentAlertMsg,
+                      'notification_type': 'grade',
+                      'target_audience': 'students',
+                      'recipient_id': student.id,
+                      'student_id': student.id,
+                      'subject_offering_id': offeringId,
+                      'scope': 'class',
+                      'is_archived': false,
+                      'created_by': teacherId,
+                      'created_at': nowIso,
+                    })
+                    .select('id')
+                    .maybeSingle();
+
+                final sNotifId = sNotifInsert?['id']?.toString();
+                if (sNotifId != null) {
+                  try {
+                    await client.from('notification_recipients').insert({
+                      'notification_id': sNotifId,
+                      'user_id': student.id,
+                      'created_at': nowIso,
+                    });
+                  } catch (_) {}
+                }
+
+                // At-Risk Grade Alert: Individual Parent Notification for this student only
+                final linkedPids = studentToParentsMap[student.id] ?? [];
+                if (linkedPids.isNotEmpty) {
+                  final parentAlertTitle = isTermGrade
+                      ? 'Academic Alert: ${_displayName(student)} ($grade in $subjectName - $termDesc)'
+                      : 'Academic Alert: ${_displayName(student)} ($grade Final Grade in $subjectName)';
+                  final parentAlertMsg = isTermGrade
+                      ? 'Dear Parent/Guardian, your child ${_displayName(student)} received an official grade of $grade for $termDesc in $subjectName ($sectionName). Please coordinate with the teacher for remediation support.'
+                      : 'Dear Parent/Guardian, your child ${_displayName(student)} received an official Final Grade of $grade in $subjectName ($sectionName). Please coordinate with the teacher immediately to arrange academic intervention and remediation.';
+
+                  final pNotifInsert = await client
+                      .from('notifications')
+                      .insert({
+                        'title': parentAlertTitle,
+                        'message': parentAlertMsg,
+                        'notification_type': 'grade',
+                        'target_audience': 'parents',
+                        'student_id': student.id,
+                        'subject_offering_id': offeringId,
+                        'scope': 'class',
+                        'is_archived': false,
+                        'created_by': teacherId,
+                        'created_at': nowIso,
+                      })
+                      .select('id')
+                      .maybeSingle();
+
+                  final pNotifId = pNotifInsert?['id']?.toString();
+                  if (pNotifId != null) {
+                    final pRecipients = linkedPids
+                        .map(
+                          (pid) => {
+                            'notification_id': pNotifId,
+                            'user_id': pid,
+                            'created_at': nowIso,
+                          },
+                        )
+                        .toList();
+                    try {
+                      await client
+                          .from('notification_recipients')
+                          .insert(pRecipients);
+                    } catch (_) {}
+                  }
+                }
+              } else if (grade != null && grade >= 75) {
+                // 75 pataas: Passing students
+                passingStudentIds.add(student.id);
+                final pids = studentToParentsMap[student.id] ?? [];
+                passingParentIds.addAll(pids);
+              }
+            }
+
+            // General notification for passing learners and their parents
+            if (passingStudentIds.isNotEmpty) {
+              final pubStudentTitle = isTermGrade
+                  ? 'Grades Published: $subjectName - $termDesc'
+                  : 'Final Grades Published: $subjectName';
+              final pubStudentMsg = isTermGrade
+                  ? 'Your teacher has published the official $termDesc grades for $subjectName. You can view your grades in the Grades tab.'
+                  : 'Your teacher has published the official Final Grades for $subjectName. You can view your final grade in the Grades tab.';
+
+              final pubStudentInsert = await client
+                  .from('notifications')
+                  .insert({
+                    'title': pubStudentTitle,
+                    'message': pubStudentMsg,
+                    'notification_type': 'grade',
+                    'target_audience': 'students',
+                    'subject_offering_id': offeringId,
+                    'scope': 'class',
+                    'is_archived': false,
+                    'created_by': teacherId,
+                    'created_at': nowIso,
+                  })
+                  .select('id')
+                  .maybeSingle();
+
+              final pubStudentId = pubStudentInsert?['id']?.toString();
+              if (pubStudentId != null) {
+                final recs = passingStudentIds
+                    .map(
+                      (sid) => {
+                        'notification_id': pubStudentId,
+                        'user_id': sid,
+                        'created_at': nowIso,
+                      },
+                    )
+                    .toList();
+                try {
+                  await client.from('notification_recipients').insert(recs);
+                } catch (_) {}
+              }
+            }
+
+            if (passingParentIds.isNotEmpty) {
+              final pubParentTitle = isTermGrade
+                  ? 'Grades Published: $subjectName ($sectionName) - $termDesc'
+                  : 'Final Grades Published: $subjectName ($sectionName)';
+              final pubParentMsg = isTermGrade
+                  ? 'Dear Parent/Guardian, official $termDesc grades for $subjectName ($sectionName) have been published. You can review your child\'s performance in the Grades tab.'
+                  : 'Dear Parent/Guardian, official Final Grades for $subjectName ($sectionName) have been published. You can review your child\'s performance in the Grades tab.';
+
+              final pubParentInsert = await client
+                  .from('notifications')
+                  .insert({
+                    'title': pubParentTitle,
+                    'message': pubParentMsg,
+                    'notification_type': 'grade',
+                    'target_audience': 'parents',
+                    'subject_offering_id': offeringId,
+                    'scope': 'class',
+                    'is_archived': false,
+                    'created_by': teacherId,
+                    'created_at': nowIso,
+                  })
+                  .select('id')
+                  .maybeSingle();
+
+              final pubParentId = pubParentInsert?['id']?.toString();
+              if (pubParentId != null) {
+                final recs = passingParentIds
+                    .map(
+                      (pid) => {
+                        'notification_id': pubParentId,
+                        'user_id': pid,
+                        'created_at': nowIso,
+                      },
+                    )
+                    .toList();
+                try {
+                  await client.from('notification_recipients').insert(recs);
+                } catch (_) {}
+              }
+            }
+          }
+        } catch (notifErr) {
+          debugPrint(
+            'Notice sending grade publication notifications: $notifErr',
+          );
+        }
+      } else {
+        // Unpublishing: Archive existing grade notifications for this offering and term
+        try {
+          final matchPattern =
+              isTermGrade ? '%Term $_selectedTerm%' : '%Final Grade%';
+          await client
+              .from('notifications')
+              .update({'is_archived': true})
+              .eq('subject_offering_id', offeringId)
+              .eq('notification_type', 'grade')
+              .ilike('title', matchPattern);
+        } catch (_) {}
+      }
+
       AppDataCache.instance.invalidatePrefix('student_dashboard_');
       AppDataCache.instance.invalidatePrefix('parent_child_grades_');
       AppDataCache.instance.invalidatePrefix('student_grades_');

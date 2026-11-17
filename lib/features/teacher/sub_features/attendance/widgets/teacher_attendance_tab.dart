@@ -2088,13 +2088,13 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
               .where((id) => id.isNotEmpty)
               .toSet();
 
-          // 5. Insert targeted notification to students & parents of this specific class
-          final notifInsert = await client.from('notifications').insert({
+          // 5a. Insert targeted notification to enrolled students
+          final studentNotifInsert = await client.from('notifications').insert({
             'title': 'Class Suspended: $cleanReason in $subjectName ($sectionName)',
             'message':
-                'Classes and RFID attendance are suspended on $readableDate ($cleanReason) for $subjectName ($sectionName). All enrolled students are excused for this session.',
+                'Classes and RFID attendance are suspended on $readableDate ($cleanReason) for $subjectName ($sectionName). You are excused for this session.',
             'notification_type': 'announcement',
-            'target_audience': 'students_parents',
+            'target_audience': 'students',
             'is_archived': false,
             'created_at': nowIso,
             'subject_offering_id': offeringId,
@@ -2102,17 +2102,42 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             'created_by': teacherId,
           }).select('id').maybeSingle();
 
-          final notifId = notifInsert?['id']?.toString();
-          if (notifId != null) {
-            final targetUserIds = {...studentIds, ...parentIds};
-            if (targetUserIds.isNotEmpty) {
-              final recipientRows = targetUserIds.map((uid) => {
-                'notification_id': notifId,
-                'user_id': uid,
+          final studentNotifId = studentNotifInsert?['id']?.toString();
+          if (studentNotifId != null && studentIds.isNotEmpty) {
+            final studentRecipientRows = studentIds.map((uid) => {
+              'notification_id': studentNotifId,
+              'user_id': uid,
+              'created_at': nowIso,
+            }).toList();
+            try {
+              await client.from('notification_recipients').insert(studentRecipientRows);
+            } catch (_) {}
+          }
+
+          // 5b. Insert tailored notification to linked parents
+          if (parentIds.isNotEmpty) {
+            final parentNotifInsert = await client.from('notifications').insert({
+              'title': 'Class Suspension Notice: $subjectName ($sectionName)',
+              'message':
+                  'Notice for Parents/Guardians: Classes and RFID attendance for your child in $subjectName ($sectionName) are suspended on $readableDate ($cleanReason). Enrolled learners are excused for this session.',
+              'notification_type': 'announcement',
+              'target_audience': 'parents',
+              'is_archived': false,
+              'created_at': nowIso,
+              'subject_offering_id': offeringId,
+              'scope': 'class',
+              'created_by': teacherId,
+            }).select('id').maybeSingle();
+
+            final parentNotifId = parentNotifInsert?['id']?.toString();
+            if (parentNotifId != null) {
+              final parentRecipientRows = parentIds.map((pid) => {
+                'notification_id': parentNotifId,
+                'user_id': pid,
                 'created_at': nowIso,
               }).toList();
               try {
-                await client.from('notification_recipients').insert(recipientRows);
+                await client.from('notification_recipients').insert(parentRecipientRows);
               } catch (_) {}
             }
           }
@@ -2198,7 +2223,7 @@ class _TeacherAttendanceTabState extends State<TeacherAttendanceTab> {
             .from('notifications')
             .update({'is_archived': true})
             .eq('subject_offering_id', _selectedSubjectId!)
-            .ilike('title', '%Class Suspended%');
+            .ilike('title', '%Class Suspen%');
       } catch (_) {}
 
       if (!mounted) return;
