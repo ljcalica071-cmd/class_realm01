@@ -2072,12 +2072,21 @@ class _UnifiedEnrollStudentDialogState extends State<UnifiedEnrollStudentDialog>
   }
 
   String _decodeXmlEntities(String str) {
-    return str
+    var result = str
         .replaceAll('&amp;', '&')
         .replaceAll('&lt;', '<')
         .replaceAll('&gt;', '>')
         .replaceAll('&quot;', '"')
         .replaceAll('&apos;', "'");
+    result = result.replaceAllMapped(RegExp(r'&#(\d+);'), (match) {
+      final code = int.tryParse(match.group(1)!);
+      return code != null ? String.fromCharCode(code) : match.group(0)!;
+    });
+    result = result.replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (match) {
+      final code = int.tryParse(match.group(1)!, radix: 16);
+      return code != null ? String.fromCharCode(code) : match.group(0)!;
+    });
+    return result;
   }
 
   List<List<dynamic>> _parseXlsxBytes(Uint8List bytes) {
