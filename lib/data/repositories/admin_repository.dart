@@ -886,8 +886,7 @@ class AdminRepository {
       }
 
       final res = await filterQuery
-          .order('login_at', ascending: false)
-          .limit(200);
+          .order('login_at', ascending: false);
       final rawLogs = res as List;
       if (rawLogs.isEmpty) return [];
 
