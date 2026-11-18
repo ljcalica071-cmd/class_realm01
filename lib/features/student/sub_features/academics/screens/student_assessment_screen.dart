@@ -905,10 +905,23 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             ),
             callback: (payload) {
               final rec = payload.newRecord;
-              if (rec['status']?.toString().toLowerCase() == 'cancelled') {
+              if (rec['status']?.toString().toLowerCase() == 'cancelled' ||
+                  rec['is_archived'] == true ||
+                  rec['is_published'] == false) {
                 _handleAssessmentCancelled();
               }
             },
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.delete,
+            schema: 'public',
+            table: 'digital_assessments',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'id',
+              value: widget.assessment.id,
+            ),
+            callback: (_) => _handleAssessmentCancelled(),
           )
           .subscribe();
     } catch (e) {
@@ -942,9 +955,12 @@ class StudentAssessmentScreenState extends State<StudentAssessmentScreen>
             ),
           ],
         ),
-        content: const Text(
-          'Notice: This assessment has been cancelled by your teacher. Your answers will not be recorded and your grade will not be affected.',
-          style: TextStyle(fontSize: 14, height: 1.45),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: const Text(
+            'Notice: This assessment has been cancelled by your teacher. Your answers will not be recorded and your grade will not be affected.',
+            style: TextStyle(fontSize: 14, height: 1.45),
+          ),
         ),
         actions: [
           ElevatedButton(

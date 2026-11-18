@@ -1906,34 +1906,51 @@ class _TeacherUnifiedAssessmentsTabState
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Are you sure you want to cancel "${item.title}"?',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.catRed.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppTheme.catRed.withValues(alpha: 0.25),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to cancel "${item.title}"?',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
                 ),
               ),
-              child: Text(
-                'This will immediately terminate all active student sessions, remove this ${item.isExam ? "exam" : "quiz"} from students\' portals, void recorded scores, and deduct its points from the Gradebook Highest Possible Score (HPS).\n\nNo student will be penalized.',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  height: 1.45,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.catRed.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.catRed.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildCancelBullet(
+                      theme,
+                      'Active student sessions will end immediately.',
+                    ),
+                    const SizedBox(height: 6),
+                    _buildCancelBullet(
+                      theme,
+                      'Recorded attempts and scores will be voided (no student penalized).',
+                    ),
+                    const SizedBox(height: 6),
+                    _buildCancelBullet(
+                      theme,
+                      'This ${item.isExam ? "exam" : "quiz"} and its HPS will be removed so you can recreate it anytime.',
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1965,12 +1982,35 @@ class _TeacherUnifiedAssessmentsTabState
     }
   }
 
+  Widget _buildCancelBullet(ThemeData theme, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 5),
+          child: Icon(Icons.circle, size: 5, color: AppTheme.catRed),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.4,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.82),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _cancelAssessment(QuizOrExamModel item) async {
     setState(() => _isSyncing = true);
     try {
       final client = SupabaseService().client;
 
-      // 1. Fetch classwork_items row to get metadata
+      // 1. Fetch classwork_items row to get metadata for Gradebook cleanup
       Map<String, dynamic>? classworkRow;
       try {
         classworkRow = await client
@@ -1984,56 +2024,77 @@ class _TeacherUnifiedAssessmentsTabState
         debugPrint('classwork_items query notice during cancel: $e');
       }
 
-      // 2. Mark digital_assessments status = 'cancelled', is_published = false
+      // 2. Query existing attempts so we can notify active students & delete responses safely
+      List<String> attemptIds = [];
+      Set<String> distinctStudentIds = {};
+      try {
+        final attempts = await client
+            .from('assessment_attempts')
+            .select('id, student_id')
+            .eq('assessment_id', item.id);
+        for (final raw in (attempts as List? ?? [])) {
+          final row = raw as Map<String, dynamic>;
+          final aid = row['id']?.toString() ?? '';
+          final sid = row['student_id']?.toString() ?? '';
+          if (aid.isNotEmpty) attemptIds.add(aid);
+          if (sid.isNotEmpty) distinctStudentIds.add(sid);
+        }
+      } catch (e) {
+        debugPrint('assessment_attempts query notice during cancel: $e');
+      }
+
+      // 3. Broadcast real-time cancellation to connected students before deleting
       try {
         await client
             .from('digital_assessments')
-            .update({'status': 'cancelled', 'is_published': false})
+            .update({'is_published': false, 'is_archived': true})
             .eq('id', item.id);
       } catch (e) {
-        debugPrint('digital_assessments cancel notice: $e');
+        debugPrint('digital_assessments cancel broadcast notice: $e');
       }
 
-      // 3. Mark classwork_items status = 'cancelled', is_published = false
-      try {
-        await client
-            .from('classwork_items')
-            .update({'status': 'cancelled', 'is_published': false})
-            .eq('id', item.id);
-      } catch (e) {
-        debugPrint('classwork_items cancel notice: $e');
+      if (distinctStudentIds.isNotEmpty) {
+        try {
+          final nowIso = DateTime.now().toUtc().toIso8601String();
+          await client.from('anti_cheating_logs').insert([
+            for (final sid in distinctStudentIds)
+              {
+                'event_type': 'cancelled',
+                'details': 'Assessment was cancelled by instructor.',
+                'assessment_id': item.id,
+                'student_id': sid,
+                'event_at': nowIso,
+              },
+          ]);
+        } catch (e) {
+          debugPrint('anti_cheating_logs cancel insert notice: $e');
+        }
       }
 
-      // 4. Mark assessment_attempts status = 'cancelled'
+      // 4. Hard-delete assessment records so Gradebook slot & portals are cleaned
       try {
+        if (attemptIds.isNotEmpty) {
+          await client
+              .from('assessment_responses')
+              .delete()
+              .inFilter('attempt_id', attemptIds);
+        }
         await client
             .from('assessment_attempts')
-            .update({'status': 'cancelled'})
+            .delete()
             .eq('assessment_id', item.id);
-      } catch (e) {
-        debugPrint('assessment_attempts cancel notice: $e');
-      }
-
-      // 5. Mark student_classwork_submissions status = 'cancelled', void score
-      try {
         await client
             .from('student_classwork_submissions')
-            .update({'status': 'cancelled', 'score': null})
+            .delete()
             .eq('classwork_id', item.id);
+        await client
+            .from('assessment_questions')
+            .delete()
+            .eq('assessment_id', item.id);
+        await client.from('classwork_items').delete().eq('id', item.id);
+        await client.from('digital_assessments').delete().eq('id', item.id);
       } catch (e) {
-        debugPrint('student_classwork_submissions cancel notice: $e');
-      }
-
-      // 6. Broadcast cancellation to connected students via anti_cheating_logs
-      try {
-        await client.from('anti_cheating_logs').insert({
-          'event_type': 'cancelled',
-          'details': 'Assessment was cancelled by instructor.',
-          'assessment_id': item.id,
-          'event_at': DateTime.now().toUtc().toIso8601String(),
-        });
-      } catch (e) {
-        debugPrint('anti_cheating_logs cancel insert notice: $e');
+        debugPrint('Assessment delete cleanup notice during cancel: $e');
       }
 
       // 7. Clean up Gradebook: remove column score & HPS so grades recalculate cleanly
