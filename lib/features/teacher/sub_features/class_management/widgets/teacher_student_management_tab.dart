@@ -328,6 +328,17 @@ class _TeacherStudentManagementTabState
     return age;
   }
 
+  bool _matchesStudentEnrollmentRow(
+    UserModel item,
+    UserModel target, [
+    String? subjectOfferingId,
+  ]) {
+    if (item.id != target.id) return false;
+    final targetSubject = subjectOfferingId ?? target.enrolledSubjectId;
+    if (targetSubject == null || targetSubject.isEmpty) return true;
+    return item.enrolledSubjectId == targetSubject;
+  }
+
   Future<void> _handlePermanentlyDeleteStudent(UserModel s) async {
     if (_deletingStudentId != null) return;
     setState(() {
@@ -384,8 +395,12 @@ class _TeacherStudentManagementTabState
 
         if (confirm == true) {
           setState(() {
-            _activeStudents.removeWhere((item) => item.id == s.id);
-            _archivedStudents.removeWhere((item) => item.id == s.id);
+            _activeStudents.removeWhere(
+              (item) => _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
+            );
+            _archivedStudents.removeWhere(
+              (item) => _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
+            );
           });
           await studentRepo.permanentlyDeleteStudent(s.id, subjectOfferingId);
           await _loadData(forceRefresh: true);
@@ -413,8 +428,12 @@ class _TeacherStudentManagementTabState
 
         if (confirm == true) {
           setState(() {
-            _activeStudents.removeWhere((item) => item.id == s.id);
-            _archivedStudents.removeWhere((item) => item.id == s.id);
+            _activeStudents.removeWhere(
+              (item) => _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
+            );
+            _archivedStudents.removeWhere(
+              (item) => _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
+            );
           });
           await studentRepo.permanentlyDeleteStudent(s.id, subjectOfferingId);
           await _loadData(forceRefresh: true);
@@ -1483,12 +1502,12 @@ class _TeacherStudentManagementTabState
                                                                                 );
                                                                                 if (confirm == true) {
                                                                                   setState(() {
-                                                                                    _activeStudents.removeWhere((item) => item.id == s.id);
+                                                                                    _activeStudents.removeWhere((item) => _matchesStudentEnrollmentRow(item, s));
                                                                                     final archivedStudent = s.copyWith(
                                                                                       isArchived: true,
                                                                                       status: AccountStatus.archived,
                                                                                     );
-                                                                                    _archivedStudents.removeWhere((item) => item.id == s.id);
+                                                                                    _archivedStudents.removeWhere((item) => _matchesStudentEnrollmentRow(item, s));
                                                                                     _archivedStudents.add(archivedStudent);
                                                                                   });
                                                                                   if (context.mounted) {
@@ -1530,19 +1549,22 @@ class _TeacherStudentManagementTabState
                                                                                       );
                                                                                       if (confirm == true) {
                                                                                         setState(() {
-                                                                                          _archivedStudents.removeWhere((item) => item.id == s.id);
+                                                                                          _archivedStudents.removeWhere((item) => _matchesStudentEnrollmentRow(item, s));
                                                                                           final restoredStudent = s.copyWith(
                                                                                             isArchived: false,
                                                                                             status: AccountStatus.active,
                                                                                           );
-                                                                                          _activeStudents.removeWhere((item) => item.id == s.id);
+                                                                                          _activeStudents.removeWhere((item) => _matchesStudentEnrollmentRow(item, s));
                                                                                           _activeStudents.add(restoredStudent);
                                                                                         });
                                                                                         if (context.mounted) {
                                                                                           AppTopToast.success(context, '${s.fullName} restored to active enrollment.');
                                                                                         }
                                                                                         try {
-                                                                                          await SupabaseStudentRepository().restoreStudent(s.id);
+                                                                                          await SupabaseStudentRepository().restoreStudent(
+                                                                                            s.id,
+                                                                                            s.enrolledSubjectId,
+                                                                                          );
                                                                                         } catch (e) {
                                                                                           debugPrint('Error restoring student: $e');
                                                                                         }
