@@ -169,75 +169,83 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     }
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    if (_isLoading && _dashboard == null) {
-      return Scaffold(
-        body: _mobileFrame(
-          context,
-          _buildStudentHomeSkeleton(theme, isDark),
-        ),
-      );
-    }
-    if (_loadError != null && _dashboard == null) {
-      return Scaffold(
-        body: _mobileFrame(
-          context,
-          AppPullToRefresh(
-            onRefresh: () => _loadDashboard(forceRefresh: true),
-            child: AppPullToRefresh.scrollableState(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 68,
-                    height: 68,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.error.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.cloud_off_outlined,
-                      size: 34,
-                      color: theme.colorScheme.error,
-                    ),
+    final activeTabIndex = _currentIndex.clamp(0, 3);
+    final student =
+        _dashboard?.student ??
+        currentUser ??
+        LocalStorageService.getCachedUser() ??
+        UserModel(
+          id: '',
+          username: '',
+          fullName: 'Student',
+          email: '',
+          role: UserRole.student,
+        );
+
+    final Widget activePage;
+    if (_dashboard == null) {
+      if (_loadError != null && !_isLoading) {
+        activePage = AppPullToRefresh(
+          onRefresh: () => _loadDashboard(forceRefresh: true),
+          child: AppPullToRefresh.scrollableState(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.error.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'We could not load your student dashboard.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Icon(
+                    Icons.cloud_off_outlined,
+                    size: 34,
+                    color: theme.colorScheme.error,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _loadError.toString(),
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'We could not load your student dashboard.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: () => _loadDashboard(forceRefresh: true),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Try again'),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _loadError.toString(),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => _loadDashboard(forceRefresh: true),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Try again'),
+                ),
+              ],
             ),
           ),
-        ),
-      );
+        );
+      } else {
+        activePage = switch (activeTabIndex) {
+          0 => _buildStudentHomeSkeleton(theme, isDark),
+          1 => const ShimmerClassworkSkeleton(),
+          2 => const StudentNotificationsTab(),
+          _ => const ShimmerStudentProfileSkeleton(),
+        };
+      }
+    } else {
+      final classwork = _dashboard!.classwork;
+      final enrollments = _dashboard!.enrollments;
+      activePage = switch (activeTabIndex) {
+        0 => _buildHomeTab(context, student, classwork, enrollments),
+        1 => _buildClassworkTab(context, classwork, enrollments),
+        2 => const StudentNotificationsTab(),
+        _ => _buildProfileTab(context, student),
+      };
     }
-
-    final student = _dashboard!.student;
-    final classwork = _dashboard!.classwork;
-    final enrollments = _dashboard!.enrollments;
-    final activeTabIndex = _currentIndex.clamp(0, 3);
-    final Widget activePage = switch (activeTabIndex) {
-      0 => _buildHomeTab(context, student, classwork, enrollments),
-      1 => _buildClassworkTab(context, classwork, enrollments),
-      2 => const StudentNotificationsTab(),
-      _ => _buildProfileTab(context, student),
-    };
 
     return Scaffold(
         key: _scaffoldKey,
@@ -293,12 +301,14 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         drawer: _buildStudentDrawer(context, student),
         body: _mobileFrame(
           context,
-          StaggeredEntrance(
-            key: ValueKey(activeTabIndex),
-            index: 0,
-            duration: const Duration(milliseconds: 280),
-            child: activePage,
-          ),
+          _dashboard == null
+              ? activePage
+              : StaggeredEntrance(
+                  key: ValueKey(activeTabIndex),
+                  index: 0,
+                  duration: const Duration(milliseconds: 280),
+                  child: activePage,
+                ),
         ),
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _currentIndex.clamp(0, 3),
@@ -461,7 +471,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             title: 'My Schedule',
             onTap: () => _openPage(
               context,
-              StudentScheduleScreen(dashboardData: _dashboard!),
+              StudentScheduleScreen(dashboardData: _dashboard),
               AppRoutes.studentSchedule,
             ),
           ),

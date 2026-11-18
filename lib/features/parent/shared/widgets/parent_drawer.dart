@@ -217,7 +217,7 @@ class ParentDrawer extends StatelessWidget {
                     theme: theme,
                     isDark: isDark,
                     icon: Icons.assessment_outlined,
-                    title: 'Report Card & Term Grades',
+                    title: 'Term Grades',
                     subtitle: 'View Term 1–3 & Final Subject Grades',
                     accentColor: AppTheme.catTeal,
                     onTap: () {

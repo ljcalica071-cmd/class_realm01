@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:class_realm/core/utils/search_utils.dart';
 import 'package:flutter/material.dart';
 
@@ -174,6 +176,8 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
 
   late final ScrollController _horizontalScrollController;
 
+  ScrollPosition? _ancestorScrollPosition;
+
   @override
   void initState() {
     super.initState();
@@ -184,6 +188,29 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scrollable = Scrollable.maybeOf(context);
+    if (scrollable != null && scrollable.position != _ancestorScrollPosition) {
+      _ancestorScrollPosition?.removeListener(_onAncestorScroll);
+      _ancestorScrollPosition = scrollable.position;
+      _ancestorScrollPosition?.addListener(_onAncestorScroll);
+    }
+  }
+
+  void _onAncestorScroll() {
+    if (_ancestorScrollPosition == null || !mounted) return;
+    if (_ancestorScrollPosition!.extentAfter < 200) {
+      final total = _buildFilteredSortedRoster().length;
+      if (_visibleCount < total) {
+        setState(() {
+          _visibleCount += 20;
+        });
+      }
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant AttendanceRosterTable oldWidget) {
     super.didUpdateWidget(oldWidget);
 
@@ -191,10 +218,15 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
         _searchController.text != widget.searchQuery) {
       _searchController.text = widget.searchQuery;
     }
+    if (oldWidget.students != widget.students) {
+      _visibleCount = 20;
+    }
   }
 
   @override
   void dispose() {
+    _ancestorScrollPosition?.removeListener(_onAncestorScroll);
+
     _searchController.dispose();
 
     _horizontalScrollController.dispose();
@@ -461,111 +493,127 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
 
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── TOP FILTER & BULK ACTION BAR ──
+            _buildTopFilterBar(
+              theme: theme,
+              isDark: isDark,
+              totalCount: totalCount,
+              maleCount: maleCount,
+              femaleCount: femaleCount,
+              unmarkedCount: unmarkedCount,
+              hasAnyRecordedData: hasAnyRecordedData,
+            ),
 
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+            // ── ROSTER BODY ──
+            if (filteredStudents.isEmpty && widget.students.isNotEmpty)
+              AppEmptyState(
+                icon: LucideIcons.searchX,
+                title: 'No Matching Students',
+                message: 'No students match your active gender tab or search query.',
+                actionLabel: 'Reset Filters',
+                onAction: () {
+                  setState(() {
+                    _genderFilter = RosterGenderFilter.all;
+                    _visibleCount = 20;
+                    _searchController.clear();
+                  });
+                  widget.onSearchChanged('');
+                },
+              )
+            else ...[
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final visibleStudents = filteredStudents
+                      .take(_visibleCount)
+                      .toList();
 
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-
-            children: [
-              // ── TOP FILTER & BULK ACTION BAR ──
-
-              _buildTopFilterBar(
-                theme: theme,
-
-                isDark: isDark,
-
-                totalCount: totalCount,
-
-                maleCount: maleCount,
-
-                femaleCount: femaleCount,
-
-                unmarkedCount: unmarkedCount,
-
-                hasAnyRecordedData: hasAnyRecordedData,
+                  return _buildUnifiedTable(
+                    theme: theme,
+                    isDark: isDark,
+                    students: visibleStudents,
+                    constraints: constraints,
+                  );
+                },
               ),
 
-              // ── ROSTER BODY ──
-              if (filteredStudents.isEmpty && widget.students.isNotEmpty)
-                AppEmptyState(
-                  icon: LucideIcons.searchX,
-
-                  title: 'No Matching Students',
-
-                  message: 'No students match your active gender tab or search query.',
-
-                  actionLabel: 'Reset Filters',
-
-                  onAction: () {
-                    setState(() {
-                      _genderFilter = RosterGenderFilter.all;
-
-                      _searchController.clear();
-                    });
-
-                    widget.onSearchChanged('');
-                  },
-                )
-              else ...[
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final visibleStudents = filteredStudents
-                        .take(_visibleCount)
-                        .toList();
-
-                    return _buildUnifiedTable(
-                      theme: theme,
-
-                      isDark: isDark,
-
-                      students: visibleStudents,
-
-                      constraints: constraints,
-                    );
-                  },
+              if (_visibleCount < filteredStudents.length) ...[
+                const SizedBox(height: 16),
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Showing ${min(_visibleCount, filteredStudents.length)} of ${filteredStudents.length} students',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.65,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      AppButton.outline(
+                        label:
+                            'Load More (Scroll to show ${filteredStudents.length - min(_visibleCount, filteredStudents.length)} remaining)',
+                        icon: LucideIcons.chevronDown,
+                        isSmall: true,
+                        onPressed: () {
+                          setState(() {
+                            _visibleCount += 20;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-
-                if (_visibleCount < filteredStudents.length)
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-
-                    alignment: Alignment.center,
-
+                const SizedBox(height: 16),
+              ] else if (filteredStudents.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? const Color(0xFF1E293B)
-                          : Colors.grey.shade50,
-
-                      border: Border(
-                        top: BorderSide(
-                          color: isDark
-                              ? const Color(0xFF334155)
-                              : const Color(0xFFE2E8F0),
-                        ),
-                      ),
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : theme.colorScheme.onSurface.withValues(
+                              alpha: 0.04,
+                            ),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-
-                    child: TextButton.icon(
-                      onPressed: () => setState(() => _visibleCount += 20),
-
-                      icon: const Icon(LucideIcons.chevronDown, size: 16),
-
-                      label: Text(
-                        'Load More (${filteredStudents.length - _visibleCount} remaining)',
-
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-
-                          fontSize: 13,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.checkCheck,
+                          size: 14,
+                          color: theme.colorScheme.primary,
                         ),
-                      ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'All ${filteredStudents.length} students loaded',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.65,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                ),
+                const SizedBox(height: 16),
               ],
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -618,7 +666,10 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
 
             selected: _genderFilter == RosterGenderFilter.all,
 
-            onTap: () => setState(() => _genderFilter = RosterGenderFilter.all),
+            onTap: () => setState(() {
+              _genderFilter = RosterGenderFilter.all;
+              _visibleCount = 20;
+            }),
           ),
 
           _buildGenderSegment(
@@ -630,8 +681,10 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
 
             selected: _genderFilter == RosterGenderFilter.male,
 
-            onTap: () =>
-                setState(() => _genderFilter = RosterGenderFilter.male),
+            onTap: () => setState(() {
+              _genderFilter = RosterGenderFilter.male;
+              _visibleCount = 20;
+            }),
           ),
 
           _buildGenderSegment(
@@ -643,8 +696,10 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
 
             selected: _genderFilter == RosterGenderFilter.female,
 
-            onTap: () =>
-                setState(() => _genderFilter = RosterGenderFilter.female),
+            onTap: () => setState(() {
+              _genderFilter = RosterGenderFilter.female;
+              _visibleCount = 20;
+            }),
           ),
         ],
       ),
@@ -658,7 +713,12 @@ class _AttendanceRosterTableState extends State<AttendanceRosterTable> {
       child: TextField(
         controller: _searchController,
 
-        onChanged: widget.onSearchChanged,
+        onChanged: (v) {
+          if (_visibleCount != 20) {
+            setState(() => _visibleCount = 20);
+          }
+          widget.onSearchChanged(v);
+        },
 
         style: TextStyle(fontSize: 12.5, color: theme.colorScheme.onSurface),
 

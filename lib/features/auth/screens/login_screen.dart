@@ -661,19 +661,16 @@ class _LoginScreenState extends State<LoginScreen> {
           errText.contains('firebase.initializeapp') ||
           errText.contains('core/no-app')) {
         friendlyTitle = 'Service Connecting';
-        friendlyMessage =
-            'ClassRealm security service is still connecting. Please wait a brief moment and tap Login again.';
+        friendlyMessage = 'ClassRealm security service is still connecting. Please wait a brief moment and tap Login again.';
       } else if (errText.contains('network') ||
           errText.contains('socketexception') ||
           errText.contains('connection refused') ||
           errText.contains('failed host lookup')) {
         friendlyTitle = 'Connection Issue';
-        friendlyMessage =
-            'Unable to connect to the server. Please check your internet connection and try again.';
+        friendlyMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
       } else if (errText.contains('timeout')) {
         friendlyTitle = 'Connection Timeout';
-        friendlyMessage =
-            'The request took too long to respond. Please check your internet and tap Login again.';
+        friendlyMessage = 'The request took too long to respond. Please check your internet and tap Login again.';
       }
 
       AppModals.showErrorDialog(
@@ -1045,9 +1042,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                     inputFormatters: AppValidators.emailFormatters,
                     textInputAction: TextInputAction.next,
-                    onTap: MobileCredentialVault.isSupported &&
+                    onTap:
+                        MobileCredentialVault.isSupported &&
                             _savedCredentials.isNotEmpty
-                        ? () => setState(() => _showSavedCredentialsSheet = true)
+                        ? () =>
+                              setState(() => _showSavedCredentialsSheet = true)
                         : null,
                     autovalidateMode: _hasSubmitted
                         ? AutovalidateMode.onUserInteraction
@@ -1434,8 +1433,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final filtered = query.isEmpty
         ? _savedCredentials
         : _savedCredentials
-            .where((c) => c.email.toLowerCase().contains(query))
-            .toList();
+              .where((c) => c.email.toLowerCase().contains(query))
+              .toList();
     final displayList = filtered.isNotEmpty ? filtered : _savedCredentials;
 
     return Container(

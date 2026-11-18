@@ -339,9 +339,10 @@ class SupabaseStudentRepository implements StudentRepository {
                       settingsCandidate.toLowerCase() != 'archived')
                   ? settingsCandidate
                   : (usersData['status']?.toString() ?? 'pending_first_login');
-              final rawStatus = effectiveStatus
-                  .toLowerCase()
-                  .replaceAll(RegExp(r'[\s_-]'), '');
+              final rawStatus = effectiveStatus.toLowerCase().replaceAll(
+                RegExp(r'[\s_-]'),
+                '',
+              );
               if (rawStatus == 'active') {
                 accountStatus = AccountStatus.active;
               } else if (rawStatus == 'pending' ||
@@ -1245,8 +1246,7 @@ class SupabaseStudentRepository implements StudentRepository {
             canDelete: false,
             isClassRemovalOnly: false,
             hasClassRecords: true,
-            blockReason:
-                'This student cannot be deleted from this class because they have recorded attendance data in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+            blockReason: 'This student cannot be deleted from this class because they have recorded attendance data in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
           );
         }
 
@@ -1266,8 +1266,7 @@ class SupabaseStudentRepository implements StudentRepository {
             canDelete: false,
             isClassRemovalOnly: false,
             hasClassRecords: true,
-            blockReason:
-                'This student cannot be deleted from this class because they have recorded term grades in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+            blockReason: 'This student cannot be deleted from this class because they have recorded term grades in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
           );
         }
 
@@ -1291,8 +1290,7 @@ class SupabaseStudentRepository implements StudentRepository {
               canDelete: false,
               isClassRemovalOnly: false,
               hasClassRecords: true,
-              blockReason:
-                  'This student cannot be deleted from this class because they have submitted classwork activities in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+              blockReason: 'This student cannot be deleted from this class because they have submitted classwork activities in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
             );
           }
         }
@@ -1317,8 +1315,7 @@ class SupabaseStudentRepository implements StudentRepository {
               canDelete: false,
               isClassRemovalOnly: false,
               hasClassRecords: true,
-              blockReason:
-                  'This student cannot be deleted from this class because they have taken assessment quizzes or exams in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
+              blockReason: 'This student cannot be deleted from this class because they have taken assessment quizzes or exams in this subject.\n\nTo preserve historical academic records and maintain school compliance, this student must remain in the archives instead of being deleted.',
             );
           }
         }
@@ -1393,8 +1390,7 @@ class SupabaseStudentRepository implements StudentRepository {
             isClassRemovalOnly: false,
             hasOtherEnrollments: hasOtherEnrollments,
             hasGlobalRecords: hasGlobalRecords,
-            blockReason:
-                'Cannot delete student because no specific class was identified and the student has existing enrollments or academic records.',
+            blockReason: 'Cannot delete student because no specific class was identified and the student has existing enrollments or academic records.',
           );
         }
       }
@@ -1411,8 +1407,7 @@ class SupabaseStudentRepository implements StudentRepository {
       return const StudentDeletionEligibility(
         canDelete: false,
         isClassRemovalOnly: false,
-        blockReason:
-            'Unable to verify student academic records at this time. Please try again.',
+        blockReason: 'Unable to verify student academic records at this time. Please try again.',
       );
     }
   }
@@ -1447,7 +1442,10 @@ class SupabaseStudentRepository implements StudentRepository {
         }
       } else {
         try {
-          await _client.from('attendance_records').delete().eq('student_id', id);
+          await _client
+              .from('attendance_records')
+              .delete()
+              .eq('student_id', id);
         } catch (_) {}
         await _client.from('student_enrollments').delete().eq('student_id', id);
       }
@@ -1519,10 +1517,7 @@ class SupabaseStudentRepository implements StudentRepository {
             .eq('student_id', id);
       } catch (_) {}
       try {
-        await _client
-            .from('assessment_attempts')
-            .delete()
-            .eq('student_id', id);
+        await _client.from('assessment_attempts').delete().eq('student_id', id);
       } catch (_) {}
 
       try {

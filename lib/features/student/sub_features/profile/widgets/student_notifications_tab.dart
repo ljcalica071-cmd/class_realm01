@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -462,6 +463,17 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
       );
     }
 
+    final totalCount = displayedNotifications.length;
+    final totalPages = max(1, (totalCount / _pageSize).ceil());
+    final safePage = _currentPage.clamp(1, totalPages);
+    final startIndex = (safePage - 1) * _pageSize;
+    final endIndex = (startIndex + _pageSize > totalCount)
+        ? totalCount
+        : startIndex + _pageSize;
+    final pagedItems = totalCount == 0
+        ? const <AppNotificationModel>[]
+        : displayedNotifications.sublist(startIndex, endIndex);
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 540),
@@ -532,60 +544,48 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
                           ),
                         ),
                       )
-                    : Builder(
-                        builder: (context) {
-                          final totalPages =
-                              (displayedNotifications.length / _pageSize)
-                                  .ceil();
-                          final safePage = _currentPage.clamp(
-                            1,
-                            totalPages > 0 ? totalPages : 1,
-                          );
-                          final startIndex = (safePage - 1) * _pageSize;
-                          final endIndex =
-                              (startIndex + _pageSize >
-                                  displayedNotifications.length)
-                              ? displayedNotifications.length
-                              : startIndex + _pageSize;
-                          final pagedItems = displayedNotifications.sublist(
-                            startIndex,
-                            endIndex,
-                          );
-
-                          return ListView(
-                            controller: _scrollController,
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                            children: [
-                              ...pagedItems.map(
-                                (notification) => ExpandableNotificationCard(
-                                  notification: notification,
-                                  maxCollapsedLines: 2,
-                                ),
+                    : ListView(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        children: pagedItems
+                            .map(
+                              (notification) => ExpandableNotificationCard(
+                                notification: notification,
+                                maxCollapsedLines: 2,
                               ),
-                              const SizedBox(height: 12),
-                              _buildPaginationBar(
-                                theme: theme,
-                                isDark: isDark,
-                                totalCount: displayedNotifications.length,
-                                startIndex: startIndex,
-                                endIndex: endIndex,
-                                safePage: safePage,
-                                totalPages: totalPages,
-                              ),
-                            ],
-                          );
-                        },
+                            )
+                            .toList(),
                       ),
+              ),
+              _buildPaginationBar(
+                theme: theme,
+                isDark: isDark,
+                totalCount: totalCount,
+                startIndex: startIndex,
+                endIndex: endIndex,
+                safePage: safePage,
+                totalPages: totalPages,
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  void _goToPage(int page) {
+    setState(() => _currentPage = page);
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   Widget _buildPaginationBar({
@@ -597,97 +597,193 @@ class _StudentNotificationsTabState extends State<StudentNotificationsTab> {
     required int safePage,
     required int totalPages,
   }) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 52),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
-        ),
-      ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 12,
-        runSpacing: 8,
-        children: [
-          Text(
-            'Showing ${totalCount == 0 ? 0 : startIndex + 1} to $endIndex of $totalCount entries',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-            ),
+    final startDisplay = totalCount == 0 ? 0 : startIndex + 1;
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
           ),
-          if (totalPages > 1)
-            Row(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 360;
+
+            final controls = Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildPageButton(
-                  'First',
-                  () => setState(() => _currentPage = 1),
-                  safePage > 1,
-                ),
-                _buildPageButton(
-                  '<',
-                  () => setState(() => _currentPage = safePage - 1),
-                  safePage > 1,
-                ),
-                for (int p = 1; p <= totalPages; p++)
-                  if (p >= safePage - 2 && p <= safePage + 2)
-                    _buildPageButton(
-                      p.toString(),
-                      () => setState(() => _currentPage = p),
-                      true,
-                      isActive: p == safePage,
+                // Previous button
+                InkWell(
+                  onTap: safePage > 1 ? () => _goToPage(safePage - 1) : null,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isNarrow ? 7 : 10,
+                      vertical: 6,
                     ),
-                _buildPageButton(
-                  '>',
-                  () => setState(() => _currentPage = safePage + 1),
-                  safePage < totalPages,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color:
+                            isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.chevron_left_rounded,
+                          size: 16,
+                          color: safePage > 1
+                              ? theme.colorScheme.onSurface
+                              : theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.3),
+                        ),
+                        if (!isNarrow) ...[
+                          const SizedBox(width: 3),
+                          Text(
+                            'Prev',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: safePage > 1
+                                  ? theme.colorScheme.onSurface
+                                  : theme.colorScheme.onSurface
+                                      .withValues(alpha: 0.3),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-                _buildPageButton(
-                  'Last',
-                  () => setState(() => _currentPage = totalPages),
-                  safePage < totalPages,
+                const SizedBox(width: 6),
+                // Page indicator pill
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(
+                      alpha: isDark ? 0.2 : 0.1,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(
+                        alpha: isDark ? 0.4 : 0.25,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    '$safePage / ${max(1, totalPages)}',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                // Next button
+                InkWell(
+                  onTap: safePage < totalPages
+                      ? () => _goToPage(safePage + 1)
+                      : null,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isNarrow ? 7 : 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color:
+                            isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!isNarrow) ...[
+                          Text(
+                            'Next',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: safePage < totalPages
+                                  ? theme.colorScheme.onSurface
+                                  : theme.colorScheme.onSurface
+                                      .withValues(alpha: 0.3),
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                        ],
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
+                          color: safePage < totalPages
+                              ? theme.colorScheme.onSurface
+                              : theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.3),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
-            ),
-        ],
-      ),
-    );
-  }
+            );
 
-  Widget _buildPageButton(
-    String label,
-    VoidCallback onTap,
-    bool enabled, {
-    bool isActive = false,
-  }) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: enabled && !isActive ? onTap : null,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        decoration: BoxDecoration(
-          color: isActive ? theme.colorScheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            color: isActive
-                ? theme.colorScheme.onPrimary
-                : enabled
-                ? theme.colorScheme.onSurface
-                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
-          ),
+            final showingText = Text(
+              totalCount == 0
+                  ? (isNarrow ? '0 of 0' : 'Showing 0 of 0 notifications')
+                  : (isNarrow
+                      ? '$startDisplay–$endIndex of $totalCount'
+                      : 'Showing $startDisplay–$endIndex of $totalCount notifications'),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            );
+
+            if (constraints.maxWidth < 280) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  showingText,
+                  const SizedBox(height: 8),
+                  controls,
+                ],
+              );
+            }
+
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: showingText),
+                const SizedBox(width: 8),
+                controls,
+              ],
+            );
+          },
         ),
       ),
     );

@@ -99,7 +99,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   bool get _isFormValid {
     final email = _emailController.text.trim();
-    final emailError = AppValidators.validateEmail(email);
+    final emailError = AppValidators.validateEmail(
+      email,
+      checkGibberish: false,
+    );
     return emailError == null &&
         _hasMinLength &&
         _hasUpper &&
@@ -327,10 +330,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             autofillHints: const [AutofillHints.email],
             textInputAction: TextInputAction.next,
             inputFormatters: AppValidators.emailFormatters,
+            onChanged: (_) => setState(() {}),
             onFieldSubmitted: (_) {
               FocusScope.of(context).requestFocus(_newPassFocusNode);
             },
-            validator: AppValidators.validateEmail,
+            validator: (value) => AppValidators.validateEmail(
+              value,
+              checkGibberish: false,
+            ),
             style: const TextStyle(
               color: Color(0xFF0F172A),
               fontSize: 14,

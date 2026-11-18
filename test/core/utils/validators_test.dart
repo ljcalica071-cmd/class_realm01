@@ -151,6 +151,21 @@ void main() {
       );
     });
 
+    test('allows any valid email username when checkGibberish is false (login & forgot password)', () {
+      expect(
+        AppValidators.validateEmail('djdosksnajaosh@gmail.com', checkGibberish: false),
+        isNull,
+      );
+      expect(
+        AppValidators.validateEmail('aqduyaainqfdaikd87ysvsa73ycai@gmail.com', checkGibberish: false),
+        isNull,
+      );
+      expect(
+        AppValidators.validateEmail('asdfghjkl123@gmail.com', checkGibberish: false),
+        isNull,
+      );
+    });
+
     test('rejects temporary and disposable email domains', () {
       expect(
         AppValidators.validateEmail('student@tempmail.com'),

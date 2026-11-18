@@ -60,7 +60,8 @@ class _TeacherStudentManagementTabState
   List<String> get _availableSections {
     final set = <String>{};
     for (final s in _teacherSubjectsData) {
-      final subMatches = _selectedSubjectFilter == '— All Subjects —' ||
+      final subMatches =
+          _selectedSubjectFilter == '— All Subjects —' ||
           s['subject_name']?.toString().trim().toLowerCase() ==
               _selectedSubjectFilter.trim().toLowerCase();
       if (subMatches) {
@@ -396,10 +397,12 @@ class _TeacherStudentManagementTabState
         if (confirm == true) {
           setState(() {
             _activeStudents.removeWhere(
-              (item) => _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
+              (item) =>
+                  _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
             );
             _archivedStudents.removeWhere(
-              (item) => _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
+              (item) =>
+                  _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
             );
           });
           await studentRepo.permanentlyDeleteStudent(s.id, subjectOfferingId);
@@ -429,10 +432,12 @@ class _TeacherStudentManagementTabState
         if (confirm == true) {
           setState(() {
             _activeStudents.removeWhere(
-              (item) => _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
+              (item) =>
+                  _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
             );
             _archivedStudents.removeWhere(
-              (item) => _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
+              (item) =>
+                  _matchesStudentEnrollmentRow(item, s, subjectOfferingId),
             );
           });
           await studentRepo.permanentlyDeleteStudent(s.id, subjectOfferingId);
@@ -451,8 +456,7 @@ class _TeacherStudentManagementTabState
         AppModals.showErrorDialog(
           context: context,
           title: 'Delete Failed',
-          message:
-              'An unexpected error occurred while attempting to delete the student. Please try again.',
+          message: 'An unexpected error occurred while attempting to delete the student. Please try again.',
         );
       }
     } finally {
@@ -489,7 +493,8 @@ class _TeacherStudentManagementTabState
       availableSections = filteredSectionsSet.toList()..sort();
     }
 
-    final effectiveSection = (_selectedSectionFilter == '— All Sections —' ||
+    final effectiveSection =
+        (_selectedSectionFilter == '— All Sections —' ||
             availableSections.contains(_selectedSectionFilter))
         ? _selectedSectionFilter
         : '— All Sections —';
@@ -778,16 +783,14 @@ class _TeacherStudentManagementTabState
                                   hintText: 'Search by name or LRN...',
                                   hintStyle: TextStyle(
                                     fontSize: 12.5,
-                                    color: theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.5,
-                                    ),
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.5),
                                   ),
                                   prefixIcon: Icon(
                                     LucideIcons.search,
                                     size: 16,
-                                    color: theme.colorScheme.onSurface.withValues(
-                                      alpha: 0.5,
-                                    ),
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.5),
                                   ),
                                   filled: true,
                                   fillColor: theme.colorScheme.surface,
@@ -798,17 +801,19 @@ class _TeacherStudentManagementTabState
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface.withValues(
-                                        alpha: isDark ? 0.18 : 0.16,
-                                      ),
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(
+                                            alpha: isDark ? 0.18 : 0.16,
+                                          ),
                                     ),
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface.withValues(
-                                        alpha: isDark ? 0.18 : 0.16,
-                                      ),
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(
+                                            alpha: isDark ? 0.18 : 0.16,
+                                          ),
                                     ),
                                   ),
                                 ),
@@ -860,7 +865,8 @@ class _TeacherStudentManagementTabState
                                               const colStatusWidth = 180.0;
                                               const colActionsWidth = 145.0;
 
-                                              const baseFixed = colNumWidth +
+                                              const baseFixed =
+                                                  colNumWidth +
                                                   colLrnWidth +
                                                   colGenderWidth +
                                                   colBirthdateWidth +
@@ -868,20 +874,24 @@ class _TeacherStudentManagementTabState
                                                   colStatusWidth +
                                                   colActionsWidth;
                                               const baseNameWidth = 260.0;
-                                              const baseTotal = baseFixed + baseNameWidth;
+                                              const baseTotal =
+                                                  baseFixed + baseNameWidth;
 
                                               final extraWidth = math.max(
                                                 0.0,
-                                                constraints.maxWidth - baseTotal,
+                                                constraints.maxWidth -
+                                                    baseTotal,
                                               );
-                                              final colNameWidth = baseNameWidth + extraWidth;
+                                              final colNameWidth =
+                                                  baseNameWidth + extraWidth;
                                               final totalTableWidth = math.max(
                                                 constraints.maxWidth,
                                                 baseTotal,
                                               );
 
                                               return SingleChildScrollView(
-                                                scrollDirection: Axis.horizontal,
+                                                scrollDirection:
+                                                    Axis.horizontal,
                                                 child: SizedBox(
                                                   width: totalTableWidth,
                                                   child: Column(
@@ -890,84 +900,119 @@ class _TeacherStudentManagementTabState
                                                       Container(
                                                         height: 48,
                                                         decoration: BoxDecoration(
-                                                          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                                                          color: theme
+                                                              .colorScheme
+                                                              .primary
+                                                              .withValues(
+                                                                alpha: 0.1,
+                                                              ),
                                                           border: Border(
                                                             bottom: BorderSide(
-                                                              color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                                                              color: theme
+                                                                  .colorScheme
+                                                                  .primary
+                                                                  .withValues(
+                                                                    alpha: 0.3,
+                                                                  ),
                                                             ),
                                                           ),
                                                         ),
                                                         child: Row(
                                                           children: [
                                                             _buildHeaderCell(
-                                                              width: colNumWidth,
+                                                              width:
+                                                                  colNumWidth,
                                                               child: Center(
                                                                 child: Text(
                                                                   '#',
                                                                   style: TextStyle(
-                                                                    color: tableHeaderTextColor,
-                                                                    fontWeight: FontWeight.bold,
-                                                                    fontSize: 13,
+                                                                    color:
+                                                                        tableHeaderTextColor,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
+                                                                    fontSize:
+                                                                        13,
                                                                   ),
                                                                 ),
                                                               ),
                                                             ),
                                                             _buildHeaderCell(
-                                                              width: colNameWidth,
-                                                              child: _buildClickableHeaderTitle(
-                                                                'STUDENT NAME',
-                                                                'lastName',
-                                                              ),
+                                                              width:
+                                                                  colNameWidth,
+                                                              child:
+                                                                  _buildClickableHeaderTitle(
+                                                                    'STUDENT NAME',
+                                                                    'lastName',
+                                                                  ),
                                                             ),
                                                             _buildHeaderCell(
-                                                              width: colLrnWidth,
-                                                              child: _buildClickableHeaderTitle(
-                                                                'LRN',
-                                                                'lrn',
-                                                              ),
+                                                              width:
+                                                                  colLrnWidth,
+                                                              child:
+                                                                  _buildClickableHeaderTitle(
+                                                                    'LRN',
+                                                                    'lrn',
+                                                                  ),
                                                             ),
                                                             _buildHeaderCell(
-                                                              width: colGenderWidth,
-                                                              child: _buildClickableHeaderTitle(
-                                                                'GENDER',
-                                                                'gender',
-                                                              ),
+                                                              width:
+                                                                  colGenderWidth,
+                                                              child:
+                                                                  _buildClickableHeaderTitle(
+                                                                    'GENDER',
+                                                                    'gender',
+                                                                  ),
                                                             ),
                                                             _buildHeaderCell(
-                                                              width: colBirthdateWidth,
-                                                              child: _buildClickableHeaderTitle(
-                                                                'BIRTHDATE',
-                                                                'birthdate',
-                                                              ),
+                                                              width:
+                                                                  colBirthdateWidth,
+                                                              child:
+                                                                  _buildClickableHeaderTitle(
+                                                                    'BIRTHDATE',
+                                                                    'birthdate',
+                                                                  ),
                                                             ),
                                                             _buildHeaderCell(
-                                                              width: colEmailWidth,
+                                                              width:
+                                                                  colEmailWidth,
                                                               child: Text(
                                                                 'EMAIL',
                                                                 style: TextStyle(
-                                                                  color: tableHeaderTextColor,
-                                                                  fontWeight: FontWeight.bold,
+                                                                  color:
+                                                                      tableHeaderTextColor,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
                                                                   fontSize: 13,
                                                                 ),
                                                               ),
                                                             ),
                                                             _buildHeaderCell(
-                                                              width: colStatusWidth,
-                                                              child: _buildClickableHeaderTitle(
-                                                                'STATUS',
-                                                                'status',
-                                                              ),
+                                                              width:
+                                                                  colStatusWidth,
+                                                              child:
+                                                                  _buildClickableHeaderTitle(
+                                                                    'STATUS',
+                                                                    'status',
+                                                                  ),
                                                             ),
                                                             _buildHeaderCell(
-                                                              width: colActionsWidth,
-                                                              hasRightBorder: false,
+                                                              width:
+                                                                  colActionsWidth,
+                                                              hasRightBorder:
+                                                                  false,
                                                               child: Center(
                                                                 child: Text(
                                                                   'ACTIONS',
                                                                   style: TextStyle(
-                                                                    color: tableHeaderTextColor,
-                                                                    fontWeight: FontWeight.bold,
-                                                                    fontSize: 13,
+                                                                    color:
+                                                                        tableHeaderTextColor,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
+                                                                    fontSize:
+                                                                        13,
                                                                   ),
                                                                 ),
                                                               ),
@@ -980,31 +1025,49 @@ class _TeacherStudentManagementTabState
                                                         child: Center(
                                                           child: Column(
                                                             mainAxisAlignment:
-                                                                MainAxisAlignment.center,
+                                                                MainAxisAlignment
+                                                                    .center,
                                                             children: [
                                                               Icon(
                                                                 _showArchivedStudents
-                                                                    ? Icons.archive_outlined
-                                                                    : Icons.school_outlined,
+                                                                    ? Icons
+                                                                          .archive_outlined
+                                                                    : Icons
+                                                                          .school_outlined,
                                                                 size: 56,
-                                                                color: Theme.of(context)
-                                                                    .colorScheme
-                                                                    .onSurface
-                                                                    .withValues(alpha: 0.5),
+                                                                color:
+                                                                    Theme.of(
+                                                                          context,
+                                                                        )
+                                                                        .colorScheme
+                                                                        .onSurface
+                                                                        .withValues(
+                                                                          alpha:
+                                                                              0.5,
+                                                                        ),
                                                               ),
-                                                              const SizedBox(height: 16),
+                                                              const SizedBox(
+                                                                height: 16,
+                                                              ),
                                                               Text(
                                                                 _showArchivedStudents
                                                                     ? 'No archived students found.'
                                                                     : 'No students found for ${_teacherSubjects.contains(_selectedSubjectFilter) ? _selectedSubjectFilter : (_teacherSubjects.isNotEmpty ? _teacherSubjects.first : "this subject")}${effectiveSection != '— All Sections —' ? ' in $effectiveSection' : ''}.',
-                                                                textAlign: TextAlign.center,
+                                                                textAlign:
+                                                                    TextAlign
+                                                                        .center,
                                                                 style: TextStyle(
                                                                   fontSize: 16,
-                                                                  fontWeight: FontWeight.w500,
-                                                                  color: Theme.of(context)
-                                                                      .colorScheme
-                                                                      .onSurface
-                                                                      .withValues(alpha: 0.8),
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w500,
+                                                                  color:
+                                                                      Theme.of(
+                                                                        context,
+                                                                      ).colorScheme.onSurface.withValues(
+                                                                        alpha:
+                                                                            0.8,
+                                                                      ),
                                                                 ),
                                                               ),
                                                             ],
@@ -1149,12 +1212,15 @@ class _TeacherStudentManagementTabState
                                                             decoration: BoxDecoration(
                                                               color: (i % 2 == 1
                                                                   ? theme
-                                                                      .colorScheme
-                                                                      .primary
-                                                                      .withValues(alpha: 0.03) // 60/30 subtle row alternate
+                                                                        .colorScheme
+                                                                        .primary
+                                                                        .withValues(
+                                                                          alpha:
+                                                                              0.03,
+                                                                        ) // 60/30 subtle row alternate
                                                                   : theme
-                                                                      .colorScheme
-                                                                      .surface), // 60% base surface
+                                                                        .colorScheme
+                                                                        .surface), // 60% base surface
                                                               border: Border(
                                                                 bottom: BorderSide(
                                                                   color:
@@ -1363,9 +1429,18 @@ class _TeacherStudentManagementTabState
                                                               return Container(
                                                                 height: 52,
                                                                 decoration: BoxDecoration(
-                                                                  color: (i % 2 == 1
-                                                                      ? theme.colorScheme.primary.withValues(alpha: 0.03) // 60/30 subtle row alternate
-                                                                      : theme.colorScheme.surface),
+                                                                  color:
+                                                                      (i % 2 ==
+                                                                          1
+                                                                      ? theme
+                                                                            .colorScheme
+                                                                            .primary
+                                                                            .withValues(
+                                                                              alpha: 0.03,
+                                                                            ) // 60/30 subtle row alternate
+                                                                      : theme
+                                                                            .colorScheme
+                                                                            .surface),
                                                                   border: Border(
                                                                     bottom: BorderSide(
                                                                       color:
@@ -1503,10 +1578,7 @@ class _TeacherStudentManagementTabState
                                                                                 if (confirm == true) {
                                                                                   setState(() {
                                                                                     _activeStudents.removeWhere((item) => _matchesStudentEnrollmentRow(item, s));
-                                                                                    final archivedStudent = s.copyWith(
-                                                                                      isArchived: true,
-                                                                                      status: AccountStatus.archived,
-                                                                                    );
+                                                                                    final archivedStudent = s.copyWith(isArchived: true, status: AccountStatus.archived);
                                                                                     _archivedStudents.removeWhere((item) => _matchesStudentEnrollmentRow(item, s));
                                                                                     _archivedStudents.add(archivedStudent);
                                                                                   });
@@ -1514,13 +1586,7 @@ class _TeacherStudentManagementTabState
                                                                                     AppTopToast.success(context, '${s.fullName} moved to archives.');
                                                                                   }
                                                                                   try {
-                                                                                    await SupabaseStudentRepository().archiveStudent(
-                                                                                      s.id,
-                                                                                      s.enrolledSubjectId,
-                                                                                      (s.status == AccountStatus.pendingFirstLogin)
-                                                                                          ? 'pending_first_login'
-                                                                                          : 'active',
-                                                                                    );
+                                                                                    await SupabaseStudentRepository().archiveStudent(s.id, s.enrolledSubjectId, (s.status == AccountStatus.pendingFirstLogin) ? 'pending_first_login' : 'active');
                                                                                   } catch (e) {
                                                                                     debugPrint('Error archiving student: $e');
                                                                                   }
@@ -1550,10 +1616,7 @@ class _TeacherStudentManagementTabState
                                                                                       if (confirm == true) {
                                                                                         setState(() {
                                                                                           _archivedStudents.removeWhere((item) => _matchesStudentEnrollmentRow(item, s));
-                                                                                          final restoredStudent = s.copyWith(
-                                                                                            isArchived: false,
-                                                                                            status: AccountStatus.active,
-                                                                                          );
+                                                                                          final restoredStudent = s.copyWith(isArchived: false, status: AccountStatus.active);
                                                                                           _activeStudents.removeWhere((item) => _matchesStudentEnrollmentRow(item, s));
                                                                                           _activeStudents.add(restoredStudent);
                                                                                         });
@@ -1561,10 +1624,7 @@ class _TeacherStudentManagementTabState
                                                                                           AppTopToast.success(context, '${s.fullName} restored to active enrollment.');
                                                                                         }
                                                                                         try {
-                                                                                          await SupabaseStudentRepository().restoreStudent(
-                                                                                            s.id,
-                                                                                            s.enrolledSubjectId,
-                                                                                          );
+                                                                                          await SupabaseStudentRepository().restoreStudent(s.id, s.enrolledSubjectId);
                                                                                         } catch (e) {
                                                                                           debugPrint('Error restoring student: $e');
                                                                                         }
@@ -1578,20 +1638,11 @@ class _TeacherStudentManagementTabState
                                                                                   ? const SizedBox(
                                                                                       width: 14,
                                                                                       height: 14,
-                                                                                      child: CircularProgressIndicator(
-                                                                                        strokeWidth: 2,
-                                                                                        color: Color(0xFFEF4444),
-                                                                                      ),
+                                                                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)),
                                                                                     )
-                                                                                  : const Icon(
-                                                                                      Icons.delete_outline,
-                                                                                      color: Color(0xFFEF4444),
-                                                                                      size: 18,
-                                                                                    ),
+                                                                                  : const Icon(Icons.delete_outline, color: Color(0xFFEF4444), size: 18),
                                                                               splashRadius: 18,
-                                                                              onPressed: _deletingStudentId != null
-                                                                                  ? null
-                                                                                  : () => _handlePermanentlyDeleteStudent(s),
+                                                                              onPressed: _deletingStudentId != null ? null : () => _handlePermanentlyDeleteStudent(s),
                                                                             ),
                                                                           ],
                                                                         ],
@@ -1852,24 +1903,17 @@ class _TeacherStudentManagementTabState
                 : theme.colorScheme.onSurface.withValues(alpha: 0.2),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         icon: Icon(
-          _showArchivedStudents
-              ? Icons.people_outline
-              : Icons.archive_outlined,
+          _showArchivedStudents ? Icons.people_outline : Icons.archive_outlined,
           size: 16,
         ),
         label: Text(
           _showArchivedStudents
               ? 'View Active'
               : 'View Archive (${_archivedStudents.length})',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 12.5,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
         ),
         onPressed: () => setState(() {
           _showArchivedStudents = !_showArchivedStudents;
@@ -1969,11 +2013,7 @@ class _TeacherStudentManagementTabState
             return AppDropdownItem<String>(
               value: item,
               label: itemLabel(item),
-              icon: Icon(
-                icon,
-                size: 13.5,
-                color: theme.colorScheme.primary,
-              ),
+              icon: Icon(icon, size: 13.5, color: theme.colorScheme.primary),
             );
           }).toList(),
           onChanged: onChanged,

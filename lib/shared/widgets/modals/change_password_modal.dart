@@ -55,18 +55,44 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
 
   bool get _isParent => widget.user.role == UserRole.parent;
 
+  bool get _arePasswordRequirementsMet =>
+      _hasMinLength && _hasUpper && _hasLower && _hasNumber && _passwordsMatch;
+
+  bool get _canSubmit {
+    final current = _currentPassCtrl.text.trim();
+    final newPass = _newPassCtrl.text.trim();
+    return !_isLoading &&
+        current.isNotEmpty &&
+        _arePasswordRequirementsMet &&
+        newPass != current;
+  }
+
   @override
   void initState() {
     super.initState();
-    _currentPassCtrl.addListener(_onFieldsChanged);
-    _newPassCtrl.addListener(_onFieldsChanged);
+    _currentPassCtrl.addListener(_onCurrentPassChanged);
+    _newPassCtrl.addListener(_onNewPassChanged);
     _confirmPassCtrl.addListener(_onFieldsChanged);
   }
 
+  void _onCurrentPassChanged() {
+    if (_currentPassError != null) {
+      _currentPassError = null;
+    }
+    _onFieldsChanged();
+  }
+
+  void _onNewPassChanged() {
+    if (_newPassError != null) {
+      _newPassError = null;
+    }
+    _onFieldsChanged();
+  }
+
   void _onFieldsChanged() {
-    final password = _newPassCtrl.text;
-    final confirm = _confirmPassCtrl.text;
-    final current = _currentPassCtrl.text;
+    final password = _newPassCtrl.text.trim();
+    final confirm = _confirmPassCtrl.text.trim();
+    final current = _currentPassCtrl.text.trim();
 
     final result = AppValidators.validatePasswordComplexity(
       password: password,
@@ -98,18 +124,13 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
           password != current) {
         _newPassError = null;
       }
-
-      // Clear current password error when typing
-      if (_currentPassError != null && current.isNotEmpty) {
-        _currentPassError = null;
-      }
     });
   }
 
   @override
   void dispose() {
-    _currentPassCtrl.removeListener(_onFieldsChanged);
-    _newPassCtrl.removeListener(_onFieldsChanged);
+    _currentPassCtrl.removeListener(_onCurrentPassChanged);
+    _newPassCtrl.removeListener(_onNewPassChanged);
     _confirmPassCtrl.removeListener(_onFieldsChanged);
     _currentPassCtrl.dispose();
     _newPassCtrl.dispose();
@@ -121,6 +142,8 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
   }
 
   Future<void> _handleSubmit() async {
+    if (!_canSubmit) return;
+
     final current = _currentPassCtrl.text.trim();
     final newPass = _newPassCtrl.text.trim();
     final confirm = _confirmPassCtrl.text.trim();
@@ -435,7 +458,7 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
                     child: AppPrimaryButton(
                       label: _isParent ? 'Update Password' : 'Continue to Verification',
                       isLoading: _isLoading,
-                      onPressed: _isLoading ? null : _handleSubmit,
+                      onPressed: _canSubmit ? _handleSubmit : null,
                     ),
                   ),
                 ],
@@ -516,6 +539,13 @@ class _ChangePasswordModalState extends State<ChangePasswordModal> {
             buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
             inputFormatters: AppValidators.passwordFormatters,
             textInputAction: textInputAction,
+            onSubmitted: isConfirmField
+                ? (_) {
+                    if (_canSubmit) {
+                      _handleSubmit();
+                    }
+                  }
+                : null,
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,

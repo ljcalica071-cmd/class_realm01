@@ -12,7 +12,7 @@ import 'package:class_realm/data/repositories/auth_repository.dart';
 import 'package:class_realm/features/parent/sub_features/child_details/widgets/parent_subject_details_sheet.dart';
 import 'package:class_realm/shared/widgets/shared_widgets.dart';
 
-/// Standalone screen wrapper for opening Report Card & Term Grades from the
+/// Standalone screen wrapper for opening Term Grades from the
 /// Parent Side Panel (Drawer) or Quick Actions on Home.
 class ParentGradesScreen extends StatefulWidget {
   final UserModel? initialStudent;
@@ -67,14 +67,17 @@ class _ParentGradesScreenState extends State<ParentGradesScreen> {
         }
       });
     } else {
-      SupabaseParentRepository().getLinkedStudentsForParent(parent.id).then((students) {
-        if (students.isNotEmpty && mounted) {
-          setState(() {
-            _allChildren = students;
-            _activeStudent = students.first;
-          });
-        }
-      }).catchError((_) {});
+      SupabaseParentRepository()
+          .getLinkedStudentsForParent(parent.id)
+          .then((students) {
+            if (students.isNotEmpty && mounted) {
+              setState(() {
+                _allChildren = students;
+                _activeStudent = students.first;
+              });
+            }
+          })
+          .catchError((_) {});
     }
   }
 
@@ -201,9 +204,15 @@ class _ParentGradesScreenState extends State<ParentGradesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Report Card & Term Grades',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+        title: const FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Term Grades',
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
         ),
         actions: [
           if (student != null && _allChildren.isNotEmpty)

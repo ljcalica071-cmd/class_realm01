@@ -36,6 +36,9 @@ void main() {
     final dropdownFinder = find.byType(AppFixedDropdown<String?>);
     expect(dropdownFinder, findsOneWidget);
     expect(find.text('All Subjects'), findsOneWidget);
+    expect(find.text('1 / 1'), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_left_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
 
     // Tap dropdown to open
     await tester.tap(dropdownFinder);

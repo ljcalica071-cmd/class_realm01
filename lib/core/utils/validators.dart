@@ -323,7 +323,7 @@ class AppValidators {
   }
 
   /// Email validator (Strict & Reusable across the system)
-  static String? validateEmail(String? value) {
+  static String? validateEmail(String? value, {bool checkGibberish = true}) {
     if (value == null || value.trim().isEmpty) {
       return 'Email address is required.';
     }
@@ -364,7 +364,7 @@ class AppValidators {
     }
 
     // Prevent keyboard mash or random gibberish usernames (e.g. aqduyaainqfdaikd87ysvsa73ycai)
-    if (_isGibberishUsername(localPart)) {
+    if (checkGibberish && _isGibberishUsername(localPart)) {
       return 'Email username appears to be a random string. Please enter a valid email.';
     }
 

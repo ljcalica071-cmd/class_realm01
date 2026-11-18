@@ -1428,176 +1428,94 @@ class ShimmerStudentHomeSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return ShimmerLoading(
-      child: SingleChildScrollView(
+      child: ListView(
         physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Top Student Hero Card ──
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(
-                    alpha: isDark ? 0.14 : 0.08,
-                  ),
-                ),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        children: [
+          // ── Top Student Hero Card ──
+          const ShimmerBox(
+            width: double.infinity,
+            height: 204,
+            borderRadius: 22,
+          ),
+          const SizedBox(height: 18),
+
+          // ── Quick Access Row (Attendance & Schedule) ──
+          const Row(
+            children: [
+              Expanded(
+                child: ShimmerBox(height: 92, borderRadius: 15),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            ShimmerBox(width: 110, height: 20, borderRadius: 10),
-                            SizedBox(height: 12),
-                            ShimmerBox(width: 90, height: 13, borderRadius: 4),
-                            SizedBox(height: 6),
-                            ShimmerBox(width: 170, height: 20, borderRadius: 4),
-                            SizedBox(height: 8),
-                            ShimmerBox(width: 130, height: 14, borderRadius: 4),
-                          ],
-                        ),
-                      ),
-                      const ShimmerBox(width: 58, height: 58, borderRadius: 29),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  // Bottom mini stat cards row (Enrolled, To-Do)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: isDark ? 0.06 : 0.04,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: isDark ? 0.06 : 0.04,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              SizedBox(width: 10),
+              Expanded(
+                child: ShimmerBox(height: 92, borderRadius: 15),
               ),
-            ),
-            const SizedBox(height: 16),
+            ],
+          ),
+          const SizedBox(height: 24),
 
-            // ── Quick Access Row (Attendance & Schedule) ──
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    height: 64,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: isDark ? 0.12 : 0.07,
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        ShimmerBox(width: 28, height: 28, borderRadius: 8),
-                        SizedBox(width: 10),
-                        ShimmerBox(width: 72, height: 14, borderRadius: 4),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    height: 64,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: isDark ? 0.12 : 0.07,
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        ShimmerBox(width: 28, height: 28, borderRadius: 8),
-                        SizedBox(width: 10),
-                        ShimmerBox(width: 68, height: 14, borderRadius: 4),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
+          // ── To-Do List Section Header ──
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ShimmerBox(width: 104, height: 18, borderRadius: 6),
+              ShimmerBox(width: 82, height: 24, borderRadius: 999),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: ShimmerBox(width: 240, height: 12, borderRadius: 6),
+          ),
+          const SizedBox(height: 14),
 
-            // ── To-Do List Section Header ──
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: const [
-                ShimmerBox(width: 90, height: 18, borderRadius: 4),
-                ShimmerBox(width: 70, height: 20, borderRadius: 10),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const ShimmerBox(width: 240, height: 12, borderRadius: 4),
-            const SizedBox(height: 16),
+          // ── To-Do Card Skeleton ──
+          const ShimmerBox(
+            width: double.infinity,
+            height: 210,
+            borderRadius: 18,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-            // ── To-Do Empty/List Card Skeleton ──
-            Container(
+/// Preset: Student Profile Tab Skeleton
+class ShimmerStudentProfileSkeleton extends StatelessWidget {
+  const ShimmerStudentProfileSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        children: [
+          // ── Top Profile Banner Card ──
+          const ShimmerBox(
+            width: double.infinity,
+            height: 168,
+            borderRadius: 20,
+          ),
+          const SizedBox(height: 20),
+          // ── Section Title ──
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: ShimmerBox(width: 130, height: 12, borderRadius: 6),
+          ),
+          const SizedBox(height: 12),
+          // ── Profile Info Field Cards ──
+          for (int i = 0; i < 5; i++) ...[
+            const ShimmerBox(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: theme.colorScheme.onSurface.withValues(
-                    alpha: isDark ? 0.12 : 0.07,
-                  ),
-                ),
-              ),
-              child: Column(
-                children: const [
-                  ShimmerBox(width: 56, height: 56, borderRadius: 28),
-                  SizedBox(height: 16),
-                  ShimmerBox(width: 160, height: 16, borderRadius: 4),
-                  SizedBox(height: 8),
-                  ShimmerBox(width: 220, height: 12, borderRadius: 4),
-                ],
-              ),
+              height: 68,
+              borderRadius: 14,
             ),
+            if (i < 4) const SizedBox(height: 10),
           ],
-        ),
+        ],
       ),
     );
   }
