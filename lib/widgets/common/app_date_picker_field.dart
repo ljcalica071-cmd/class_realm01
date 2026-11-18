@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 
 /// A modern, intuitive date-picker field designed to avoid cumbersome month-by-month scrolling.
 /// Features quick year selection, month dropdown, dynamic day grid,
@@ -300,24 +301,16 @@ Future<DateTime?> showAppDatePickerDialog(
           );
 
           // Build calendar months, restricting past/future months when at boundary years
-          final validMonthItems = <DropdownMenuItem<int>>[];
+          final validMonthItems = <AppDropdownItem<int>>[];
           for (int m = 1; m <= 12; m++) {
             final isMonthDisabled =
                 (selectedYear == minDateOnly.year && m < minDateOnly.month) ||
                 (selectedYear == maxDateOnly.year && m > maxDateOnly.month);
             validMonthItems.add(
-              DropdownMenuItem<int>(
+              AppDropdownItem<int>(
                 value: m,
+                label: monthNames[m - 1],
                 enabled: !isMonthDisabled,
-                child: Text(
-                  monthNames[m - 1],
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isMonthDisabled
-                        ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
-                        : null,
-                  ),
-                ),
               ),
             );
           }
@@ -481,11 +474,21 @@ Future<DateTime?> showAppDatePickerDialog(
                               ),
                             ),
                             const SizedBox(height: 4),
-                            Container(
+                            AppFixedDropdown<int>(
+                              value: selectedYear,
+                              isExpanded: true,
+                              menuMaxHeight: 210,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
+                                vertical: 10,
+                              ),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: theme.colorScheme.onSurface,
                               ),
                               decoration: BoxDecoration(
+                                color: theme.colorScheme.surface,
                                 border: Border.all(
                                   color: theme.colorScheme.outline.withValues(
                                     alpha: 0.3,
@@ -493,60 +496,48 @@ Future<DateTime?> showAppDatePickerDialog(
                                 ),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<int>(
-                                  value: selectedYear,
-                                  isExpanded: true,
-                                  menuMaxHeight: 300,
-                                  items: yearList
-                                      .map(
-                                        (yr) => DropdownMenuItem(
-                                          value: yr,
-                                          child: Text(
-                                            '$yr',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (yr) {
-                                    if (yr != null) {
-                                      setDialogState(() {
-                                        selectedYear = yr;
-                                        // Clamp month if exceeds bounds of new year
-                                        if (selectedYear == maxDateOnly.year &&
-                                            selectedMonth > maxDateOnly.month) {
-                                          selectedMonth = maxDateOnly.month;
-                                        }
-                                        if (selectedYear == minDateOnly.year &&
-                                            selectedMonth < minDateOnly.month) {
-                                          selectedMonth = minDateOnly.month;
-                                        }
-                                        final days = DateUtils.getDaysInMonth(
-                                          selectedYear,
-                                          selectedMonth,
-                                        );
-                                        if (selectedDay > days) {
-                                          selectedDay = days;
-                                        }
-                                        final testDate = DateTime(
-                                          selectedYear,
-                                          selectedMonth,
-                                          selectedDay,
-                                        );
-                                        if (testDate.isAfter(maxDateOnly)) {
-                                          selectedDay = maxDateOnly.day;
-                                        }
-                                        if (testDate.isBefore(minDateOnly)) {
-                                          selectedDay = minDateOnly.day;
-                                        }
-                                      });
+                              items: yearList
+                                  .map(
+                                    (yr) => AppDropdownItem<int>(
+                                      value: yr,
+                                      label: '$yr',
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (yr) {
+                                if (yr != null) {
+                                  setDialogState(() {
+                                    selectedYear = yr;
+                                    // Clamp month if exceeds bounds of new year
+                                    if (selectedYear == maxDateOnly.year &&
+                                        selectedMonth > maxDateOnly.month) {
+                                      selectedMonth = maxDateOnly.month;
                                     }
-                                  },
-                                ),
-                              ),
+                                    if (selectedYear == minDateOnly.year &&
+                                        selectedMonth < minDateOnly.month) {
+                                      selectedMonth = minDateOnly.month;
+                                    }
+                                    final days = DateUtils.getDaysInMonth(
+                                      selectedYear,
+                                      selectedMonth,
+                                    );
+                                    if (selectedDay > days) {
+                                      selectedDay = days;
+                                    }
+                                    final testDate = DateTime(
+                                      selectedYear,
+                                      selectedMonth,
+                                      selectedDay,
+                                    );
+                                    if (testDate.isAfter(maxDateOnly)) {
+                                      selectedDay = maxDateOnly.day;
+                                    }
+                                    if (testDate.isBefore(minDateOnly)) {
+                                      selectedDay = minDateOnly.day;
+                                    }
+                                  });
+                                }
+                              },
                             ),
                           ],
                         ),
@@ -570,11 +561,27 @@ Future<DateTime?> showAppDatePickerDialog(
                               ),
                             ),
                             const SizedBox(height: 4),
-                            Container(
+                            AppFixedDropdown<int>(
+                              value: validMonthItems.any(
+                                (item) => item.value == selectedMonth,
+                              )
+                                  ? selectedMonth
+                                  : (validMonthItems.isNotEmpty
+                                        ? validMonthItems.last.value
+                                        : 1),
+                              isExpanded: true,
+                              menuMaxHeight: 210,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
+                                vertical: 10,
+                              ),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: theme.colorScheme.onSurface,
                               ),
                               decoration: BoxDecoration(
+                                color: theme.colorScheme.surface,
                                 border: Border.all(
                                   color: theme.colorScheme.outline.withValues(
                                     alpha: 0.3,
@@ -582,46 +589,32 @@ Future<DateTime?> showAppDatePickerDialog(
                                 ),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<int>(
-                                  value:
-                                      validMonthItems.any(
-                                        (item) => item.value == selectedMonth,
-                                      )
-                                      ? selectedMonth
-                                      : (validMonthItems.isNotEmpty
-                                            ? validMonthItems.last.value
-                                            : 1),
-                                  isExpanded: true,
-                                  menuMaxHeight: 300,
-                                  items: validMonthItems,
-                                  onChanged: (m) {
-                                    if (m != null) {
-                                      setDialogState(() {
-                                        selectedMonth = m;
-                                        final days = DateUtils.getDaysInMonth(
-                                          selectedYear,
-                                          selectedMonth,
-                                        );
-                                        if (selectedDay > days) {
-                                          selectedDay = days;
-                                        }
-                                        final testDate = DateTime(
-                                          selectedYear,
-                                          selectedMonth,
-                                          selectedDay,
-                                        );
-                                        if (testDate.isAfter(maxDateOnly)) {
-                                          selectedDay = maxDateOnly.day;
-                                        }
-                                        if (testDate.isBefore(minDateOnly)) {
-                                          selectedDay = minDateOnly.day;
-                                        }
-                                      });
+                              items: validMonthItems,
+                              onChanged: (m) {
+                                if (m != null) {
+                                  setDialogState(() {
+                                    selectedMonth = m;
+                                    final days = DateUtils.getDaysInMonth(
+                                      selectedYear,
+                                      selectedMonth,
+                                    );
+                                    if (selectedDay > days) {
+                                      selectedDay = days;
                                     }
-                                  },
-                                ),
-                              ),
+                                    final testDate = DateTime(
+                                      selectedYear,
+                                      selectedMonth,
+                                      selectedDay,
+                                    );
+                                    if (testDate.isAfter(maxDateOnly)) {
+                                      selectedDay = maxDateOnly.day;
+                                    }
+                                    if (testDate.isBefore(minDateOnly)) {
+                                      selectedDay = minDateOnly.day;
+                                    }
+                                  });
+                                }
+                              },
                             ),
                           ],
                         ),

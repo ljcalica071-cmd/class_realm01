@@ -10,6 +10,7 @@ import 'package:class_realm/models/admin_portal_models.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
 
 class AdminActivityAnalyticsTab extends StatefulWidget {
   const AdminActivityAnalyticsTab({super.key});
@@ -602,148 +603,109 @@ class _AdminActivityAnalyticsTabState extends State<AdminActivityAnalyticsTab>
           )
         : null;
 
-    return Theme(
-      data: Theme.of(context).copyWith(
-        popupMenuTheme: PopupMenuThemeData(
-          color: isDark ? const Color(0xFF1E293B) : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
-            ),
+    return AppFixedDropdown<String>(
+      value: _selectedTeacherId ?? '__ALL_FACULTY__',
+      menuWidth: 220,
+      onChanged: (String? teacherId) {
+        setState(
+          () => _selectedTeacherId =
+              (teacherId == null || teacherId == '__ALL_FACULTY__')
+              ? null
+              : teacherId,
+        );
+      },
+      items: [
+        AppDropdownItem<String>(
+          value: '__ALL_FACULTY__',
+          label: 'All Faculty',
+          icon: Icon(
+            LucideIcons.users,
+            size: 15,
+            color: _selectedTeacherId == null
+                ? AppTheme.catGreen
+                : (isDark ? Colors.white70 : const Color(0xFF475569)),
           ),
         ),
-      ),
-      child: PopupMenuButton<String?>(
-        tooltip: 'Filter by Teacher',
-        offset: const Offset(0, 36),
-        onSelected: (String? teacherId) {
-          setState(
-            () => _selectedTeacherId =
-                (teacherId == null || teacherId == '__ALL_FACULTY__')
-                ? null
-                : teacherId,
+        ...teachers.map((t) {
+          return AppDropdownItem<String>(
+            value: t.id,
+            label: t.name,
+            icon: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: t.color,
+                shape: BoxShape.circle,
+              ),
+            ),
           );
-        },
-        itemBuilder: (context) => [
-          PopupMenuItem<String?>(
-            value: '__ALL_FACULTY__',
+        }),
+      ],
+      builder: (context, controller, selectedItem) {
+        return InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color:
+                  isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: selectedTeacher != null
+                    ? selectedTeacher.color.withValues(alpha: 0.5)
+                    : (isDark ? Colors.white12 : const Color(0xFFCBD5E1)),
+              ),
+            ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  LucideIcons.users,
-                  size: 15,
-                  color: _selectedTeacherId == null
-                      ? AppTheme.catGreen
-                      : (isDark ? Colors.white70 : const Color(0xFF475569)),
-                ),
-                const SizedBox(width: 8),
+                if (selectedTeacher != null)
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                      color: selectedTeacher.color,
+                      shape: BoxShape.circle,
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Icon(
+                      LucideIcons.users,
+                      size: 13,
+                      color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                    ),
+                  ),
                 Text(
-                  'All Faculty',
+                  selectedTeacher != null
+                      ? selectedTeacher.name
+                      : 'All Faculty',
                   style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: _selectedTeacherId == null
-                        ? FontWeight.bold
-                        : FontWeight.w500,
-                    color: _selectedTeacherId == null
-                        ? AppTheme.catGreen
-                        : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
                   ),
                 ),
-                const Spacer(),
-                if (_selectedTeacherId == null)
-                  const Icon(Icons.check, size: 16, color: AppTheme.catGreen),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 16,
+                  color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                ),
               ],
             ),
           ),
-          const PopupMenuDivider(),
-          ...teachers.map((t) {
-            final isCurrent = _selectedTeacherId == t.id;
-            return PopupMenuItem<String?>(
-              value: t.id,
-              child: Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: t.color,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      t.name,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: isCurrent
-                            ? FontWeight.bold
-                            : FontWeight.w500,
-                        color: isCurrent
-                            ? t.color
-                            : (isDark ? Colors.white : const Color(0xFF1E293B)),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (isCurrent) Icon(Icons.check, size: 16, color: t.color),
-                ],
-              ),
-            );
-          }),
-        ],
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selectedTeacher != null
-                  ? selectedTeacher.color.withValues(alpha: 0.5)
-                  : (isDark ? Colors.white12 : const Color(0xFFCBD5E1)),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (selectedTeacher != null)
-                Container(
-                  width: 8,
-                  height: 8,
-                  margin: const EdgeInsets.only(right: 6),
-                  decoration: BoxDecoration(
-                    color: selectedTeacher.color,
-                    shape: BoxShape.circle,
-                  ),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Icon(
-                    LucideIcons.users,
-                    size: 13,
-                    color: isDark ? Colors.white70 : const Color(0xFF64748B),
-                  ),
-                ),
-              Text(
-                selectedTeacher != null ? selectedTeacher.name : 'All Faculty',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : const Color(0xFF1E293B),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 16,
-                color: isDark ? Colors.white54 : const Color(0xFF64748B),
-              ),
-            ],
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 

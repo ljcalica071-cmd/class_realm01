@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:class_realm/shared/widgets/app_fixed_dropdown.dart';
+import 'package:class_realm/widgets/common/app_date_picker_field.dart';
 
 void main() {
   group('AppFixedDropdown Tests', () {
@@ -190,6 +191,67 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(selected, 'Section 2');
+    });
+
+    testWidgets(
+        'AppDatePickerField Year and Month dropdowns open below trigger and select properly',
+        (tester) async {
+      DateTime? pickedDate;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: AppDatePickerField(
+                label: 'Birthday',
+                initialDate: DateTime(1995, 1, 1),
+                onDateSelected: (d) => pickedDate = d,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Tap field to open Select Birthdate dialog
+      await tester.tap(find.text('1995-01-01'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Select Birthdate'), findsOneWidget);
+      expect(find.text('1995'), findsOneWidget);
+      expect(find.text('01 - January'), findsOneWidget);
+
+      final yearTriggerBottom = tester.getBottomLeft(find.text('1995')).dy;
+
+      // Open Year dropdown
+      await tester.tap(find.text('1995'));
+      await tester.pumpAndSettle();
+
+      // Verify menu items open BELOW the trigger (not above the Select Birthdate header)
+      final firstMenuButtonTop =
+          tester.getTopLeft(find.byType(MenuItemButton).first).dy;
+      expect(firstMenuButtonTop, greaterThanOrEqualTo(yearTriggerBottom));
+
+      // Select another year from the menu
+      await tester.tap(find.widgetWithText(MenuItemButton, '2005'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2005'), findsOneWidget);
+
+      // Open Month dropdown
+      await tester.tap(find.text('01 - January'));
+      await tester.pumpAndSettle();
+
+      // Select 03 - March
+      await tester.tap(find.widgetWithText(MenuItemButton, '03 - March'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('03 - March'), findsOneWidget);
+
+      // Confirm Date
+      await tester.tap(find.text('Confirm Date'));
+      await tester.pumpAndSettle();
+
+      expect(pickedDate, equals(DateTime(2005, 3, 1)));
     });
   });
 }
