@@ -11,6 +11,7 @@ import 'package:class_realm/models/user_model.dart';
 import 'package:class_realm/routes/app_routes.dart';
 import 'package:class_realm/core/theme/app_theme.dart';
 import 'package:class_realm/core/services/local_storage_service.dart';
+import 'package:class_realm/core/services/mobile_credential_vault.dart';
 import 'package:class_realm/core/services/sync_coordinator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:class_realm/data/repositories/admin_repository.dart';
@@ -40,6 +41,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final FocusNode _emailFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
 
+  // Mobile-only encrypted saved credentials (untouched on Web)
+  List<SavedLoginCredential> _savedCredentials = const [];
+  bool _showSavedCredentialsSheet = false;
+
   bool get _isRateLimited => _lockoutRemaining != null;
 
   @override
@@ -48,9 +53,17 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.addListener(_handleEmailChanged);
     _passwordController.addListener(_handlePasswordChanged);
 
+    if (MobileCredentialVault.isSupported) {
+      unawaited(_loadSavedMobileCredentials());
+      _emailFocusNode.addListener(_handleMobileCredentialFocusChange);
+    }
+
     _passwordFocusNode.addListener(() {
       if (_passwordFocusNode.hasFocus) {
         _healPasswordSelection();
+        if (MobileCredentialVault.isSupported && _savedCredentials.isNotEmpty) {
+          setState(() => _showSavedCredentialsSheet = true);
+        }
       }
     });
 
@@ -192,6 +205,9 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.removeListener(_handleEmailChanged);
     _passwordController.removeListener(_handlePasswordChanged);
+    if (MobileCredentialVault.isSupported) {
+      _emailFocusNode.removeListener(_handleMobileCredentialFocusChange);
+    }
     _lockoutTimer?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
@@ -200,7 +216,213 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleEmailChanged() {}
+  Future<void> _loadSavedMobileCredentials() async {
+    final loaded = await MobileCredentialVault.instance.loadCredentials();
+    if (!mounted) return;
+    setState(() {
+      _savedCredentials = loaded;
+    });
+  }
+
+  void _handleMobileCredentialFocusChange() {
+    if (!MobileCredentialVault.isSupported || !mounted) return;
+    if (_emailFocusNode.hasFocus && _savedCredentials.isNotEmpty) {
+      setState(() => _showSavedCredentialsSheet = true);
+    }
+  }
+
+  void _applySavedCredential(SavedLoginCredential cred) {
+    _emailController.text = cred.email;
+    _passwordController.text = cred.password;
+    _emailController.selection = TextSelection.collapsed(
+      offset: cred.email.length,
+    );
+    _passwordController.selection = TextSelection.collapsed(
+      offset: cred.password.length,
+    );
+    setState(() {
+      _showSavedCredentialsSheet = false;
+    });
+    FocusScope.of(context).unfocus();
+  }
+
+  Future<void> _removeSavedCredential(SavedLoginCredential cred) async {
+    await MobileCredentialVault.instance.removeCredential(cred.email);
+    final updated = await MobileCredentialVault.instance.loadCredentials();
+    if (!mounted) return;
+    setState(() {
+      _savedCredentials = updated;
+      if (_savedCredentials.isEmpty) {
+        _showSavedCredentialsSheet = false;
+      }
+    });
+  }
+
+  Future<void> _maybePromptSaveMobileCredential(
+    UserModel user,
+    String email,
+    String password,
+  ) async {
+    if (!MobileCredentialVault.isSupported || !mounted) return;
+    if (user.status != AccountStatus.active) return;
+    if (user.role != UserRole.admin && LocalStorageService.isMaintenanceMode) {
+      return;
+    }
+
+    final existing = MobileCredentialVault.instance.findByEmail(
+      _savedCredentials,
+      email,
+    );
+    if (existing != null && existing.password == password) {
+      // Refresh recency/name silently without interrupting login
+      await MobileCredentialVault.instance.saveCredential(
+        SavedLoginCredential(
+          email: email,
+          password: password,
+          displayName: user.fullName,
+          role: user.role.name,
+          updatedAt: DateTime.now(),
+        ),
+      );
+      return;
+    }
+
+    final isUpdate = existing != null;
+    if (!mounted) return;
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+        contentPadding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF487898).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                LucideIcons.keyRound,
+                color: Color(0xFF487898),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                isUpdate ? 'Update Saved Password?' : 'Save Password?',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.mail,
+                      size: 15,
+                      color: Color(0xFF475569),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        email,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0F172A),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                isUpdate
+                    ? 'Your password for this account has changed. Update your saved password on this device?'
+                    : 'Save your credentials securely on this device so you can tap to autofill and sign in faster next time?',
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  color: Color(0xFF475569),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text(
+              'Not Now',
+              style: TextStyle(color: Color(0xFF64748B)),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF487898),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              isUpdate ? 'Update' : 'Save',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSave == true) {
+      await MobileCredentialVault.instance.saveCredential(
+        SavedLoginCredential(
+          email: email,
+          password: password,
+          displayName: user.fullName,
+          role: user.role.name,
+          updatedAt: DateTime.now(),
+        ),
+      );
+    }
+  }
+
+  void _handleEmailChanged() {
+    if (MobileCredentialVault.isSupported &&
+        _showSavedCredentialsSheet &&
+        mounted) {
+      setState(() {});
+    }
+  }
 
   void _healPasswordSelection() {
     final text = _passwordController.text;
@@ -239,6 +461,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handlePasswordFieldTap() {
     _healPasswordSelection();
+    if (MobileCredentialVault.isSupported && _savedCredentials.isNotEmpty) {
+      setState(() => _showSavedCredentialsSheet = true);
+    }
     if (!_passwordFocusNode.hasFocus) {
       _passwordFocusNode.requestFocus();
     } else {
@@ -283,7 +508,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     // Instant UI feedback: set loading immediately with 0ms latency
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _showSavedCredentialsSheet = false;
+    });
 
     final rawEmail = _emailController.text.trim();
     final emailInput = rawEmail.toLowerCase();
@@ -374,6 +602,15 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       _lockoutTimer?.cancel();
       _lockoutRemaining = null;
+
+      if (MobileCredentialVault.isSupported) {
+        await _maybePromptSaveMobileCredential(
+          user,
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
+        );
+        if (!mounted) return;
+      }
 
       _routeUser(user);
     } catch (e) {
@@ -799,19 +1036,29 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextFormField(
                     controller: _emailController,
                     focusNode: _emailFocusNode,
+                    keyboardType: MobileCredentialVault.isSupported
+                        ? TextInputType.emailAddress
+                        : null,
                     autofillHints: const [
                       AutofillHints.username,
                       AutofillHints.email,
                     ],
                     inputFormatters: AppValidators.emailFormatters,
                     textInputAction: TextInputAction.next,
+                    onTap: MobileCredentialVault.isSupported &&
+                            _savedCredentials.isNotEmpty
+                        ? () => setState(() => _showSavedCredentialsSheet = true)
+                        : null,
                     autovalidateMode: _hasSubmitted
                         ? AutovalidateMode.onUserInteraction
                         : AutovalidateMode.disabled,
                     onFieldSubmitted: (_) {
                       FocusScope.of(context).requestFocus(_passwordFocusNode);
                     },
-                    validator: AppValidators.validateEmail,
+                    validator: (value) => AppValidators.validateEmail(
+                      value,
+                      checkGibberish: false,
+                    ),
                     style: const TextStyle(
                       color: Color(0xFF0F172A),
                       fontSize: 14,
@@ -1044,6 +1291,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
+                  if (MobileCredentialVault.isSupported &&
+                      _showSavedCredentialsSheet &&
+                      _savedCredentials.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _buildMobileSavedCredentialsPanel(),
+                  ],
                 ],
               ),
             ),
@@ -1172,6 +1425,152 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMobileSavedCredentialsPanel() {
+    final query = _emailController.text.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? _savedCredentials
+        : _savedCredentials
+            .where((c) => c.email.toLowerCase().contains(query))
+            .toList();
+    final displayList = filtered.isNotEmpty ? filtered : _savedCredentials;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF487898).withValues(alpha: 0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 6, 6),
+            child: Row(
+              children: [
+                const Icon(
+                  LucideIcons.keyRound,
+                  size: 14,
+                  color: Color(0xFF487898),
+                ),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    'Saved passwords — tap to fill',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () =>
+                      setState(() => _showSavedCredentialsSheet = false),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.close,
+                      size: 16,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          for (int i = 0; i < displayList.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: Color(0xFFE2E8F0)),
+            InkWell(
+              onTap: () => _applySavedCredential(displayList[i]),
+              borderRadius: i == displayList.length - 1
+                  ? const BorderRadius.vertical(bottom: Radius.circular(12))
+                  : BorderRadius.zero,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF487898).withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        LucideIcons.userCheck,
+                        size: 16,
+                        color: Color(0xFF487898),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayList[i].email,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0F172A),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            displayList[i].displayName.isNotEmpty
+                                ? '${displayList[i].displayName} • ••••••••'
+                                : '••••••••',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: Color(0xFF64748B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Remove saved password',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      icon: const Icon(
+                        LucideIcons.trash2,
+                        size: 15,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      onPressed: () => _removeSavedCredential(displayList[i]),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
