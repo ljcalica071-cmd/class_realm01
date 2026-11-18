@@ -417,7 +417,7 @@ class SupabaseNotificationRepository {
                 .select()
                 .eq('is_archived', false)
                 .or(
-                  'recipient_id.eq.${user.id},created_by.eq.${user.id},scope.eq.school_wide',
+                  'recipient_id.eq.${user.id},target_audience.in.(teachers,all),scope.eq.school_wide',
                 )
                 .order('created_at', ascending: false)
                 .limit(limit);
@@ -490,6 +490,7 @@ class SupabaseNotificationRepository {
         final unread = notifs
             .where(
               (n) =>
+                  (n.createdBy == null || n.createdBy != user.id) &&
                   !readIds.contains(n.id) &&
                   !LocalStorageService.isNotificationRead(user.id, n.id),
             )
