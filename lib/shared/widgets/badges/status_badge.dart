@@ -13,6 +13,8 @@ class StatusBadge extends StatelessWidget {
   final Color textColor;
   final IconData? icon;
   final bool isArchived;
+  final double fontSize;
+  final EdgeInsetsGeometry padding;
 
   const StatusBadge({
     super.key,
@@ -21,6 +23,8 @@ class StatusBadge extends StatelessWidget {
     required this.textColor,
     this.icon,
     this.isArchived = false,
+    this.fontSize = 12,
+    this.padding = const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
   });
 
   factory StatusBadge.fromAccountStatus(AccountStatus status) {
@@ -71,31 +75,44 @@ class StatusBadge extends StatelessWidget {
     }
   }
 
-  factory StatusBadge.fromAttendance(AttendanceStatus status) {
+  factory StatusBadge.fromAttendance(
+    AttendanceStatus status, {
+    double fontSize = 11.5,
+    EdgeInsetsGeometry padding =
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+  }) {
     switch (status) {
       case AttendanceStatus.present:
         return StatusBadge(
           text: 'Present',
           backgroundColor: AppTheme.catGreen.withValues(alpha: 0.12),
           textColor: AppTheme.catGreen,
+          fontSize: fontSize,
+          padding: padding,
         );
       case AttendanceStatus.late:
         return StatusBadge(
           text: 'Late',
           backgroundColor: AppTheme.catOrange.withValues(alpha: 0.12),
           textColor: AppTheme.catOrange,
+          fontSize: fontSize,
+          padding: padding,
         );
       case AttendanceStatus.absent:
         return StatusBadge(
           text: 'Absent',
           backgroundColor: AppTheme.catRed.withValues(alpha: 0.12),
           textColor: AppTheme.catRed,
+          fontSize: fontSize,
+          padding: padding,
         );
       case AttendanceStatus.excused:
         return StatusBadge(
           text: 'Excused',
           backgroundColor: AppTheme.catSlate.withValues(alpha: 0.12),
           textColor: AppTheme.catSlate,
+          fontSize: fontSize,
+          padding: padding,
         );
     }
   }
@@ -125,7 +142,7 @@ class StatusBadge extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: padding,
       decoration: BoxDecoration(
         color: effectiveBg,
         borderRadius: BorderRadius.circular(20),
@@ -145,7 +162,7 @@ class StatusBadge extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               softWrap: false,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: fontSize,
                 fontWeight: FontWeight.w600,
                 color: effectiveText,
               ),

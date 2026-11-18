@@ -138,6 +138,46 @@ class _ParentAttendanceTabState extends State<ParentAttendanceTab> {
     return 'Class Attendance';
   }
 
+  static String _extractSectionDisplay(
+    AttendanceRecord record,
+    String subjectName,
+  ) {
+    var sec = record.section.trim();
+    if (sec.isEmpty) return '';
+
+    // If formatted as "Subject (Section)", extract inside parentheses
+    if (sec.contains('(') && sec.contains(')')) {
+      final start = sec.indexOf('(') + 1;
+      final end = sec.lastIndexOf(')');
+      if (end > start) {
+        sec = sec.substring(start, end).trim();
+      }
+    }
+
+    // Strip subject name if it's still prefixed (e.g. "Subject - Section")
+    final cleanSubject = subjectName.trim().toLowerCase();
+    if (cleanSubject.isNotEmpty) {
+      if (sec.toLowerCase() == cleanSubject) {
+        return '';
+      }
+      if (sec.toLowerCase().startsWith('$cleanSubject -')) {
+        sec = sec.substring('$cleanSubject -'.length).trim();
+      } else if (sec.toLowerCase().startsWith('$cleanSubject •')) {
+        sec = sec.substring('$cleanSubject •'.length).trim();
+      } else if (sec.toLowerCase().startsWith(cleanSubject)) {
+        sec = sec.substring(cleanSubject.length).trim();
+      }
+    }
+
+    if (sec.isEmpty ||
+        sec.toLowerCase() == 'class' ||
+        sec.toLowerCase() == cleanSubject) {
+      return '';
+    }
+
+    return sec;
+  }
+
   static AttendanceSource _resolveProvenance(AttendanceRecord record) {
     final m = record.method.trim().toLowerCase();
     if (m.contains('rfid') || m.contains('esp32') || m.contains('scan')) {
@@ -817,7 +857,7 @@ class _ParentAttendanceTabState extends State<ParentAttendanceTab> {
       child: Row(
         children: [
           SizedBox(
-            width: 85,
+            width: 82,
             child: Text(
               'DATE & TIME',
               style: TextStyle(
@@ -840,7 +880,7 @@ class _ParentAttendanceTabState extends State<ParentAttendanceTab> {
             ),
           ),
           Container(
-            width: 65,
+            width: 76,
             alignment: Alignment.centerRight,
             child: Text(
               'STATUS',
@@ -868,6 +908,7 @@ class _ParentAttendanceTabState extends State<ParentAttendanceTab> {
     final source = _resolveProvenance(record);
     final subjectName = _extractSubjectName(record);
     final classLabel = _resolveClassLabel(record);
+    final sectionLabel = _extractSectionDisplay(record, subjectName);
     final timeInDisplay = record.timeIn.trim().isEmpty
         ? '—'
         : record.timeIn.trim();
@@ -900,7 +941,7 @@ class _ParentAttendanceTabState extends State<ParentAttendanceTab> {
         children: [
           // Date & Time
           SizedBox(
-            width: 85,
+            width: 82,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -944,12 +985,11 @@ class _ParentAttendanceTabState extends State<ParentAttendanceTab> {
                 Row(
                   children: [
                     _buildProvenancePill(theme, source),
-                    if (record.section.isNotEmpty &&
-                        record.section != subjectName) ...[
+                    if (sectionLabel.isNotEmpty) ...[
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          record.section,
+                          sectionLabel,
                           style: TextStyle(
                             fontSize: 10.5,
                             color: theme.colorScheme.onSurfaceVariant,
@@ -982,7 +1022,7 @@ class _ParentAttendanceTabState extends State<ParentAttendanceTab> {
           const SizedBox(width: 8),
           // Status Badge
           Container(
-            width: 65,
+            width: 76,
             alignment: Alignment.topRight,
             child: StatusBadge.fromAttendance(record.status),
           ),

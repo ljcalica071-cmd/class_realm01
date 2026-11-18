@@ -256,6 +256,46 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     return 'Class';
   }
 
+  static String _extractSectionDisplay(
+    AttendanceRecord record,
+    String subjectName,
+  ) {
+    var sec = record.section.trim();
+    if (sec.isEmpty) return '';
+
+    // If formatted as "Subject (Section)", extract inside parentheses
+    if (sec.contains('(') && sec.contains(')')) {
+      final start = sec.indexOf('(') + 1;
+      final end = sec.lastIndexOf(')');
+      if (end > start) {
+        sec = sec.substring(start, end).trim();
+      }
+    }
+
+    // Strip subject name if it's still prefixed (e.g. "Subject - Section")
+    final cleanSubject = subjectName.trim().toLowerCase();
+    if (cleanSubject.isNotEmpty) {
+      if (sec.toLowerCase() == cleanSubject) {
+        return '';
+      }
+      if (sec.toLowerCase().startsWith('$cleanSubject -')) {
+        sec = sec.substring('$cleanSubject -'.length).trim();
+      } else if (sec.toLowerCase().startsWith('$cleanSubject •')) {
+        sec = sec.substring('$cleanSubject •'.length).trim();
+      } else if (sec.toLowerCase().startsWith(cleanSubject)) {
+        sec = sec.substring(cleanSubject.length).trim();
+      }
+    }
+
+    if (sec.isEmpty ||
+        sec.toLowerCase() == 'class' ||
+        sec.toLowerCase() == cleanSubject) {
+      return '';
+    }
+
+    return sec;
+  }
+
   List<String> get _availableSubjectNames {
     if (_enrolledSubjectNames.isNotEmpty) {
       return _enrolledSubjectNames;
@@ -933,7 +973,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       child: Row(
         children: [
           SizedBox(
-            width: 85,
+            width: 82,
             child: Text(
               'DATE & TIME',
               style: TextStyle(
@@ -956,7 +996,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
             ),
           ),
           Container(
-            width: 65,
+            width: 76,
             alignment: Alignment.centerRight,
             child: Text(
               'STATUS',
@@ -984,6 +1024,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     final source = _resolveProvenance(record);
     final subjectName = _extractSubjectName(record);
     final classLabel = _resolveClassLabel(record);
+    final sectionLabel = _extractSectionDisplay(record, subjectName);
     final timeInDisplay =
         record.timeIn.trim().isEmpty ? '—' : record.timeIn.trim();
 
@@ -1015,7 +1056,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
         children: [
           // Date & Time
           SizedBox(
-            width: 85,
+            width: 82,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1059,12 +1100,11 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                 Row(
                   children: [
                     _buildProvenancePill(theme, source),
-                    if (record.section.isNotEmpty &&
-                        record.section != subjectName) ...[
+                    if (sectionLabel.isNotEmpty) ...[
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          record.section,
+                          sectionLabel,
                           style: TextStyle(
                             fontSize: 10.5,
                             color: theme.colorScheme.onSurfaceVariant,
@@ -1097,7 +1137,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
           const SizedBox(width: 8),
           // Status Badge
           Container(
-            width: 65,
+            width: 76,
             alignment: Alignment.topRight,
             child: StatusBadge.fromAttendance(record.status),
           ),
