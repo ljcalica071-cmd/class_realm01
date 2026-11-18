@@ -55,7 +55,9 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
   String _donutMode = 'components'; // 'components' or 'distribution'
   int? _hoveredDonutIndex;
   String _searchQuery = '';
-  String _sortOrder = 'desc'; // 'desc', 'asc', 'alpha'
+  String _sortOrder = 'desc'; // 'desc', 'asc', 'alpha', 'alpha_desc', 'trend_desc'
+  String? _columnSortKey; // 'name', 'ww', 'pt', 'ex', 'grade', 'trend'
+  bool _columnSortAscending = false;
   int _pageSize = 10;
   int _currentPage = 1;
 
@@ -3093,32 +3095,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       );
     }).toList();
 
-    // Sort order
-    if (_sortOrder == 'desc') {
-      list.sort((a, b) {
-        final ga = a.activeGrade;
-        final gb = b.activeGrade;
-        if (ga == null && gb == null) {
-          return a.displayName.compareTo(b.displayName);
-        }
-        if (ga == null) return 1;
-        if (gb == null) return -1;
-        return gb.compareTo(ga);
-      });
-    } else if (_sortOrder == 'asc') {
-      list.sort((a, b) {
-        final ga = a.activeGrade;
-        final gb = b.activeGrade;
-        if (ga == null && gb == null) {
-          return a.displayName.compareTo(b.displayName);
-        }
-        if (ga == null) return 1;
-        if (gb == null) return -1;
-        return ga.compareTo(gb);
-      });
-    } else if (_sortOrder == 'alpha') {
-      list.sort((a, b) => a.displayName.compareTo(b.displayName));
-    }
+    // Sort order (column header override or preset dropdown)
+    _sortStudentRows(list);
 
     // Pagination calculations
     final totalEntries = list.length;
@@ -3275,11 +3253,20 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                           value: 'alpha',
                           label: 'Sort: Alphabetical (A–Z)',
                         ),
+                        AppDropdownItem(
+                          value: 'alpha_desc',
+                          label: 'Sort: Alphabetical (Z–A)',
+                        ),
+                        AppDropdownItem(
+                          value: 'trend_desc',
+                          label: 'Sort: Most Improved',
+                        ),
                       ],
                       onChanged: (val) {
                         if (val != null) {
                           setState(() {
                             _sortOrder = val;
+                            _columnSortKey = null;
                             _currentPage = 1;
                           });
                         }
@@ -3472,6 +3459,175 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
     letterSpacing: 0.5,
   );
 
+  String get _effectiveSortKey {
+    if (_columnSortKey != null) return _columnSortKey!;
+    if (_sortOrder == 'alpha' || _sortOrder == 'alpha_desc') return 'name';
+    if (_sortOrder == 'trend_desc') return 'trend';
+    return 'grade';
+  }
+
+  bool get _effectiveSortAscending {
+    if (_columnSortKey != null) return _columnSortAscending;
+    return _sortOrder == 'asc' || _sortOrder == 'alpha';
+  }
+
+  void _toggleColumnSort(String key, {bool defaultAscending = false}) {
+    setState(() {
+      if (_columnSortKey == key || (_columnSortKey == null && _effectiveSortKey == key)) {
+        _columnSortAscending = !_effectiveSortAscending;
+        _columnSortKey = key;
+      } else {
+        _columnSortKey = key;
+        _columnSortAscending = defaultAscending;
+      }
+      if (key == 'name') {
+        _sortOrder = _columnSortAscending ? 'alpha' : 'alpha_desc';
+      } else if (key == 'grade') {
+        _sortOrder = _columnSortAscending ? 'asc' : 'desc';
+      } else if (key == 'trend' && !_columnSortAscending) {
+        _sortOrder = 'trend_desc';
+      }
+      _currentPage = 1;
+    });
+  }
+
+  int _compareNullableMetric(
+    double? aVal,
+    double? bVal, {
+    required bool ascending,
+    required StudentGradeAnalyticsRow a,
+    required StudentGradeAnalyticsRow b,
+  }) {
+    if (aVal == null && bVal == null) {
+      return GradebookAnalyticsCalculator.compareRowsByPerformance(
+        a,
+        b,
+        descending: true,
+      );
+    }
+    if (aVal == null) return 1;
+    if (bVal == null) return -1;
+    final cmp = ascending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
+    if (cmp != 0) return cmp;
+    return GradebookAnalyticsCalculator.compareRowsByPerformance(
+      a,
+      b,
+      descending: true,
+    );
+  }
+
+  void _sortStudentRows(List<StudentGradeAnalyticsRow> list) {
+    final key = _effectiveSortKey;
+    final asc = _effectiveSortAscending;
+    switch (key) {
+      case 'name':
+        list.sort((a, b) {
+          final cmp = a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          );
+          return asc ? cmp : -cmp;
+        });
+        break;
+      case 'ww':
+        list.sort(
+          (a, b) => _compareNullableMetric(
+            a.wwPs,
+            b.wwPs,
+            ascending: asc,
+            a: a,
+            b: b,
+          ),
+        );
+        break;
+      case 'pt':
+        list.sort(
+          (a, b) => _compareNullableMetric(
+            a.ptPs,
+            b.ptPs,
+            ascending: asc,
+            a: a,
+            b: b,
+          ),
+        );
+        break;
+      case 'ex':
+        list.sort(
+          (a, b) => _compareNullableMetric(
+            a.exPs,
+            b.exPs,
+            ascending: asc,
+            a: a,
+            b: b,
+          ),
+        );
+        break;
+      case 'trend':
+        list.sort(
+          (a, b) => _compareNullableMetric(
+            a.delta,
+            b.delta,
+            ascending: asc,
+            a: a,
+            b: b,
+          ),
+        );
+        break;
+      case 'grade':
+      default:
+        list.sort(
+          (a, b) => GradebookAnalyticsCalculator.compareRowsByPerformance(
+            a,
+            b,
+            descending: !asc,
+          ),
+        );
+        break;
+    }
+  }
+
+  Widget _buildSortableHeaderCell(
+    String label,
+    String sortKey, {
+    bool defaultAscending = false,
+  }) {
+    final isActive = _effectiveSortKey == sortKey;
+    final iconData = !isActive
+        ? LucideIcons.arrowUpDown
+        : (_effectiveSortAscending
+              ? LucideIcons.arrowUp
+              : LucideIcons.arrowDown);
+    return InkWell(
+      onTap: () =>
+          _toggleColumnSort(sortKey, defaultAscending: defaultAscending),
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: _colHeaderStyle.copyWith(
+                  color: isActive ? crSteelBlue : crSlateMuted,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              iconData,
+              size: 12,
+              color: isActive
+                  ? crSteelBlue
+                  : crSlateMuted.withValues(alpha: 0.65),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCustomTableHeader(
     bool isCrossTerm,
     List<int> activeTerms,
@@ -3487,10 +3643,14 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       child: Row(
         children: [
           const SizedBox(width: 44, child: Text('#', style: _colHeaderStyle)),
-          const Expanded(
+          Expanded(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text('STUDENT NAME', style: _colHeaderStyle),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _buildSortableHeaderCell(
+                'STUDENT NAME',
+                'name',
+                defaultAscending: true,
+              ),
             ),
           ),
           const SizedBox(
@@ -3503,34 +3663,34 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                 width: 85,
                 child: Text('TERM $t', style: _colHeaderStyle),
               ),
-            const SizedBox(
-              width: 105,
-              child: Text('FINAL GRADE', style: _colHeaderStyle),
+            SizedBox(
+              width: 115,
+              child: _buildSortableHeaderCell('FINAL GRADE', 'grade'),
             ),
           ] else ...[
-            const SizedBox(
+            SizedBox(
               width: 95,
-              child: Text('WW (PS%)', style: _colHeaderStyle),
-            ),
-            const SizedBox(
-              width: 95,
-              child: Text('PT (PS%)', style: _colHeaderStyle),
-            ),
-            const SizedBox(
-              width: 95,
-              child: Text('EXAM (PS%)', style: _colHeaderStyle),
+              child: _buildSortableHeaderCell('WW (PS%)', 'ww'),
             ),
             SizedBox(
-              width: 110,
-              child: Text(
+              width: 95,
+              child: _buildSortableHeaderCell('PT (PS%)', 'pt'),
+            ),
+            SizedBox(
+              width: 95,
+              child: _buildSortableHeaderCell('EXAM (PS%)', 'ex'),
+            ),
+            SizedBox(
+              width: 120,
+              child: _buildSortableHeaderCell(
                 'TERM ${_selectedTermView == 0 ? activeTerms.first : _selectedTermView} GRADE',
-                style: _colHeaderStyle,
+                'grade',
               ),
             ),
           ],
-          const SizedBox(
+          SizedBox(
             width: 110,
-            child: Text('TREND', style: _colHeaderStyle),
+            child: _buildSortableHeaderCell('TREND', 'trend'),
           ),
           const SizedBox(
             width: 130,
@@ -3797,7 +3957,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                 ),
               ),
             SizedBox(
-              width: 105,
+              width: 115,
               child: Align(alignment: Alignment.centerLeft, child: gradeBadge),
             ),
           ] else ...[
@@ -3832,7 +3992,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
               ),
             ),
             SizedBox(
-              width: 110,
+              width: 120,
               child: Align(alignment: Alignment.centerLeft, child: gradeBadge),
             ),
           ],

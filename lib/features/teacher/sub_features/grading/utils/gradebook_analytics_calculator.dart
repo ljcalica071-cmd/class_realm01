@@ -91,6 +91,13 @@ class StudentGradeAnalyticsRow {
   final String descriptor;
   final String remarks;
 
+  /// Sum of available weighted component scores, used as a fallback sort key
+  /// while a term grade is still Pending.
+  double? get partialWeightedScore {
+    if (wwWs == null && ptWs == null && exWs == null) return null;
+    return (wwWs ?? 0.0) + (ptWs ?? 0.0) + (exWs ?? 0.0);
+  }
+
   StudentGradeAnalyticsRow({
     required this.student,
     this.rank = 0,
@@ -159,6 +166,42 @@ class GradebookAnalyticsSummary {
 
 class GradebookAnalyticsCalculator {
   GradebookAnalyticsCalculator._();
+
+  /// Compares two student analytics rows by academic performance while keeping
+  /// no-data rows at the bottom regardless of sort direction.
+  static int compareRowsByPerformance(
+    StudentGradeAnalyticsRow a,
+    StudentGradeAnalyticsRow b, {
+    bool descending = true,
+  }) {
+    final ga = a.activeGrade;
+    final gb = b.activeGrade;
+    if (ga != null || gb != null) {
+      if (ga == null) return 1;
+      if (gb == null) return -1;
+      final gradeCmp = descending ? gb.compareTo(ga) : ga.compareTo(gb);
+      if (gradeCmp != 0) return gradeCmp;
+
+      final ia = a.initialGrade;
+      final ib = b.initialGrade;
+      if (ia != null || ib != null) {
+        if (ia == null) return 1;
+        if (ib == null) return -1;
+        final initCmp = descending ? ib.compareTo(ia) : ia.compareTo(ib);
+        if (initCmp != 0) return initCmp;
+      }
+    } else {
+      final pa = a.partialWeightedScore;
+      final pb = b.partialWeightedScore;
+      if (pa != null || pb != null) {
+        if (pa == null) return 1;
+        if (pb == null) return -1;
+        final partialCmp = descending ? pb.compareTo(pa) : pa.compareTo(pb);
+        if (partialCmp != 0) return partialCmp;
+      }
+    }
+    return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+  }
 
   static const Color crSteelBlue = Color(0xFF3A6B88);
   static const Color crEmerald = Color(0xFF10B981);
@@ -439,17 +482,10 @@ class GradebookAnalyticsCalculator {
       ));
     }
 
-    // Rank students by activeGrade descending
-    studentRows.sort((a, b) {
-      final ga = a.activeGrade;
-      final gb = b.activeGrade;
-      if (ga == null && gb == null) return a.displayName.compareTo(b.displayName);
-      if (ga == null) return 1;
-      if (gb == null) return -1;
-      final gradeCompare = gb.compareTo(ga);
-      if (gradeCompare != 0) return gradeCompare;
-      return a.displayName.compareTo(b.displayName);
-    });
+    // Rank students by activeGrade descending (tie-breaking by initialGrade & partial score)
+    studentRows.sort(
+      (a, b) => compareRowsByPerformance(a, b, descending: true),
+    );
 
     for (var i = 0; i < studentRows.length; i++) {
       studentRows[i].rank = i + 1;
