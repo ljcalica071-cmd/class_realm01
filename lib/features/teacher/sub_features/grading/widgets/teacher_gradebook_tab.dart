@@ -4136,50 +4136,50 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                   } catch (_) {}
                 }
 
-                // At-Risk Grade Alert: Individual Parent Notification for this student only
+                // At-Risk Grade Alert: Individual Parent Notification for this student only.
+                // Always create the parent alert row tied to student_id so parents linked
+                // now OR linked later automatically receive the alert via parent_student_links.
                 final linkedPids = studentToParentsMap[student.id] ?? [];
-                if (linkedPids.isNotEmpty) {
-                  final parentAlertTitle = isTermGrade
-                      ? 'Academic Alert: ${_displayName(student)} ($grade in $subjectName - $termDesc)'
-                      : 'Academic Alert: ${_displayName(student)} ($grade Final Grade in $subjectName)';
-                  final parentAlertMsg = isTermGrade
-                      ? 'Dear Parent/Guardian, your child ${_displayName(student)} received an official grade of $grade for $termDesc in $subjectName ($sectionName). Please coordinate with the teacher for remediation support.'
-                      : 'Dear Parent/Guardian, your child ${_displayName(student)} received an official Final Grade of $grade in $subjectName ($sectionName). Please coordinate with the teacher immediately to arrange academic intervention and remediation.';
+                final parentAlertTitle = isTermGrade
+                    ? 'Academic Alert: ${_displayName(student)} ($grade in $subjectName - $termDesc)'
+                    : 'Academic Alert: ${_displayName(student)} ($grade Final Grade in $subjectName)';
+                final parentAlertMsg = isTermGrade
+                    ? 'Dear Parent/Guardian, your child ${_displayName(student)} received an official grade of $grade for $termDesc in $subjectName ($sectionName). Please coordinate with the teacher for remediation support.'
+                    : 'Dear Parent/Guardian, your child ${_displayName(student)} received an official Final Grade of $grade in $subjectName ($sectionName). Please coordinate with the teacher immediately to arrange academic intervention and remediation.';
 
-                  final pNotifInsert = await client
-                      .from('notifications')
-                      .insert({
-                        'title': parentAlertTitle,
-                        'message': parentAlertMsg,
-                        'notification_type': 'grade',
-                        'target_audience': 'parents',
-                        'student_id': student.id,
-                        'subject_offering_id': offeringId,
-                        'scope': 'class',
-                        'is_archived': false,
-                        'created_by': teacherId,
-                        'created_at': nowIso,
-                      })
-                      .select('id')
-                      .maybeSingle();
+                final pNotifInsert = await client
+                    .from('notifications')
+                    .insert({
+                      'title': parentAlertTitle,
+                      'message': parentAlertMsg,
+                      'notification_type': 'grade',
+                      'target_audience': 'parents',
+                      'student_id': student.id,
+                      'subject_offering_id': offeringId,
+                      'scope': 'class',
+                      'is_archived': false,
+                      'created_by': teacherId,
+                      'created_at': nowIso,
+                    })
+                    .select('id')
+                    .maybeSingle();
 
-                  final pNotifId = pNotifInsert?['id']?.toString();
-                  if (pNotifId != null) {
-                    final pRecipients = linkedPids
-                        .map(
-                          (pid) => {
-                            'notification_id': pNotifId,
-                            'user_id': pid,
-                            'created_at': nowIso,
-                          },
-                        )
-                        .toList();
-                    try {
-                      await client
-                          .from('notification_recipients')
-                          .insert(pRecipients);
-                    } catch (_) {}
-                  }
+                final pNotifId = pNotifInsert?['id']?.toString();
+                if (pNotifId != null && linkedPids.isNotEmpty) {
+                  final pRecipients = linkedPids
+                      .map(
+                        (pid) => {
+                          'notification_id': pNotifId,
+                          'user_id': pid,
+                          'created_at': nowIso,
+                        },
+                      )
+                      .toList();
+                  try {
+                    await client
+                        .from('notification_recipients')
+                        .insert(pRecipients);
+                  } catch (_) {}
                 }
               } else if (grade != null && grade >= 75) {
                 // 75 pataas: Passing students
@@ -4231,7 +4231,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
               }
             }
 
-            if (passingParentIds.isNotEmpty) {
+            if (passingStudentIds.isNotEmpty) {
               final pubParentTitle = isTermGrade
                   ? 'Grades Published: $subjectName ($sectionName) - $termDesc'
                   : 'Final Grades Published: $subjectName ($sectionName)';
@@ -4256,7 +4256,7 @@ class _TeacherGradebookTabState extends State<TeacherGradebookTab>
                   .maybeSingle();
 
               final pubParentId = pubParentInsert?['id']?.toString();
-              if (pubParentId != null) {
+              if (pubParentId != null && passingParentIds.isNotEmpty) {
                 final recs = passingParentIds
                     .map(
                       (pid) => {
