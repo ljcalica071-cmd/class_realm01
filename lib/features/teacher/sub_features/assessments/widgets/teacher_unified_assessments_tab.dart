@@ -1638,6 +1638,7 @@ class _TeacherUnifiedAssessmentsTabState
 
     _showDeleteConfirmation(
       title: item.title,
+      itemType: item.isRequirement ? 'Performance Task' : 'Activity',
       onDelete: () async {
         setState(() {
           _isSyncing = true;
@@ -1651,7 +1652,12 @@ class _TeacherUnifiedAssessmentsTabState
         TeacherGradebookTab.gradebookRefreshNotifier.value++;
         if (mounted) {
           await widget.onRefresh?.call();
+          if (!mounted) return;
           setState(() => _isSyncing = false);
+          AppTopToast.success(
+            context,
+            '${item.isRequirement ? "Performance Task" : "Activity"} "${item.title}" deleted successfully.',
+          );
         }
       },
     );
@@ -1759,6 +1765,7 @@ class _TeacherUnifiedAssessmentsTabState
 
     _showDeleteConfirmation(
       title: item.title,
+      itemType: item.isExam ? 'Examination' : 'Quiz',
       onDelete: () async {
         setState(() => _isSyncing = true);
         try {
@@ -1859,122 +1866,22 @@ class _TeacherUnifiedAssessmentsTabState
             widget.assessments.removeWhere((q) => q.id == item.id);
           });
           await widget.onRefresh?.call();
+          if (!mounted) return;
           setState(() => _isSyncing = false);
+          AppTopToast.success(
+            context,
+            '${item.isExam ? "Examination" : "Quiz"} "${item.title}" deleted successfully.',
+          );
         }
       },
     );
   }
 
   Future<void> _confirmCancelAssessment(QuizOrExamModel item) async {
-    final theme = Theme.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: theme.colorScheme.outline.withValues(alpha: 0.14),
-          ),
-        ),
-        titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
-        contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.catRed.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                LucideIcons.xCircle,
-                color: AppTheme.catRed,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Cancel ${item.isExam ? "Examination" : "Quiz"}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 17,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Are you sure you want to cancel "${item.title}"?',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.catRed.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppTheme.catRed.withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildCancelBullet(
-                      theme,
-                      'Active student sessions will end immediately.',
-                    ),
-                    const SizedBox(height: 6),
-                    _buildCancelBullet(
-                      theme,
-                      'Recorded attempts and scores will be voided (no student penalized).',
-                    ),
-                    const SizedBox(height: 6),
-                    _buildCancelBullet(
-                      theme,
-                      'This ${item.isExam ? "exam" : "quiz"} and its HPS will be removed so you can recreate it anytime.',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Keep Assessment'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.catRed,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              'Yes, Cancel ${item.isExam ? "Exam" : "Quiz"}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
+      builder: (ctx) => CancelAssessmentDialog(item: item),
     );
 
     if (confirmed == true) {
@@ -1982,7 +1889,7 @@ class _TeacherUnifiedAssessmentsTabState
     }
   }
 
-  Widget _buildCancelBullet(ThemeData theme, String text) {
+  static Widget buildCancelBullet(ThemeData theme, String text) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2202,7 +2109,7 @@ class _TeacherUnifiedAssessmentsTabState
         setState(() => _isSyncing = false);
         AppTopToast.success(
           context,
-          '${item.isExam ? "Examination" : "Quiz"} "${item.title}" cancelled.',
+          '${item.isExam ? "Examination" : "Quiz"} "${item.title}" cancelled and removed successfully.',
         );
       }
     } catch (e) {
@@ -2643,30 +2550,15 @@ class _TeacherUnifiedAssessmentsTabState
 
   void _showDeleteConfirmation({
     required String title,
+    String itemType = 'item',
     required VoidCallback onDelete,
   }) {
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Item'),
-        content: Text('Are you sure you want to delete this item?\n\n$title'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.catRed,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              onDelete();
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
+      builder: (dialogContext) => DeleteConfirmationDialog(
+        title: title,
+        itemType: itemType,
+        onDelete: onDelete,
       ),
     );
   }
@@ -2879,5 +2771,342 @@ class _KeepAliveTabWrapperState extends State<_KeepAliveTabWrapper>
   Widget build(BuildContext context) {
     super.build(context);
     return widget.child;
+  }
+}
+
+class CancelAssessmentDialog extends StatefulWidget {
+  final QuizOrExamModel item;
+
+  const CancelAssessmentDialog({super.key, required this.item});
+
+  @override
+  State<CancelAssessmentDialog> createState() =>
+      _CancelAssessmentDialogState();
+}
+
+class _CancelAssessmentDialogState extends State<CancelAssessmentDialog> {
+  int _secondsRemaining = 5;
+  Timer? _cooldownTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_secondsRemaining > 1) {
+        setState(() => _secondsRemaining--);
+      } else {
+        setState(() => _secondsRemaining = 0);
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isCoolingDown = _secondsRemaining > 0;
+    final itemType = widget.item.isExam ? 'Exam' : 'Quiz';
+    final itemTypeFull = widget.item.isExam ? 'Examination' : 'Quiz';
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: theme.colorScheme.outline.withValues(alpha: 0.14),
+        ),
+      ),
+      titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
+      contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.catRed.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              LucideIcons.xCircle,
+              color: AppTheme.catRed,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Cancel $itemTypeFull',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 17,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to cancel "${widget.item.title}"?',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.catRed.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppTheme.catRed.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _TeacherUnifiedAssessmentsTabState.buildCancelBullet(
+                    theme,
+                    'Active student sessions will end immediately.',
+                  ),
+                  const SizedBox(height: 6),
+                  _TeacherUnifiedAssessmentsTabState.buildCancelBullet(
+                    theme,
+                    'Recorded attempts and scores will be voided (no student penalized).',
+                  ),
+                  const SizedBox(height: 6),
+                  _TeacherUnifiedAssessmentsTabState.buildCancelBullet(
+                    theme,
+                    'This ${widget.item.isExam ? "exam" : "quiz"} and its HPS will be removed so you can recreate it anytime.',
+                  ),
+                ],
+              ),
+            ),
+            if (isCoolingDown) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.clockAlert,
+                      size: 14,
+                      color: Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Cooldown active: Wait ${_secondsRemaining}s before cancellation to prevent accidental action.',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFFB45309),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Keep Assessment'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isCoolingDown
+                ? theme.colorScheme.onSurface.withValues(alpha: 0.12)
+                : AppTheme.catRed,
+            foregroundColor: isCoolingDown
+                ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
+                : Colors.white,
+            disabledBackgroundColor:
+                theme.colorScheme.onSurface.withValues(alpha: 0.12),
+            disabledForegroundColor:
+                theme.colorScheme.onSurface.withValues(alpha: 0.38),
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          onPressed: isCoolingDown
+              ? null
+              : () => Navigator.of(context).pop(true),
+          child: Text(
+            isCoolingDown
+                ? 'Yes, Cancel $itemType (${_secondsRemaining}s)'
+                : 'Yes, Cancel $itemType',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class DeleteConfirmationDialog extends StatelessWidget {
+  final String title;
+  final String itemType;
+  final VoidCallback onDelete;
+
+  const DeleteConfirmationDialog({
+    super.key,
+    required this.title,
+    this.itemType = 'item',
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final normalizedType = itemType.toLowerCase();
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: theme.colorScheme.outline.withValues(alpha: 0.14),
+        ),
+      ),
+      titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
+      contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.catRed.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              LucideIcons.trash2,
+              color: AppTheme.catRed,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Delete Item',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 17,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete this $normalizedType?',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.catRed.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppTheme.catRed.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _TeacherUnifiedAssessmentsTabState.buildCancelBullet(
+                    theme,
+                    'This $normalizedType and its record will be permanently deleted from Classwork.',
+                  ),
+                  const SizedBox(height: 6),
+                  _TeacherUnifiedAssessmentsTabState.buildCancelBullet(
+                    theme,
+                    'Its corresponding column and highest possible score (HPS) will be removed from the Gradebook.',
+                  ),
+                  const SizedBox(height: 6),
+                  _TeacherUnifiedAssessmentsTabState.buildCancelBullet(
+                    theme,
+                    'This action is permanent and cannot be undone.',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.catRed,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          onPressed: () {
+            Navigator.pop(context);
+            onDelete();
+          },
+          child: const Text(
+            'Delete',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    );
   }
 }

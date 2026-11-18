@@ -109,11 +109,11 @@ class UserModel {
 
   /// True when the student is 18+ and has opted to hide term grades from linked parents.
   bool get effectiveHideTermGradesFromParent =>
-      isLegalAdult && hideTermGradesFromParent;
+      hideTermGradesFromParent && (birthday == null || isLegalAdult);
 
   /// True when the student is 18+ and has opted to hide final grades/GWA from linked parents.
   bool get effectiveHideFinalGradesFromParent =>
-      isLegalAdult && hideFinalGradesFromParent;
+      hideFinalGradesFromParent && (birthday == null || isLegalAdult);
 
   /// Formats name as `LastName, FirstName M.I.` (e.g. "Cruz, Carlos D.").
   /// Falls back cleanly if individual fields are not set.

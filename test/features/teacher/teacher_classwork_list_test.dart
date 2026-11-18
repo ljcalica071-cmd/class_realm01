@@ -138,6 +138,7 @@ void main() {
       final confirmBtn = find.widgetWithText(ElevatedButton, 'Delete');
       await tester.tap(confirmBtn);
       await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 4));
 
       expect(repo.deleteCalled, isTrue);
       expect(repo.deletedId, 'persisted-delete-me');

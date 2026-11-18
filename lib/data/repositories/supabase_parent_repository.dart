@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -180,7 +181,7 @@ class SupabaseParentRepository {
               status
             )
           ''')
-          .filter('student_id', 'in', studentIds);
+          .inFilter('student_id', studentIds);
 
       if ((linksResponse as List).isEmpty) {
         return [];
@@ -196,7 +197,7 @@ class SupabaseParentRepository {
       final usersResponse = await _client
           .from('users')
           .select('id, email, is_archived')
-          .filter('id', 'in', parentIds);
+          .inFilter('id', parentIds);
 
       final userStatusMap = <String, Map<String, dynamic>>{};
       for (final u in usersResponse as List) {
@@ -606,7 +607,7 @@ class SupabaseParentRepository {
                 status,
                 users!inner ( email, is_archived )
               ''')
-              .filter('parent_id', 'in', missingParentIds);
+              .inFilter('parent_id', missingParentIds);
 
           for (final p in (extraParents as List)) {
             final pid = p['parent_id']?.toString();
@@ -652,7 +653,7 @@ class SupabaseParentRepository {
               last_name
             )
           ''')
-          .filter('parent_id', 'in', allParentIds);
+          .inFilter('parent_id', allParentIds);
 
       for (final row in (childrenResp as List)) {
         final pid = row['parent_id']?.toString();
@@ -882,13 +883,14 @@ class SupabaseParentRepository {
 
       final privacyByStudentId = <String, Map<String, bool>>{};
       if (studentIds.isNotEmpty) {
+        // 1. Try reading from student_settings
         try {
           final settingsResp = await _client
               .from('student_settings')
               .select(
                 'student_id, hide_term_grades_from_parent, hide_final_grades_from_parent',
               )
-              .filter('student_id', 'in', studentIds);
+              .inFilter('student_id', studentIds);
           for (final sRow in (settingsResp as List)) {
             final sid = sRow['student_id']?.toString();
             if (sid != null) {
@@ -900,6 +902,40 @@ class SupabaseParentRepository {
           }
         } catch (e) {
           debugPrint('Student settings privacy columns notice: $e');
+        }
+
+        // 2. Cross-device fallback: query latest 18+ privacy from audit_logs
+        final missingPrivacyIds = studentIds
+            .where((id) => !privacyByStudentId.containsKey(id))
+            .toList();
+        if (missingPrivacyIds.isNotEmpty) {
+          try {
+            final auditResp = await _client
+                .from('audit_logs')
+                .select('user_id, description, logged_at')
+                .inFilter('user_id', missingPrivacyIds)
+                .eq('action_type', '18plus_grade_privacy')
+                .order('logged_at', ascending: false);
+            for (final aRow in (auditResp as List)) {
+              final sid = aRow['user_id']?.toString();
+              if (sid != null && !privacyByStudentId.containsKey(sid)) {
+                final desc = aRow['description']?.toString();
+                if (desc != null && desc.startsWith('{')) {
+                  try {
+                    final parsed = jsonDecode(desc) as Map<String, dynamic>;
+                    privacyByStudentId[sid] = {
+                      'hideTerm': parsed['hideTermGrades'] == true ||
+                          parsed['hideTerm'] == true,
+                      'hideFinal': parsed['hideFinalGrades'] == true ||
+                          parsed['hideFinal'] == true,
+                    };
+                  } catch (_) {}
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('Audit logs privacy sync lookup notice: $e');
+          }
         }
       }
 
@@ -1274,7 +1310,7 @@ class SupabaseParentRepository {
           final usersResp = await _client
               .from('users')
               .select('id, email')
-              .filter('id', 'in', idList);
+              .inFilter('id', idList);
           for (final u in (usersResp as List)) {
             final uid = u['id']?.toString();
             final em = u['email']?.toString();
@@ -1292,7 +1328,7 @@ class SupabaseParentRepository {
               .select(
                 'teacher_id, contact_number, is_phone_public, facebook_link, is_facebook_public, consultation_hours, subject_specialization',
               )
-              .filter('teacher_id', 'in', idList);
+              .inFilter('teacher_id', idList);
           for (final ts in (settingsResp as List)) {
             final tid = ts['teacher_id']?.toString();
             if (tid != null) {
@@ -1382,7 +1418,7 @@ class SupabaseParentRepository {
           final usersResp = await _client
               .from('users')
               .select('id, email, is_archived')
-              .filter('id', 'in', parentIds);
+              .inFilter('id', parentIds);
           for (final u in (usersResp as List)) {
             if (u['is_archived'] == true) continue;
             final pid = u['id']?.toString();
@@ -1418,7 +1454,7 @@ class SupabaseParentRepository {
     }
   }
 
-  /// Reads the student's 18+ grade privacy toggles from `student_settings` (with local cache fallback).
+  /// Reads the student's 18+ grade privacy toggles from `student_settings` or `audit_logs` (with local cache fallback).
   Future<Map<String, bool>> getStudentGradePrivacySettings(
     String studentId,
   ) async {
@@ -1427,13 +1463,16 @@ class SupabaseParentRepository {
       return {'hideTermGrades': false, 'hideFinalGrades': false};
     }
 
+    // 1. Try reading from student_settings (if columns exist)
     try {
       final resp = await _client
           .from('student_settings')
           .select('hide_term_grades_from_parent, hide_final_grades_from_parent')
           .eq('student_id', studentId)
           .maybeSingle();
-      if (resp != null) {
+      if (resp != null &&
+          (resp.containsKey('hide_term_grades_from_parent') ||
+              resp.containsKey('hide_final_grades_from_parent'))) {
         final hideTerm = resp['hide_term_grades_from_parent'] == true;
         final hideFinal = resp['hide_final_grades_from_parent'] == true;
         await LocalStorageService.saveStudentGradePrivacy(
@@ -1447,13 +1486,43 @@ class SupabaseParentRepository {
       debugPrint('Student grade privacy DB read fallback: $e');
     }
 
+    // 2. Cross-device fallback: Read latest 18+ privacy recorded in audit_logs
+    try {
+      final auditResp = await _client
+          .from('audit_logs')
+          .select('description')
+          .eq('user_id', studentId)
+          .eq('action_type', '18plus_grade_privacy')
+          .order('logged_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      if (auditResp != null && auditResp['description'] != null) {
+        final rawDesc = auditResp['description'].toString();
+        if (rawDesc.startsWith('{')) {
+          final parsed = jsonDecode(rawDesc) as Map<String, dynamic>;
+          final hideTerm = parsed['hideTermGrades'] == true ||
+              parsed['hideTerm'] == true;
+          final hideFinal = parsed['hideFinalGrades'] == true ||
+              parsed['hideFinal'] == true;
+          await LocalStorageService.saveStudentGradePrivacy(
+            studentId,
+            hideTermGrades: hideTerm,
+            hideFinalGrades: hideFinal,
+          );
+          return {'hideTermGrades': hideTerm, 'hideFinalGrades': hideFinal};
+        }
+      }
+    } catch (e) {
+      debugPrint('Student grade privacy audit_logs read notice: $e');
+    }
+
     return {
       'hideTermGrades': local?['hideTermGrades'] ?? false,
       'hideFinalGrades': local?['hideFinalGrades'] ?? false,
     };
   }
 
-  /// Updates the student's 18+ grade privacy toggles in `student_settings` and invalidates parent caches.
+  /// Updates the student's 18+ grade privacy toggles in `student_settings` and `audit_logs` and invalidates parent caches.
   Future<void> updateStudentGradePrivacySettings({
     required String studentId,
     required bool hideTermGrades,
@@ -1467,6 +1536,7 @@ class SupabaseParentRepository {
       hideFinalGrades: hideFinalGrades,
     );
 
+    // 1. Try updating student_settings (if columns exist)
     try {
       await _client
           .from('student_settings')
@@ -1478,6 +1548,21 @@ class SupabaseParentRepository {
           .eq('student_id', studentId);
     } catch (e) {
       debugPrint('Student grade privacy DB update notice: $e');
+    }
+
+    // 2. Cross-device sync: Record in audit_logs for guaranteed cross-device persistence
+    try {
+      await _client.from('audit_logs').insert({
+        'user_id': studentId,
+        'action_type': '18plus_grade_privacy',
+        'description': jsonEncode({
+          'hideTermGrades': hideTermGrades,
+          'hideFinalGrades': hideFinalGrades,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        }),
+      });
+    } catch (e) {
+      debugPrint('Student grade privacy audit_logs sync notice: $e');
     }
 
     AppDataCache.instance.invalidatePrefix('parent_linked_students_');

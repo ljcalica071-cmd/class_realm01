@@ -48,6 +48,8 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
   List<ScheduleModel> _schedules = const [];
   Map<String, Map<int, Map<String, dynamic>>> _termGrades = const {};
   bool _isLoadingSubjects = true;
+  bool? _liveHideTermGrades;
+  bool? _liveHideFinalGrades;
 
   @override
   void initState() {
@@ -139,10 +141,14 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
               'subject_offering_id, term_number, initial_grade, transmuted_grade, remarks, is_finalized, is_published',
             )
             .eq('student_id', studentId),
+
+        // 4. Live 18+ Student Privacy Settings
+        SupabaseParentRepository().getStudentGradePrivacySettings(studentId),
       ]);
 
       final offeringRows = results[0] as List<Map<String, dynamic>>;
       final scheduleRows = results[1] as List<ScheduleModel>;
+      final privacySettings = results[3] as Map<String, bool>;
 
       final gradesByOffering = <String, Map<int, Map<String, dynamic>>>{};
       for (final row in results[2] as List) {
@@ -166,6 +172,8 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
         _offerings = offeringRows;
         _schedules = scheduleRows;
         _termGrades = gradesByOffering;
+        _liveHideTermGrades = privacySettings['hideTermGrades'] ?? false;
+        _liveHideFinalGrades = privacySettings['hideFinalGrades'] ?? false;
         _isLoadingSubjects = false;
       });
 
@@ -221,8 +229,14 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
         ? (((presentCount + lateCount) / totalAccounted) * 100).round()
         : (excusedCount > 0 ? 100 : 0);
 
-    final hideFinalGrades = student.effectiveHideFinalGradesFromParent;
-    final hideTermGrades = student.effectiveHideTermGradesFromParent;
+    final hideFinalGrades =
+        _liveHideFinalGrades ?? student.effectiveHideFinalGradesFromParent;
+    final hideTermGrades =
+        _liveHideTermGrades ?? student.effectiveHideTermGradesFromParent;
+    final effectiveStudent = student.copyWith(
+      hideTermGradesFromParent: hideTermGrades,
+      hideFinalGradesFromParent: hideFinalGrades,
+    );
 
     // Compute Overall General Average across active encoded term grades
     double totalGrades = 0;
@@ -279,15 +293,11 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── 1. SENIOR HIGH SCHOOL HERO CARD (WITH DOWNWARD CHILD SWITCHER BUTTON) ──
-            _buildShsStudentHero(theme, isDark, student),
+            _buildShsStudentHero(theme, isDark, effectiveStudent),
 
             const SizedBox(height: 16),
 
-            // ── 2. SARDO EARLY WARNING ALERT (IF >= 3 ABSENCES) ──
-            if (absentCount >= 3)
-              _buildAbsenceAlert(theme, isDark, absentCount),
-
-            // ── 3. ATTENDANCE & GWA PULSE METRICS (2 CARDS) ──
+            // ── 2. ATTENDANCE & GWA PULSE METRICS (2 CARDS) ──
             Row(
               children: [
                 _buildStatCard(
@@ -397,7 +407,7 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
                   theme: theme,
                   isDark: isDark,
                   offering: offering,
-                  student: student,
+                  student: effectiveStudent,
                 );
               }),
           ],
@@ -864,83 +874,6 @@ class _ParentStudentOverviewTabState extends State<ParentStudentOverviewTab> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildAbsenceAlert(ThemeData theme, bool isDark, int absentCount) {
-    final Color bannerColor;
-    final Color borderColor;
-    final Color textColor;
-    final String title;
-    final String subtitle;
-    final IconData icon;
-
-    if (absentCount >= 10) {
-      bannerColor = isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2);
-      borderColor = const Color(0xFFDC2626);
-      textColor = isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B);
-      icon = Icons.error_rounded;
-      title = 'Critical Notice: $absentCount Absences (SARDO Policy)';
-      subtitle = 'Urgent conference with class adviser required.';
-    } else if (absentCount >= 5) {
-      bannerColor = isDark ? const Color(0xFF431407) : const Color(0xFFFFF7ED);
-      borderColor = const Color(0xFFEA580C);
-      textColor = isDark ? const Color(0xFFFDBA74) : const Color(0xFF9A3412);
-      icon = Icons.warning_amber_rounded;
-      title = 'Attendance Alert: $absentCount Recorded Absences';
-      subtitle = 'Intervention required. Coordinate with class adviser.';
-    } else {
-      bannerColor = isDark ? const Color(0xFF422006) : const Color(0xFFFEFCE8);
-      borderColor = const Color(0xFFCA8A04);
-      textColor = isDark ? const Color(0xFFFDE047) : const Color(0xFF854D0E);
-      icon = Icons.info_outline_rounded;
-      title = 'Early Warning: $absentCount Recorded Absences';
-      subtitle =
-          'Please ensure regular attendance to maintain academic standing.';
-    }
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      decoration: BoxDecoration(
-        color: bannerColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: borderColor.withValues(alpha: isDark ? 0.6 : 0.4),
-          width: 1.2,
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: borderColor),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: textColor,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.78),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

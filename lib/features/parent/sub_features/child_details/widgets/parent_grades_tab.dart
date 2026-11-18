@@ -300,6 +300,8 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
   List<ScheduleModel> _schedules = const [];
   Map<String, Map<int, Map<String, dynamic>>> _termGrades = const {};
   bool _isLoading = true;
+  bool? _liveHideTermGrades;
+  bool? _liveHideFinalGrades;
 
   @override
   void initState() {
@@ -409,9 +411,13 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
           studentId,
           fallbackSection: sec,
         ),
+
+        // 4. Live 18+ Student Privacy Settings
+        SupabaseParentRepository().getStudentGradePrivacySettings(studentId),
       ]);
 
       final offeringRows = (responses[0] as List<Map<String, dynamic>>);
+      final privacySettings = responses[3] as Map<String, bool>;
 
       final gradesByOffering = <String, Map<int, Map<String, dynamic>>>{};
       for (final row in responses[1] as List) {
@@ -437,6 +443,8 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
         _offerings = offeringRows;
         _termGrades = gradesByOffering;
         _schedules = scheduleRows;
+        _liveHideTermGrades = privacySettings['hideTermGrades'] ?? false;
+        _liveHideFinalGrades = privacySettings['hideFinalGrades'] ?? false;
         _isLoading = false;
       });
 
@@ -528,8 +536,14 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
       );
     }
 
-    final hideTermGrades = student.effectiveHideTermGradesFromParent;
-    final hideFinalGrades = student.effectiveHideFinalGradesFromParent;
+    final hideTermGrades =
+        _liveHideTermGrades ?? student.effectiveHideTermGradesFromParent;
+    final hideFinalGrades =
+        _liveHideFinalGrades ?? student.effectiveHideFinalGradesFromParent;
+    final effectiveStudent = student.copyWith(
+      hideTermGradesFromParent: hideTermGrades,
+      hideFinalGradesFromParent: hideFinalGrades,
+    );
 
     // Compute Overall General Weighted Average (GWA) from active encoded term grades
     double totalGrades = 0;
@@ -745,7 +759,7 @@ class _ParentGradesTabState extends State<ParentGradesTab> {
                       offering: offering,
                       schedules: _schedules,
                       termGrades: terms,
-                      student: student,
+                      student: effectiveStudent,
                     );
                   },
                   child: Padding(
