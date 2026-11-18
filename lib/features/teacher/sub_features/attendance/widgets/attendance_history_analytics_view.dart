@@ -149,18 +149,17 @@ class AttendanceHistoryAnalyticsViewState
     final historyKey =
         'attendance_history_${widget.subjectOfferingId}_${startStr}_${endStr}_0_500';
 
-    final cachedSummary =
-        AppDataCache.instance.get<AttendanceAnalyticsSummary>(analyticsKey);
+    final cachedSummary = AppDataCache.instance.get<AttendanceAnalyticsSummary>(
+      analyticsKey,
+    );
     if (cachedSummary != null) {
       _analyticsSummary = cachedSummary;
       _isLoadingAnalytics = false;
       _chartAnimController.value = 1.0;
     }
 
-    final cachedHistory =
-        AppDataCache.instance.get<AttendancePage<AttendanceWorkspaceRecord>>(
-      historyKey,
-    );
+    final cachedHistory = AppDataCache.instance
+        .get<AttendancePage<AttendanceWorkspaceRecord>>(historyKey);
     if (cachedHistory != null) {
       _historyRows = List<AttendanceWorkspaceRecord>.from(cachedHistory.rows);
       _isLoadingHistory = false;
@@ -255,8 +254,9 @@ class AttendanceHistoryAnalyticsViewState
     final cacheKey =
         'attendance_analytics_${widget.subjectOfferingId}_${startStr}_$endStr';
 
-    final cachedSummary =
-        AppDataCache.instance.get<AttendanceAnalyticsSummary>(cacheKey);
+    final cachedSummary = AppDataCache.instance.get<AttendanceAnalyticsSummary>(
+      cacheKey,
+    );
     if (cachedSummary != null) {
       _analyticsSummary = cachedSummary;
       _isLoadingAnalytics = false;
@@ -324,10 +324,8 @@ class AttendanceHistoryAnalyticsViewState
     final historyKey =
         'attendance_history_${widget.subjectOfferingId}_${startStr}_${endStr}_0_500';
 
-    final cachedHistory =
-        AppDataCache.instance.get<AttendancePage<AttendanceWorkspaceRecord>>(
-      historyKey,
-    );
+    final cachedHistory = AppDataCache.instance
+        .get<AttendancePage<AttendanceWorkspaceRecord>>(historyKey);
     if (cachedHistory != null) {
       _historyRows = List<AttendanceWorkspaceRecord>.from(cachedHistory.rows);
       _isLoadingHistory = false;
@@ -453,10 +451,7 @@ class AttendanceHistoryAnalyticsViewState
     if (corrected == true && mounted) {
       await _loadAll();
       if (!mounted || !context.mounted) return;
-      AppTopToast.success(
-        context,
-        'Attendance record updated.',
-      );
+      AppTopToast.success(context, 'Attendance record updated.');
     }
   }
 
@@ -917,10 +912,7 @@ class AttendanceHistoryAnalyticsViewState
               color: color,
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.45),
-                  blurRadius: 3,
-                ),
+                BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 3),
               ],
             ),
           ),
@@ -1005,7 +997,10 @@ class AttendanceHistoryAnalyticsViewState
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3.5,
+                ),
                 decoration: BoxDecoration(
                   color: isDark
                       ? Colors.white.withValues(alpha: 0.08)
@@ -1177,7 +1172,9 @@ class AttendanceHistoryAnalyticsViewState
                         'Trend summary: ${points.length} periods recorded. Latest period had ${points.last.presentCount} present, ${points.last.lateCount} late, and ${points.last.absentCount} absent.',
                         style: TextStyle(
                           fontSize: 11,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.75,
+                          ),
                         ),
                       ),
                     ),
@@ -1222,7 +1219,8 @@ class AttendanceHistoryAnalyticsViewState
         count: summary.presentCount,
         pct: pPres,
         color: cPresent,
-        dotLabel: 'Present: ${summary.presentCount} (${pPres.toStringAsFixed(1)}%)',
+        dotLabel:
+            'Present: ${summary.presentCount} (${pPres.toStringAsFixed(1)}%)',
       ),
       _AttendanceDonutSlice(
         label: 'Late (${summary.lateCount})',
@@ -1238,7 +1236,8 @@ class AttendanceHistoryAnalyticsViewState
         count: summary.absentCount,
         pct: pAbs,
         color: cAbsent,
-        dotLabel: 'Absent: ${summary.absentCount} (${pAbs.toStringAsFixed(1)}%)',
+        dotLabel:
+            'Absent: ${summary.absentCount} (${pAbs.toStringAsFixed(1)}%)',
       ),
       _AttendanceDonutSlice(
         label: 'Excused (${summary.excusedCount})',
@@ -1246,7 +1245,8 @@ class AttendanceHistoryAnalyticsViewState
         count: summary.excusedCount,
         pct: pExc,
         color: cExcused,
-        dotLabel: 'Excused: ${summary.excusedCount} (${pExc.toStringAsFixed(1)}%)',
+        dotLabel:
+            'Excused: ${summary.excusedCount} (${pExc.toStringAsFixed(1)}%)',
       ),
     ];
 
@@ -1325,7 +1325,8 @@ class AttendanceHistoryAnalyticsViewState
         child: AnimatedBuilder(
           animation: _chartAnim,
           builder: (context, _) {
-            final hovered = _hoveredBreakdownIndex != null &&
+            final hovered =
+                _hoveredBreakdownIndex != null &&
                     _hoveredBreakdownIndex! < slices.length
                 ? slices[_hoveredBreakdownIndex!]
                 : null;
@@ -1379,8 +1380,9 @@ class AttendanceHistoryAnalyticsViewState
                         'Total Logs',
                         style: TextStyle(
                           fontSize: 10,
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.55),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.55,
+                          ),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -1399,8 +1401,9 @@ class AttendanceHistoryAnalyticsViewState
                           fontWeight: FontWeight.w600,
                           color: total > 0
                               ? cPresent
-                              : theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.55),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.55,
+                                ),
                         ),
                       ),
                     ],
@@ -1571,15 +1574,15 @@ class AttendanceHistoryAnalyticsViewState
           color: isHovered
               ? color.withValues(alpha: isDark ? 0.16 : 0.08)
               : (isDark
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : const Color(0xFFF8FAFC)),
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : const Color(0xFFF8FAFC)),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isHovered
                 ? color.withValues(alpha: isDark ? 0.6 : 0.45)
                 : (isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : const Color(0xFFE2E8F0)),
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : const Color(0xFFE2E8F0)),
             width: isHovered ? 1.5 : 1.0,
           ),
           boxShadow: isHovered
@@ -1818,11 +1821,20 @@ class AttendanceHistoryAnalyticsViewState
             Builder(
               builder: (context) {
                 final totalAtRisk = summary.atRiskStudents.length;
-                final totalPages = (totalAtRisk / _atRiskPageSize).ceil().clamp(1, 99999);
+                final totalPages = (totalAtRisk / _atRiskPageSize).ceil().clamp(
+                  1,
+                  99999,
+                );
                 final safePage = _atRiskCurrentPage.clamp(1, totalPages);
                 final startIdx = (safePage - 1) * _atRiskPageSize;
-                final endIdx = (startIdx + _atRiskPageSize).clamp(0, totalAtRisk);
-                final pagedStudents = summary.atRiskStudents.sublist(startIdx, endIdx);
+                final endIdx = (startIdx + _atRiskPageSize).clamp(
+                  0,
+                  totalAtRisk,
+                );
+                final pagedStudents = summary.atRiskStudents.sublist(
+                  startIdx,
+                  endIdx,
+                );
 
                 return Column(
                   children: [
@@ -1878,7 +1890,8 @@ class AttendanceHistoryAnalyticsViewState
                                   ),
                                   const SizedBox(width: 12),
                                   Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         student.studentName,
@@ -1893,9 +1906,8 @@ class AttendanceHistoryAnalyticsViewState
                                         'Section: ${student.section}',
                                         style: TextStyle(
                                           fontSize: 11.5,
-                                          color: theme.colorScheme.onSurface.withValues(
-                                            alpha: 0.68,
-                                          ),
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.68),
                                         ),
                                       ),
                                     ],
@@ -2227,80 +2239,90 @@ class AttendanceHistoryAnalyticsViewState
                                         ),
                                       ]
                                     : pageRows.map((row) {
-                                  final studentName = _getStudentDisplayName(
-                                    row.studentId,
-                                  );
-                                  final timeInDisplay =
-                                      (row.timeIn != null &&
-                                          row.timeIn!.trim().isNotEmpty)
-                                      ? row.timeIn!.trim()
-                                      : '—';
+                                        final studentName =
+                                            _getStudentDisplayName(
+                                              row.studentId,
+                                            );
+                                        final timeInDisplay =
+                                            (row.timeIn != null &&
+                                                row.timeIn!.trim().isNotEmpty)
+                                            ? row.timeIn!.trim()
+                                            : '—';
 
-                                  return DataRow(
-                                    cells: [
-                                      DataCell(
-                                        Text(
-                                          _formatDate(row.attendanceDate),
-                                          style: const TextStyle(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        Text(
-                                          studentName,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        Text(
-                                          timeInDisplay,
-                                          style: const TextStyle(
-                                            fontSize: 12.5,
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        _buildProvenancePill(theme, row.source),
-                                      ),
-                                      DataCell(
-                                        StatusBadge.fromAttendance(row.status),
-                                      ),
-                                      DataCell(
-                                        Text(
-                                          row.remarks != null &&
-                                                  row.remarks!.trim().isNotEmpty
-                                              ? row.remarks!.trim()
-                                              : '—',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontStyle: row.remarks != null
-                                                ? FontStyle.italic
-                                                : FontStyle.normal,
-                                            color: theme.colorScheme.onSurface
-                                                .withValues(alpha: 0.7),
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        AppButton.outline(
-                                          label: 'Correct',
-                                          icon: LucideIcons.fileEdit,
-                                          isSmall: true,
-                                          onPressed: () =>
-                                              _showCorrectionDialog(
-                                                context,
-                                                row,
+                                        return DataRow(
+                                          cells: [
+                                            DataCell(
+                                              Text(
+                                                _formatDate(row.attendanceDate),
+                                                style: const TextStyle(
+                                                  fontSize: 12.5,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
                                               ),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }).toList(),
+                                            ),
+                                            DataCell(
+                                              Text(
+                                                studentName,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              Text(
+                                                timeInDisplay,
+                                                style: const TextStyle(
+                                                  fontSize: 12.5,
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              _buildProvenancePill(
+                                                theme,
+                                                row.source,
+                                              ),
+                                            ),
+                                            DataCell(
+                                              StatusBadge.fromAttendance(
+                                                row.status,
+                                              ),
+                                            ),
+                                            DataCell(
+                                              Text(
+                                                row.remarks != null &&
+                                                        row.remarks!
+                                                            .trim()
+                                                            .isNotEmpty
+                                                    ? row.remarks!.trim()
+                                                    : '—',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontStyle: row.remarks != null
+                                                      ? FontStyle.italic
+                                                      : FontStyle.normal,
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurface
+                                                      .withValues(alpha: 0.7),
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              AppButton.outline(
+                                                label: 'Correct',
+                                                icon: LucideIcons.fileEdit,
+                                                isSmall: true,
+                                                onPressed: () =>
+                                                    _showCorrectionDialog(
+                                                      context,
+                                                      row,
+                                                    ),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      }).toList(),
                               ),
                             ),
                           );
@@ -2992,11 +3014,14 @@ class TrendChartPainter extends CustomPainter {
 
     for (int i = 0; i < n; i++) {
       final x = n > 1 ? i * stepX : size.width / 2;
-      final yPres = baseline -
+      final yPres =
+          baseline -
           ((points[i].presentCount / maxVal) * chartHeight * clampedProgress);
-      final yLate = baseline -
+      final yLate =
+          baseline -
           ((points[i].lateCount / maxVal) * chartHeight * clampedProgress);
-      final yAbs = baseline -
+      final yAbs =
+          baseline -
           ((points[i].absentCount / maxVal) * chartHeight * clampedProgress);
 
       presentOffsets.add(Offset(x, yPres));
@@ -3117,8 +3142,7 @@ class TrendChartPainter extends CustomPainter {
       canvas.drawCircle(
         ptLate,
         isHovered ? 8.5 : 5.5,
-        Paint()
-          ..color = lateColor.withValues(alpha: isHovered ? 0.38 : 0.25),
+        Paint()..color = lateColor.withValues(alpha: isHovered ? 0.38 : 0.25),
       );
       canvas.drawCircle(
         ptLate,
@@ -3149,7 +3173,8 @@ class TrendChartPainter extends CustomPainter {
       );
 
       // Date / Period label on X-axis
-      final rawLabel = points[i].periodLabel ??
+      final rawLabel =
+          points[i].periodLabel ??
           (points[i].bucketStart != null
               ? '${points[i].bucketStart!.month}/${points[i].bucketStart!.day}'
               : 'P${i + 1}');
@@ -3166,13 +3191,13 @@ class TrendChartPainter extends CustomPainter {
           fontWeight: isHovered ? FontWeight.w800 : FontWeight.w600,
         ),
       );
-      final tp = TextPainter(
-        text: textSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
+      final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
+        ..layout();
 
-      final labelX =
-          (ptPres.dx - tp.width / 2).clamp(0.0, size.width - tp.width);
+      final labelX = (ptPres.dx - tp.width / 2).clamp(
+        0.0,
+        size.width - tp.width,
+      );
       tp.paint(canvas, Offset(labelX, baseline + 5));
     }
 
@@ -3186,7 +3211,8 @@ class TrendChartPainter extends CustomPainter {
         min(lateOffsets[idx].dy, absentOffsets[idx].dy),
       );
 
-      final dateTitle = pt.periodLabel ??
+      final dateTitle =
+          pt.periodLabel ??
           (pt.bucketStart != null
               ? '${pt.bucketStart!.month}/${pt.bucketStart!.day}/${pt.bucketStart!.year}'
               : 'Period ${idx + 1}');
