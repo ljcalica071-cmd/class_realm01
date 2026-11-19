@@ -138,5 +138,153 @@ void main() {
       expect(summary.termProgressionPoints.length, 1);
       expect(summary.termProgressionPoints.first.label, 'Term 3');
     });
+
+    test(
+      'compareRowsByPerformance sorts by activeGrade desc/asc with initialGrade tie-breaker and no-data at bottom',
+      () {
+        final noData = StudentGradeAnalyticsRow(
+          student: student1,
+          displayName: 'Zebra, Alex A.',
+          lrn: '100000000001',
+          termGrades: {},
+          trend: GradeTrend.insufficientData,
+          descriptor: 'Pending',
+          remarks: '—',
+        );
+        final lowerTie = StudentGradeAnalyticsRow(
+          student: student2,
+          displayName: 'Alpha, Bea B.',
+          lrn: '100000000002',
+          initialGrade: 88.20,
+          activeGrade: 92,
+          termGrades: {1: 92},
+          trend: GradeTrend.stable,
+          descriptor: 'Advancing',
+          remarks: 'PASSED',
+        );
+        final higherTie = StudentGradeAnalyticsRow(
+          student: student1,
+          displayName: 'Castro, Carl C.',
+          lrn: '100000000003',
+          initialGrade: 89.40,
+          activeGrade: 92,
+          termGrades: {1: 92},
+          trend: GradeTrend.stable,
+          descriptor: 'Advancing',
+          remarks: 'PASSED',
+        );
+        final highestGrade = StudentGradeAnalyticsRow(
+          student: student2,
+          displayName: 'Santos, Dana D.',
+          lrn: '100000000004',
+          initialGrade: 95.10,
+          activeGrade: 96,
+          termGrades: {1: 96},
+          trend: GradeTrend.improving,
+          descriptor: 'Advancing',
+          remarks: 'PASSED',
+        );
+
+        final descList = [noData, lowerTie, highestGrade, higherTie]
+          ..sort(
+            (a, b) => GradebookAnalyticsCalculator.compareRowsByPerformance(
+              a,
+              b,
+              descending: true,
+            ),
+          );
+        expect(
+          descList.map((r) => r.displayName).toList(),
+          ['Santos, Dana D.', 'Castro, Carl C.', 'Alpha, Bea B.', 'Zebra, Alex A.'],
+        );
+
+        final ascList = [noData, highestGrade, higherTie, lowerTie]
+          ..sort(
+            (a, b) => GradebookAnalyticsCalculator.compareRowsByPerformance(
+              a,
+              b,
+              descending: false,
+            ),
+          );
+        expect(
+          ascList.map((r) => r.displayName).toList(),
+          ['Alpha, Bea B.', 'Castro, Carl C.', 'Santos, Dana D.', 'Zebra, Alex A.'],
+        );
+      },
+    );
+
+    test(
+      'compareRowsByPerformance falls back to partialWeightedScore desc/asc when activeGrade is null',
+      () {
+        final emptyRow = StudentGradeAnalyticsRow(
+          student: student1,
+          displayName: 'Abad, Amy A.',
+          lrn: '100000000010',
+          termGrades: {},
+          trend: GradeTrend.insufficientData,
+          descriptor: 'Pending',
+          remarks: '—',
+        );
+        final midPartial = StudentGradeAnalyticsRow(
+          student: student2,
+          displayName: 'Bautista, Ben B.',
+          lrn: '100000000011',
+          wwWs: 18.0,
+          ptWs: 48.0, // total 66.0
+          termGrades: {},
+          trend: GradeTrend.stable,
+          descriptor: 'Pending',
+          remarks: '—',
+        );
+        final topPartial = StudentGradeAnalyticsRow(
+          student: student1,
+          displayName: 'Cruz, Cara C.',
+          lrn: '100000000012',
+          wwWs: 19.5,
+          ptWs: 55.0, // total 74.5
+          termGrades: {},
+          trend: GradeTrend.improving,
+          descriptor: 'Pending',
+          remarks: '—',
+        );
+        final lowPartial = StudentGradeAnalyticsRow(
+          student: student2,
+          displayName: 'Diaz, Dan D.',
+          lrn: '100000000013',
+          wwWs: 14.0,
+          ptWs: 40.0, // total 54.0
+          termGrades: {},
+          trend: GradeTrend.declining,
+          descriptor: 'Pending',
+          remarks: '—',
+        );
+
+        final descList = [emptyRow, midPartial, lowPartial, topPartial]
+          ..sort(
+            (a, b) => GradebookAnalyticsCalculator.compareRowsByPerformance(
+              a,
+              b,
+              descending: true,
+            ),
+          );
+        expect(
+          descList.map((r) => r.displayName).toList(),
+          ['Cruz, Cara C.', 'Bautista, Ben B.', 'Diaz, Dan D.', 'Abad, Amy A.'],
+        );
+
+        final ascList = [emptyRow, topPartial, midPartial, lowPartial]
+          ..sort(
+            (a, b) => GradebookAnalyticsCalculator.compareRowsByPerformance(
+              a,
+              b,
+              descending: false,
+            ),
+          );
+        expect(
+          ascList.map((r) => r.displayName).toList(),
+          ['Diaz, Dan D.', 'Bautista, Ben B.', 'Cruz, Cara C.', 'Abad, Amy A.'],
+        );
+      },
+    );
   });
 }

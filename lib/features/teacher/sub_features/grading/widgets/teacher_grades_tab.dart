@@ -55,7 +55,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
   String _donutMode = 'components'; // 'components' or 'distribution'
   int? _hoveredDonutIndex;
   String _searchQuery = '';
-  String _sortOrder = 'desc'; // 'desc', 'asc', 'alpha', 'alpha_desc', 'trend_desc'
+  String _sortOrder =
+      'desc'; // 'desc', 'asc', 'alpha', 'alpha_desc', 'trend_desc'
   String? _columnSortKey; // 'name', 'ww', 'pt', 'ex', 'grade', 'trend'
   bool _columnSortAscending = false;
   int _pageSize = 10;
@@ -1175,10 +1176,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       value: safeSubject,
                       hintText: 'Subject',
                       items: uniqueSubjects.map((s) {
-                        return AppDropdownItem<String>(
-                          value: s,
-                          label: s,
-                        );
+                        return AppDropdownItem<String>(value: s, label: s);
                       }).toList(),
                       onChanged: uniqueSubjects.isEmpty
                           ? null
@@ -1204,11 +1202,18 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                               }
                             },
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                        color: isDark
+                            ? const Color(0xFF1E293B)
+                            : const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: isDark ? Colors.white12 : crBorder),
+                        border: Border.all(
+                          color: isDark ? Colors.white12 : crBorder,
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -1242,10 +1247,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                       value: safeSection,
                       hintText: 'Section',
                       items: sectionItems.map((sec) {
-                        return AppDropdownItem<String>(
-                          value: sec,
-                          label: sec,
-                        );
+                        return AppDropdownItem<String>(value: sec, label: sec);
                       }).toList(),
                       onChanged: sectionItems.isEmpty
                           ? null
@@ -1260,11 +1262,18 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                               }
                             },
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                        color: isDark
+                            ? const Color(0xFF1E293B)
+                            : const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: isDark ? Colors.white12 : crBorder),
+                        border: Border.all(
+                          color: isDark ? Colors.white12 : crBorder,
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -2745,10 +2754,7 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                   border: Border.all(color: isDark ? Colors.white12 : crBorder),
                 ),
                 items: const [
-                  AppDropdownItem(
-                    value: 'components',
-                    label: 'WW vs PT vs EX',
-                  ),
+                  AppDropdownItem(value: 'components', label: 'WW vs PT vs EX'),
                   AppDropdownItem(
                     value: 'distribution',
                     label: 'Performance Distribution',
@@ -3234,7 +3240,10 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                         fontWeight: FontWeight.w600,
                         color: crSlateDark,
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: isDark ? Colors.white10 : Colors.white,
                         borderRadius: BorderRadius.circular(8),
@@ -3286,21 +3295,18 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
                         fontWeight: FontWeight.w600,
                         color: crSlateDark,
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: isDark ? Colors.white10 : Colors.white,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: crBorder),
                       ),
                       items: const [
-                        AppDropdownItem(
-                          value: 10,
-                          label: '10 / page',
-                        ),
-                        AppDropdownItem(
-                          value: 20,
-                          label: '20 / page',
-                        ),
+                        AppDropdownItem(value: 10, label: '10 / page'),
+                        AppDropdownItem(value: 20, label: '20 / page'),
                       ],
                       onChanged: (val) {
                         if (val != null) {
@@ -3327,7 +3333,12 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final minTableWidth = isCrossTerm ? 960.0 : 1020.0;
+                final minTableWidth = isCrossTerm
+                    ? math.max(
+                        1150.0,
+                        671.0 + (85.0 * activeTerms.length) + 220.0,
+                      )
+                    : 1180.0;
                 final tableWidth = math.max(
                   constraints.maxWidth,
                   minTableWidth,
@@ -3473,7 +3484,8 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
 
   void _toggleColumnSort(String key, {bool defaultAscending = false}) {
     setState(() {
-      if (_columnSortKey == key || (_columnSortKey == null && _effectiveSortKey == key)) {
+      if (_columnSortKey == key ||
+          (_columnSortKey == null && _effectiveSortKey == key)) {
         _columnSortAscending = !_effectiveSortAscending;
         _columnSortKey = key;
       } else {
@@ -4063,7 +4075,6 @@ class _TeacherGradesTabState extends State<TeacherGradesTab>
       ),
     );
   }
-
 }
 
 class _BarItem {
