@@ -144,12 +144,9 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
               onRefresh: () => _loadSchedules(silent: true),
               child: Column(
                 children: [
-                  // Top View Switcher Banner
+                // Top Student Info & View Switcher Banner (2-row layout for full readability)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surface,
                     border: Border(
@@ -160,106 +157,146 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
                       ),
                     ),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
+                      // Row 1: Full-width Student Name & Section/Mode Subtitle
+                      Material(
+                        color: Colors.transparent,
                         child: InkWell(
                           onTap: widget.onSwitchChildTap,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      student.fullName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 4,
+                              horizontal: 2,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary.withValues(
+                                      alpha: isDark ? 0.2 : 0.1,
                                     ),
+                                    shape: BoxShape.circle,
                                   ),
-                                  if (widget.onSwitchChildTap != null) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                      Icons.keyboard_arrow_down_rounded,
-                                      size: 18,
-                                      color: theme.colorScheme.primary,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '$section • ${_viewMode == ParentScheduleViewMode.list ? "Daily Agenda" : "Timetable"}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.65,
+                                  child: Icon(
+                                    Icons.school_outlined,
+                                    size: 18,
+                                    color: theme.colorScheme.primary,
                                   ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        student.fullName,
+                                        softWrap: true,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15,
+                                          height: 1.25,
+                                          color: theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '$section • ${_viewMode == ParentScheduleViewMode.list ? "Daily Agenda" : "Timetable"}',
+                                        softWrap: true,
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          height: 1.25,
+                                          color: theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.68),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (widget.onSwitchChildTap != null) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary
+                                          .withValues(
+                                            alpha: isDark ? 0.18 : 0.08,
+                                          ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      size: 20,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      SegmentedButton<ParentScheduleViewMode>(
-                        segments: const [
-                          ButtonSegment<ParentScheduleViewMode>(
-                            value: ParentScheduleViewMode.list,
-                            label: Text('List'),
-                            icon: Icon(Icons.view_agenda_outlined, size: 16),
-                          ),
-                          ButtonSegment<ParentScheduleViewMode>(
-                            value: ParentScheduleViewMode.grid,
-                            label: Text('Timetable'),
-                            icon: Icon(
-                              Icons.calendar_view_week_rounded,
-                              size: 16,
+                      const SizedBox(height: 10),
+                      // Row 2: Full-width, Easy-to-Read List / Timetable Switcher
+                      Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.06)
+                              : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: isDark ? 0.16 : 0.1,
                             ),
                           ),
-                        ],
-                        selected: {_viewMode},
-                        onSelectionChanged:
-                            (Set<ParentScheduleViewMode> newSelection) {
-                              setState(() {
-                                _viewMode = newSelection.first;
-                              });
-                            },
-                        style: ButtonStyle(
-                          visualDensity: VisualDensity.compact,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          backgroundColor: WidgetStateProperty.resolveWith((
-                            states,
-                          ) {
-                            if (states.contains(WidgetState.selected)) {
-                              return theme.colorScheme.primary;
-                            }
-                            return isDark
-                                ? theme.colorScheme.secondary
-                                : theme.colorScheme.surface;
-                          }),
-                          foregroundColor: WidgetStateProperty.resolveWith((
-                            states,
-                          ) {
-                            if (states.contains(WidgetState.selected)) {
-                              return Colors.white;
-                            }
-                            return theme.colorScheme.onSurface;
-                          }),
-                          side: WidgetStatePropertyAll(
-                            BorderSide(
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: isDark ? 0.24 : 0.18,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _buildViewModeSegment(
+                                theme: theme,
+                                isDark: isDark,
+                                label: 'List',
+                                icon: Icons.view_agenda_outlined,
+                                isSelected:
+                                    _viewMode == ParentScheduleViewMode.list,
+                                onTap: () {
+                                  if (_viewMode !=
+                                      ParentScheduleViewMode.list) {
+                                    setState(() {
+                                      _viewMode = ParentScheduleViewMode.list;
+                                    });
+                                  }
+                                },
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: _buildViewModeSegment(
+                                theme: theme,
+                                isDark: isDark,
+                                label: 'Timetable',
+                                icon: Icons.calendar_view_week_rounded,
+                                isSelected:
+                                    _viewMode == ParentScheduleViewMode.grid,
+                                onTap: () {
+                                  if (_viewMode !=
+                                      ParentScheduleViewMode.grid) {
+                                    setState(() {
+                                      _viewMode = ParentScheduleViewMode.grid;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -479,6 +516,75 @@ class _ParentScheduleViewState extends State<ParentScheduleView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildViewModeSegment({
+    required ThemeData theme,
+    required bool isDark,
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final fgColor = isSelected
+        ? Colors.white
+        : theme.colorScheme.onSurface.withValues(alpha: isDark ? 0.85 : 0.78);
+
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: '$label view',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(9),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: isDark ? 0.35 : 0.22,
+                        ),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 17, color: fgColor),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: fgColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
